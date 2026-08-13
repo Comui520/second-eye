@@ -27,11 +27,14 @@ class FakeAdapter:
 
 
 class FakeLLM:
-    def __init__(self, enabled=True, verdict=None, error=None):
+    def __init__(self, enabled=True, verdict=None, error=None, batch=None, batch_error=None):
         self.enabled = enabled
         self.verdict = verdict or {"matched": True, "reason": "符合需求"}
         self.error = error
+        self.batch = batch or {}
+        self.batch_error = batch_error
         self.calls = []
+        self.value_calls = []
 
     def analyze_requirement(self, **kwargs):
         self.calls.append(kwargs)
@@ -39,9 +42,17 @@ class FakeLLM:
             raise self.error
         return self.verdict
 
+    def analyze_batch_value(self, items):
+        self.value_calls.append(items)
+        if self.batch_error:
+            raise self.batch_error
+        scores = {it["external_id"]: self.batch.get(it["external_id"], 8) for it in items}
+        best = items[0]["external_id"] if items else None
+        return {"scores": scores, "best": best, "reasons": {k: "横向对比" for k in scores}}
+
 
 class FakeVision:
-    def __init__(self, enabled=True, verdict=None, error=None):
+    def __init__(self, enabled=True, verdict=None, error=None, batch=None, batch_error=None):
         self.enabled = enabled
         self.verdict = verdict or {
             "condition_score": 8,
@@ -50,13 +61,26 @@ class FakeVision:
             "reason": "ok",
         }
         self.error = error
+        self.batch = batch or {}
+        self.batch_error = batch_error
         self.calls = []
+        self.value_calls = []
 
     def analyze_condition(self, **kwargs):
         self.calls.append(kwargs)
         if self.error:
             raise self.error
         return self.verdict
+
+    def analyze_batch_value(self, items):
+        self.value_calls.append(items)
+        if self.batch_error:
+            raise self.batch_error
+        scores = {
+            it["external_id"]: self.batch.get(it["external_id"], 8) for it in items
+        }
+        best = items[0]["external_id"] if items else None
+        return {"scores": scores, "best": best, "reasons": {k: "横向对比" for k in scores}}
 
 
 class FakeNotifier:
@@ -155,7 +179,169 @@ def test_seller_advisory_in_notification_and_cache(session_factory, base_setting
         assert listing.seller_uid == "2672367114"
         assert listing.seller_risk["risk_level"] == "低"
         assert listing.task_id == task.id
-        assert listing.satisfaction == 92.0
+        assert listing.satisfaction == 90.0
+
+
+def test_new_items_notified_after_batch_value_with_best(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = FakeAdapter([_item("1001", 100), _item("1002", 200)])
+    llm = FakeLLM(batch={"1001": 9, "1002": 4})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=adapter, llm=llm)
+    stats = crawl.run_task(task.id)
+    assert stats["new"] == 2
+    assert stats["notified"] == 2
+    assert len(llm.value_calls) == 1
+    with session_factory() as session:
+        l1 = session.query(Listing).filter_by(external_id="1001").one()
+        l2 = session.query(Listing).filter_by(external_id="1002").one()
+        assert l1.value_score == 9 and l1.best_of_batch is True
+        assert l2.value_score == 4 and l2.best_of_batch is False
+        assert l1.last_notified_satisfaction is not None
+    contents = "\n".join(m.content for m in notifier.messages)
+    assert "性价比" in contents
+    assert "本批最优" in contents
+
+
+def test_price_change_reevaluates_and_renotifies_on_improvement(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k", "condition_requirement": "屏幕完好"})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item(price=100.0)]))
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+
+    improved = FakeVision(
+        verdict={"condition_score": 10, "defects": [], "recommended": True, "reason": "更好"}
+    )
+    crawl2, notifier2, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item(price=80.0)]), vision=improved
+    )
+    stats = crawl2.run_task(task.id)
+    assert stats["reevaluated"] == 1
+    assert stats["notified"] == 1
+    assert len(notifier2.messages) == 1
+    assert "价格更新重推" in notifier2.messages[0].content
+    assert "100 → 80" in notifier2.messages[0].content
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.last_notified_satisfaction == listing.satisfaction
+
+
+def test_price_change_no_improvement_no_renotify(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item(price=100.0)]))
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+
+    crawl2, notifier2, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item(price=80.0)])
+    )
+    stats = crawl2.run_task(task.id)
+    assert stats["reevaluated"] == 1
+    assert stats["notified"] == 0
+    assert len(notifier2.messages) == 0
+
+
+def test_gone_after_three_misses_and_reappear_reevaluates(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]))
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+
+    for _ in range(3):
+        crawl_empty, _, _ = _service(session_factory, base_settings, adapter=FakeAdapter([]))
+        crawl_empty.run_task(task.id)
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.status == "gone"
+        assert listing.missed_count == 3
+
+    improved = FakeVision(
+        verdict={"condition_score": 10, "defects": [], "recommended": True, "reason": "更好"}
+    )
+    crawl5, notifier5, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item(price=80.0)]), vision=improved
+    )
+    stats = crawl5.run_task(task.id)
+    assert stats["reevaluated"] == 1
+    assert stats["notified"] == 1
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.status == "active"
+        assert listing.missed_count == 0
+
+
+def test_batch_value_failure_fails_open(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    llm = FakeLLM(batch_error=RuntimeError("批量分析失败"))
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]), llm=llm)
+    stats = crawl.run_task(task.id)
+    assert stats["notified"] == 1
+    assert "性价比：未评估" in notifier.messages[0].content
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.value_score is None
+
+
+def test_unchanged_existing_no_reeval_no_batch_call(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    vision = FakeVision()
+    llm = FakeLLM()
+    crawl, notifier, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item()]), llm=llm, vision=vision
+    )
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+    assert len(vision.calls) == 1
+    assert len(llm.value_calls) == 1
+
+    crawl2, notifier2, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item()]), llm=llm, vision=vision
+    )
+    stats = crawl2.run_task(task.id)
+    assert stats["reevaluated"] == 0
+    assert stats["notified"] == 0
+    assert len(notifier2.messages) == 0
+    assert len(vision.calls) == 1  # 未重评不重跑品相
+    assert len(llm.value_calls) == 1  # 空批不调批量性价比
+
+
+def test_requirement_mismatch_excluded_from_batch(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k", "condition_requirement": "屏幕完好"})
+    llm = FakeLLM(verdict={"matched": False, "reason": "不符合"})
+    vision = FakeVision()
+    crawl, notifier, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item()]), llm=llm, vision=vision
+    )
+    stats = crawl.run_task(task.id)
+    assert stats["notified"] == 0
+    assert vision.calls == []
+    assert llm.value_calls == []
+
+
+def test_detail_variants_stored_and_shown(session_factory, base_settings):
+    class VariantAdapter(FakeAdapter):
+        def fetch_detail(self, url):
+            from goodprice.crawler.base import ListingDetail
+
+            return ListingDetail(
+                description="屏幕完好",
+                image_urls=["https://img.alicdn.com/bao/uploaded/d.jpg"],
+                variants=[
+                    {"name": "最低价", "price": 850.0},
+                    {"name": "最高价", "price": 1299.0},
+                ],
+            )
+
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=VariantAdapter([_item(price=850.0)]))
+    crawl.run_task(task.id)
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.variants == [
+            {"name": "最低价", "price": 850.0},
+            {"name": "最高价", "price": 1299.0},
+        ]
+    assert "最低价 850" in notifier.messages[0].content
+    assert "最高价 1299" in notifier.messages[0].content
 
 
 def test_seller_fetch_failure_does_not_block(session_factory, base_settings):

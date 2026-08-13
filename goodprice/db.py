@@ -44,6 +44,13 @@ def migrate_schema(session_factory) -> None:
             ("seller_risk", "seller_risk JSON"),
             ("blocked", "blocked BOOLEAN DEFAULT 0"),
             ("satisfaction", "satisfaction FLOAT DEFAULT 0"),
+            ("status", "status VARCHAR(20) DEFAULT 'active'"),
+            ("missed_count", "missed_count INTEGER DEFAULT 0"),
+            ("variants", "variants JSON"),
+            ("value_score", "value_score INTEGER"),
+            ("value_batch_at", "value_batch_at DATETIME"),
+            ("best_of_batch", "best_of_batch BOOLEAN DEFAULT 0"),
+            ("last_notified_satisfaction", "last_notified_satisfaction FLOAT"),
             ("task_id", "task_id INTEGER"),
         ],
         "sellers": [

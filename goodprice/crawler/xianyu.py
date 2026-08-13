@@ -87,6 +87,8 @@ class XianyuAdapter:
                             raise RuntimeError(
                                 f"未在页面中找到商品卡片，页面可能改版或触发风控。页面摘要: {body_text[:150]}"
                             )
+                    # 等待真实结果渲染（刚出现卡片时可能只是占位/推荐位）
+                    page.wait_for_timeout(3000)
                     for item in parse_search_html(page.content(), card_selector=card_selector):
                         seen.setdefault(item.external_id, item)
                     if len(seen) >= max_items:

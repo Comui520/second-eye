@@ -1,11 +1,14 @@
 import json
 import logging
 import re
+import time
 from typing import Any, Optional
 
 import httpx
 
 from goodprice.analysis.prompts import (
+    BATCH_VALUE_SYSTEM_PROMPT,
+    BATCH_VALUE_USER_TEMPLATE,
     CONDITION_SYSTEM_PROMPT,
     CONDITION_USER_TEMPLATE,
     REQUIREMENT_SYSTEM_PROMPT,
@@ -57,6 +60,27 @@ def parse_requirement_json(raw: str) -> dict[str, Any]:
     return {"matched": matched, "reason": str(data.get("reason", ""))[:500]}
 
 
+def parse_batch_value_json(raw: str) -> dict[str, Any]:
+    """解析批量性价比输出：{"items": [{"id", "value_score", "reason"}], "best": id}。"""
+    data = _extract_json(raw)
+    items = data.get("items")
+    if not isinstance(items, list) or not items:
+        raise ValueError(f"批量性价比输出缺少 items: {raw!r}")
+    scores: dict[str, int] = {}
+    reasons: dict[str, str] = {}
+    for it in items:
+        item_id = str(it.get("id", "")).strip()
+        if not item_id:
+            continue
+        score = max(1, min(10, int(it.get("value_score", 0))))
+        scores[item_id] = score
+        reasons[item_id] = str(it.get("reason", ""))[:200]
+    best = str(data.get("best", "")).strip()
+    if not best or best not in scores:
+        raise ValueError(f"批量性价比输出缺少有效 best: {raw!r}")
+    return {"scores": scores, "best": best, "reasons": reasons}
+
+
 class LLMClient:
     def __init__(
         self,
@@ -66,6 +90,7 @@ class LLMClient:
         timeout: float = 60.0,
         transport: Optional[httpx.BaseTransport] = None,
         allow_image_fallback: bool = True,
+        retry_delay: float = 5.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -73,6 +98,7 @@ class LLMClient:
         self.timeout = timeout
         self._transport = transport
         self.allow_image_fallback = allow_image_fallback
+        self.retry_delay = retry_delay
 
     @property
     def enabled(self) -> bool:
@@ -131,6 +157,30 @@ class LLMClient:
                 return self._complete(self._payload([{"type": "text", "text": fallback_text}]))
             raise
 
+    def analyze_batch_value(
+        self, items: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """对同一批商品做横向性价比对比，返回 {scores, best, reasons}。"""
+        if not self.enabled:
+            raise RuntimeError("LLM 未配置")
+        if not items:
+            return {"scores": {}, "best": None, "reasons": {}}
+        lines = []
+        for i, it in enumerate(items, 1):
+            defects = "、".join(str(d) for d in (it.get("defects") or [])[:5]) or "无"
+            lines.append(
+                f"[{i}] id={it.get('external_id')} 标题={it.get('title')} "
+                f"价格={it.get('price')}元 品相分={it.get('condition_score') or '未评估'} "
+                f"瑕疵={defects} 卖家风险={it.get('seller_risk') or '未知'}"
+            )
+        text = BATCH_VALUE_USER_TEMPLATE.format(items="\n".join(lines))
+        return self._complete(
+            self._payload(
+                [{"type": "text", "text": text}], system=BATCH_VALUE_SYSTEM_PROMPT
+            ),
+            parser=parse_batch_value_json,
+        )
+
     def _payload(
         self, content: list[dict[str, Any]], system: str = CONDITION_SYSTEM_PROMPT
     ) -> dict[str, Any]:
@@ -148,9 +198,21 @@ class LLMClient:
     ) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         client = httpx.Client(transport=self._transport, timeout=self.timeout)
-        response = client.post(
-            f"{self.base_url}/chat/completions", json=payload, headers=headers
-        )
-        response.raise_for_status()
-        raw = response.json()["choices"][0]["message"]["content"]
-        return parser(raw)
+        for attempt in range(3):
+            response = client.post(
+                f"{self.base_url}/chat/completions", json=payload, headers=headers
+            )
+            if response.status_code == 429 and attempt < 2:
+                if self.retry_delay:
+                    time.sleep(self.retry_delay)
+                continue
+            if response.status_code >= 400:
+                detail = response.text[:300]
+                raise httpx.HTTPStatusError(
+                    f"LLM 请求失败 {response.status_code}: {detail}",
+                    request=response.request,
+                    response=response,
+                )
+            raw = response.json()["choices"][0]["message"]["content"]
+            return parser(raw)
+        raise RuntimeError("LLM 请求重试耗尽")  # pragma: no cover

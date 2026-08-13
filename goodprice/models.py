@@ -69,6 +69,13 @@ class Listing(Base):
     seller_risk: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     blocked: Mapped[bool] = mapped_column(default=False)
     satisfaction: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    missed_count: Mapped[int] = mapped_column(Integer, default=0)
+    variants: Mapped[list] = mapped_column(JSON, default=list)
+    value_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    value_batch_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    best_of_batch: Mapped[bool] = mapped_column(default=False)
+    last_notified_satisfaction: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     task_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("watch_tasks.id", ondelete="SET NULL"), nullable=True
     )

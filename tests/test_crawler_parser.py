@@ -12,6 +12,7 @@ from goodprice.crawler.parser import (
 
 FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_search.html"
 DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_detail.html"
+VARIANT_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_detail_variants.html"
 SELLER_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_seller.html"
 
 
@@ -58,6 +59,15 @@ def test_parse_detail_html():
     assert detail.credit_label == "卖家信用极好"
     assert detail.positive_rate == 1.0  # 好评率 100% 存为小数
     assert detail.sold_count == 264
+    assert detail.variants == []
+
+
+def test_parse_detail_html_price_range_as_variants():
+    detail = parse_detail_html(VARIANT_FIXTURE.read_text(encoding="utf-8"))
+    assert detail.variants == [
+        {"name": "最低价", "price": 850.0},
+        {"name": "最高价", "price": 1299.0},
+    ]
 
 
 def test_extract_user_id():

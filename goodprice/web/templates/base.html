@@ -21,5 +21,18 @@
   <main class="max-w-6xl mx-auto px-4 py-6">
     {% block content %}{% endblock %}
   </main>
+  <div id="toast" class="hidden fixed top-4 right-4 bg-green-700 text-white rounded shadow px-4 py-3"></div>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var msg = params.get('toast');
+      if (msg) {
+        var el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.remove('hidden');
+        setTimeout(function () { el.classList.add('hidden'); }, 2500);
+      }
+    })();
+  </script>
 </body>
 </html>

@@ -88,3 +88,17 @@ def test_blocked_flags(session_factory):
         session.commit()
         assert l.blocked is True
         assert s.blocked is True
+
+
+def test_round7_listing_columns(session_factory):
+    with session_factory() as session:
+        listing = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u")
+        session.add(listing)
+        session.commit()
+        assert listing.status == "active"
+        assert listing.missed_count == 0
+        assert listing.variants == []
+        assert listing.value_score is None
+        assert listing.value_batch_at is None
+        assert listing.best_of_batch is False
+        assert listing.last_notified_satisfaction is None

@@ -2,22 +2,22 @@
 {% block title %}命中列表 - 闲鱼盯价助手{% endblock %}
 {% block content %}
 <form method="get" action="/listings" class="flex items-center gap-3 mb-4">
-  <select name="task_id" class="border rounded px-3 py-2">
+  <select name="task_id" class="border rounded px-3 py-2" onchange="this.form.submit()">
     <option value="">全部任务</option>
     {% for t in tasks %}<option value="{{ t.id }}" {{ 'selected' if (task_id|string) == (t.id|string) }}>{{ t.keyword }}</option>{% endfor %}
   </select>
-  <select name="sort" class="border rounded px-3 py-2">
+  <select name="sort" class="border rounded px-3 py-2" onchange="this.form.submit()">
     <option value="satisfaction" {{ 'selected' if sort == 'satisfaction' }}>按满足程度</option>
     <option value="price_asc" {{ 'selected' if sort == 'price_asc' }}>价格升序</option>
     <option value="price_desc" {{ 'selected' if sort == 'price_desc' }}>价格降序</option>
     <option value="newest" {{ 'selected' if sort == 'newest' }}>最新</option>
   </select>
-  <select name="show" class="border rounded px-3 py-2">
-    <option value="active" {{ 'selected' if show == 'active' }}>未拉黑</option>
+  <select name="show" class="border rounded px-3 py-2" onchange="this.form.submit()">
+    <option value="active" {{ 'selected' if show == 'active' }}>在售</option>
+    <option value="gone" {{ 'selected' if show == 'gone' }}>已下架</option>
     <option value="blocked" {{ 'selected' if show == 'blocked' }}>已拉黑</option>
     <option value="all" {{ 'selected' if show == 'all' }}>全部</option>
   </select>
-  <input type="hidden" name="task_id" value="{{ task_id or '' }}">
   <button class="bg-blue-600 text-white rounded px-4 py-2">筛选</button>
 </form>
 {% if running_ids %}

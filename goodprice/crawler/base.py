@@ -19,6 +19,7 @@ class ListingData:
 class ListingDetail:
     description: str = ""
     image_urls: list[str] = field(default_factory=list)
+    variants: list[dict] = field(default_factory=list)
     seller_uid: Optional[str] = None
     seller_name: Optional[str] = None
     credit_label: Optional[str] = None

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from sqlalchemy import func
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -284,7 +285,9 @@ def listings_page(
         if task_id_int:
             query = query.filter(Listing.task_id == task_id_int)
         if show == "active":
-            query = query.filter(Listing.blocked.is_(False))
+            query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
+        elif show == "gone":
+            query = query.filter(Listing.status == "gone")
         elif show == "blocked":
             query = query.filter(Listing.blocked.is_(True))
         if sort == "price_asc":
@@ -296,9 +299,14 @@ def listings_page(
         else:
             query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
         listings = query.limit(100).all()
+        notify_counts = _notify_counts(session, listings)
     partial_url = f"/listings?partial=1&task_id={task_id or ''}&sort={sort}&show={show}"
     if partial:
-        return templates.TemplateResponse(request, "listings_grid.html", {"listings": listings})
+        return templates.TemplateResponse(
+            request,
+            "listings_grid.html",
+            {"listings": listings, "notify_counts": notify_counts},
+        )
     running_ids = request.app.state.guard.running_ids()
     return templates.TemplateResponse(
         request,
@@ -311,9 +319,27 @@ def listings_page(
             "sort": sort,
             "show": show,
             "partial_url": partial_url,
+            "notify_counts": notify_counts,
             "active": "listings",
         },
     )
+
+
+def _notify_counts(session, listings) -> dict[int, int]:
+    from goodprice.models import Notification
+
+    if not listings:
+        return {}
+    rows = (
+        session.query(Notification.listing_id, func.count(Notification.id))
+        .filter(
+            Notification.listing_id.in_([item.id for item in listings]),
+            Notification.status == "sent",
+        )
+        .group_by(Notification.listing_id)
+        .all()
+    )
+    return {listing_id: count for listing_id, count in rows}
 
 
 @router.post("/listings/delete-batch")
@@ -324,7 +350,7 @@ def delete_listings_batch(request: Request, ids: list[int] = Form(...)):
         for row in session.query(Listing).filter(Listing.id.in_(ids)).all():
             session.delete(row)
         session.commit()
-    return RedirectResponse("/listings", status_code=303)
+    return RedirectResponse("/listings?toast=已批量删除", status_code=303)
 
 
 @router.post("/listings/{listing_id}/delete")
@@ -336,31 +362,31 @@ def delete_listing(request: Request, listing_id: int):
         if row:
             session.delete(row)
             session.commit()
-    return RedirectResponse("/listings", status_code=303)
+    return RedirectResponse("/listings?toast=已删除", status_code=303)
 
 
 @router.post("/listings/{listing_id}/block")
 def block_listing(request: Request, listing_id: int):
     _set_blocked(request, listing_id, True, seller=False)
-    return RedirectResponse("/listings", status_code=303)
+    return RedirectResponse("/listings?toast=已拉黑商品", status_code=303)
 
 
 @router.post("/listings/{listing_id}/unblock")
 def unblock_listing(request: Request, listing_id: int):
     _set_blocked(request, listing_id, False, seller=False)
-    return RedirectResponse("/listings", status_code=303)
+    return RedirectResponse("/listings?toast=已恢复", status_code=303)
 
 
 @router.post("/listings/{listing_id}/block-seller")
 def block_seller(request: Request, listing_id: int):
     _set_blocked(request, listing_id, True, seller=True)
-    return RedirectResponse("/listings", status_code=303)
+    return RedirectResponse("/listings?toast=已拉黑卖家", status_code=303)
 
 
 @router.post("/listings/{listing_id}/unblock-seller")
 def unblock_seller(request: Request, listing_id: int):
     _set_blocked(request, listing_id, False, seller=True)
-    return RedirectResponse("/listings", status_code=303)
+    return RedirectResponse("/listings?toast=已恢复卖家", status_code=303)
 
 
 def _set_blocked(request: Request, listing_id: int, blocked: bool, seller: bool) -> None:
@@ -485,7 +511,9 @@ def api_list_listings(
         if task_id_int:
             query = query.filter(Listing.task_id == task_id_int)
         if show == "active":
-            query = query.filter(Listing.blocked.is_(False))
+            query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
+        elif show == "gone":
+            query = query.filter(Listing.status == "gone")
         elif show == "blocked":
             query = query.filter(Listing.blocked.is_(True))
         if sort == "price_asc":

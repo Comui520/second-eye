@@ -259,6 +259,46 @@ def test_listings_filter_empty_task_id_ok(base_settings, session_factory):
     assert client.get("/api/listings?task_id=&sort=satisfaction").status_code == 200
 
 
+def test_listings_show_gone_filter(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        session.add(Listing(platform="xianyu", external_id="1", title="在售", price=1, url="u", status="active"))
+        session.add(Listing(platform="xianyu", external_id="2", title="下架", price=1, url="v", status="gone"))
+        session.add(Listing(platform="xianyu", external_id="3", title="拉黑", price=1, url="w", blocked=True))
+        session.commit()
+    assert [d["title"] for d in client.get("/api/listings?show=active").json()] == ["在售"]
+    assert [d["title"] for d in client.get("/api/listings?show=gone").json()] == ["下架"]
+    assert [d["title"] for d in client.get("/api/listings?show=blocked").json()] == ["拉黑"]
+    assert len(client.get("/api/listings?show=all").json()) == 3
+    page = client.get("/listings?show=gone")
+    assert "已下架" in page.text
+    assert 'value="gone"' in page.text
+
+
+def test_listings_actions_redirect_with_toast(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        row = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u")
+        session.add(row)
+        session.commit()
+        listing_id = row.id
+    resp = client.post(f"/listings/{listing_id}/block")
+    assert resp.status_code == 303
+    assert "toast" in resp.headers["location"]
+    resp = client.post(f"/listings/{listing_id}/delete")
+    assert resp.status_code == 303
+    assert "toast" in resp.headers["location"]
+    assert "toast" in client.get("/listings").text  # 基础模板含 toast JS
+
+
+def test_settings_page_glm_hints(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    page = client.get("/settings")
+    assert "glm-4.7-flash" in page.text
+    assert "open.bigmodel.cn" in page.text
+    assert "小写" in page.text
+
+
 def test_listings_delete_single_and_batch(base_settings, session_factory):
     from goodprice.models import Listing, Notification
 

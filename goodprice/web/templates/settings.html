@@ -15,6 +15,7 @@
     <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
       <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
   </div>
+  <p class="text-xs text-gray-500 -mt-3">免费推荐（智谱 GLM，模型名必须小写）：Base URL <code>https://open.bigmodel.cn/api/paas/v4</code>，文本模型 <code>glm-4.7-flash</code>。</p>
   <div class="border-t pt-4">
     <h3 class="text-md font-semibold mb-3">视觉模型（阶段二看图，必填才做品相分析）</h3>
     <label class="flex items-center gap-2 mb-3"><input type="checkbox" name="vision_enabled" value="1" {{ 'checked' if settings.vision_enabled }}> 启用视觉品相分析（关闭后满足评分按需求+卖家计算）</label>
@@ -24,7 +25,7 @@
       <div><label class="block text-sm font-medium mb-1">Vision API Key</label>
         <input name="vision_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
       <div><label class="block text-sm font-medium mb-1">Vision 模型</label>
-        <input name="vision_model" class="w-full border rounded px-3 py-2" value="{{ settings.vision_model }}" placeholder="推荐 glm-4.1v-thinking-flash（智谱免费）"></div>
+        <input name="vision_model" class="w-full border rounded px-3 py-2" value="{{ settings.vision_model }}" placeholder="推荐 glm-4.6v-flash / glm-4.1v-thinking-flash（智谱免费，小写）"></div>
     </div>
   </div>
   <div class="border-t pt-4">

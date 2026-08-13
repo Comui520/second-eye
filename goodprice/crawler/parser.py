@@ -77,6 +77,15 @@ def parse_search_html(html: str, card_selector: str = sel.RESULT_CARD) -> list[L
 
 def parse_detail_html(html: str) -> ListingDetail:
     soup = BeautifulSoup(html, "html.parser")
+    variants: list[dict] = []
+    range_el = soup.select_one(sel.DETAIL_PRICE_RANGE)
+    if range_el:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*[-~至]\s*(\d+(?:\.\d+)?)", range_el.get_text(" ", strip=True))
+        if m:
+            variants = [
+                {"name": "最低价", "price": float(m.group(1))},
+                {"name": "最高价", "price": float(m.group(2))},
+            ]
     desc = ""
     desc_el = soup.select_one(sel.DETAIL_DESC)
     if desc_el:
@@ -104,6 +113,7 @@ def parse_detail_html(html: str) -> ListingDetail:
     return ListingDetail(
         description=desc[:2000],
         image_urls=images[:8],
+        variants=variants,
         seller_uid=seller_uid,
         seller_name=seller_name,
         credit_label=credit_label,

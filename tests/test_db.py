@@ -56,3 +56,22 @@ def test_migrate_adds_notification_columns(tmp_db):
     with factory() as session:
         cols = {r[1] for r in session.execute(text("PRAGMA table_info(notifications)"))}
     assert {"title", "content"} <= cols
+
+
+def test_migrate_adds_round7_columns(tmp_db):
+    engine = create_engine(tmp_db)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE listings (id INTEGER PRIMARY KEY, external_id TEXT)"))
+    factory = make_session_factory(tmp_db)
+    migrate_schema(factory)
+    with factory() as session:
+        cols = {r[1] for r in session.execute(text("PRAGMA table_info(listings)"))}
+    assert {
+        "status",
+        "missed_count",
+        "variants",
+        "value_score",
+        "value_batch_at",
+        "best_of_batch",
+        "last_notified_satisfaction",
+    } <= cols

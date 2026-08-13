@@ -1,9 +1,9 @@
 def compute_satisfaction(listing, vision_enabled: bool = True) -> float:
-    """组合评分：视觉开启时 需求 50 + 品相 40 + 卖家 10；关闭时 需求 70 + 卖家 30。"""
+    """组合评分：视觉开启时 需求40 + 品相30 + 性价比20 + 卖家10；关闭时 需求50 + 性价比30 + 卖家20。"""
     if vision_enabled:
-        req_w, cond_w, seller_w = 50.0, 40.0, 10.0
+        req_w, cond_w, value_w, seller_w = 40.0, 30.0, 20.0, 10.0
     else:
-        req_w, cond_w, seller_w = 70.0, 0.0, 30.0
+        req_w, cond_w, value_w, seller_w = 50.0, 0.0, 30.0, 20.0
     score = 0.0
     if listing.requirement_match is True:
         score += req_w
@@ -11,6 +11,10 @@ def compute_satisfaction(listing, vision_enabled: bool = True) -> float:
         score += req_w / 2
     if cond_w and listing.condition_score is not None:
         score += min(cond_w, listing.condition_score * cond_w / 10)
+    if listing.value_score is not None:
+        score += min(value_w, listing.value_score * value_w / 10)
+    else:
+        score += value_w / 2
     risk = None
     if isinstance(listing.seller_risk, dict):
         risk = listing.seller_risk.get("risk_level")
