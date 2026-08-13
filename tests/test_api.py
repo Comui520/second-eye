@@ -55,6 +55,23 @@ def test_run_task_executes_in_background(base_settings, session_factory):
     assert calls == [task["id"]]
 
 
+def test_run_redirect_includes_feedback_param(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    client.app.state.run_job = lambda task_id: None
+    response = client.post(f"/tasks/{task['id']}/run")
+    assert response.status_code == 303
+    assert f"/tasks?run={task['id']}" in response.headers["location"]
+
+
+def test_tasks_page_shows_run_banner(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    client.post("/api/tasks", json={"keyword": "k"})
+    response = client.get("/tasks?run=1")
+    assert response.status_code == 200
+    assert "已开始执行" in response.text
+
+
 def test_task_change_triggers_scheduler_sync(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     calls = []
@@ -75,6 +92,7 @@ def test_tasks_page_shows_requirement_and_running(base_settings, session_factory
     assert response.status_code == 200
     assert "屏幕完好" in response.text
     assert "运行中" in response.text
+    assert "setTimeout" in response.text  # 运行中自动刷新
     client.app.state.guard.finish(task["id"])
 
 

@@ -83,8 +83,10 @@ def build_app(
     guard = TaskRunGuard()
 
     def run_job(task_id: int) -> None:
+        logger.info("任务 %s 开始执行", task_id)
         try:
-            _make_crawl_service(session_factory, settings_service, guard).run_task(task_id)
+            stats = _make_crawl_service(session_factory, settings_service, guard).run_task(task_id)
+            logger.info("任务 %s 执行完成: %s", task_id, stats)
         except Exception:
             logger.exception("任务 %s 执行失败", task_id)
 

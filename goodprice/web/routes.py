@@ -72,10 +72,11 @@ def tasks_page(request: Request):
     task_service, _ = _services(request)
     tasks = task_service.list_tasks()
     running_ids = request.app.state.guard.running_ids()
+    just_ran = request.query_params.get("run")
     return templates.TemplateResponse(
         request,
         "tasks.html",
-        {"tasks": tasks, "running_ids": running_ids, "active": "tasks"},
+        {"tasks": tasks, "running_ids": running_ids, "just_ran": just_ran, "active": "tasks"},
     )
 
 
@@ -121,7 +122,7 @@ def run_task(request: Request, task_id: int):
     threading.Thread(
         target=request.app.state.run_job, args=(task_id,), daemon=True
     ).start()
-    return RedirectResponse("/tasks", status_code=303)
+    return RedirectResponse(f"/tasks?run={task_id}", status_code=303)
 
 
 @router.post("/tasks/{task_id}/delete")

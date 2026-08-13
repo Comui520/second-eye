@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}监控任务 - 闲鱼盯价助手{% endblock %}
 {% block content %}
+{% if just_ran %}
+<div class="bg-green-100 text-green-800 rounded shadow px-4 py-3 mb-6">
+  已开始执行任务 #{{ just_ran }}，页面将自动刷新显示进度；完成后可查看「上次运行」与「命中列表」。
+</div>
+{% endif %}
+{% if running_ids %}
+<script>setTimeout(function () { location.reload(); }, 2000);</script>
+{% endif %}
 <div class="bg-white rounded shadow p-4 mb-6">
   <h2 class="text-lg font-semibold mb-3">新建监控任务</h2>
   <form method="post" action="/tasks" class="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -31,7 +39,10 @@
       {{ '启用' if task.enabled else '停用' }}
     </span>
     <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="border rounded px-3 py-1">{{ '停用' if task.enabled else '启用' }}</button></form>
-    <form method="post" action="/tasks/{{ task.id }}/run" class="inline"><button class="border rounded px-3 py-1 bg-blue-50">立即执行</button></form>
+    <form method="post" action="/tasks/{{ task.id }}/run" class="inline">
+      {% if task.id in running_ids %}<button disabled class="border rounded px-3 py-1 bg-gray-200 text-gray-500">执行中...</button>
+      {% else %}<button class="border rounded px-3 py-1 bg-blue-50">立即执行</button>{% endif %}
+    </form>
     <form method="post" action="/tasks/{{ task.id }}/delete" class="inline" onsubmit="return confirm('确认删除该任务？')"><button class="border rounded px-3 py-1 text-red-600">删除</button></form>
   </div>
   {% else %}
