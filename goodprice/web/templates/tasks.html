@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}监控任务 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<div class="bg-white rounded shadow p-4 mb-6">
+  <h2 class="text-lg font-semibold mb-3">新建监控任务</h2>
+  <form method="post" action="/tasks" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <input name="keyword" required placeholder="关键词，如 iPhone 13" class="border rounded px-3 py-2">
+    <input name="max_price" type="number" step="0.01" min="0" placeholder="最高价（0 不限）" class="border rounded px-3 py-2">
+    <input name="min_condition_score" type="number" min="0" max="10" value="0" placeholder="最低品相分 0-10" class="border rounded px-3 py-2">
+    <input name="interval_minutes" type="number" min="1" value="20" placeholder="间隔分钟" class="border rounded px-3 py-2">
+    <input name="name" placeholder="备注名（可选）" class="border rounded px-3 py-2">
+    <input name="condition_requirement" placeholder="品相要求，如“无拆修、屏幕完好”" class="border rounded px-3 py-2 md:col-span-2">
+    <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" checked> 立即启用</label>
+    <button class="bg-blue-600 text-white rounded px-4 py-2">添加</button>
+  </form>
+</div>
+<div class="bg-white rounded shadow divide-y">
+  {% for task in tasks %}
+  <div class="p-4 flex items-center gap-4">
+    <div class="flex-1">
+      <div class="font-medium">{{ task.keyword }} <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
+      <div class="text-sm text-gray-500">
+        最高价 {{ task.max_price }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟
+        {% if task.last_run_at %} · 上次运行 {{ task.last_run_at.strftime('%m-%d %H:%M') }}{% endif %}
+      </div>
+      {% if task.last_error %}<div class="text-sm text-red-600 mt-1">最近错误：{{ task.last_error }}</div>{% endif %}
+    </div>
+    <span class="px-2 py-1 rounded text-xs {{ 'bg-green-100 text-green-700' if task.enabled else 'bg-gray-200 text-gray-600' }}">
+      {{ '启用' if task.enabled else '停用' }}
+    </span>
+    <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="border rounded px-3 py-1">{{ '停用' if task.enabled else '启用' }}</button></form>
+    <form method="post" action="/tasks/{{ task.id }}/run" class="inline"><button class="border rounded px-3 py-1 bg-blue-50">立即执行</button></form>
+    <form method="post" action="/tasks/{{ task.id }}/delete" class="inline" onsubmit="return confirm('确认删除该任务？')"><button class="border rounded px-3 py-1 text-red-600">删除</button></form>
+  </div>
+  {% else %}
+  <div class="p-4 text-gray-500">还没有监控任务。</div>
+  {% endfor %}
+</div>
+{% endblock %}

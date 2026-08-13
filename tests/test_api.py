@@ -1,0 +1,71 @@
+from fastapi.testclient import TestClient
+
+from goodprice.main import build_app
+
+
+def _client(base_settings, session_factory):
+    app = build_app(settings=base_settings, session_factory=session_factory, with_scheduler=False)
+    app.state.run_job = lambda task_id: None
+    return TestClient(app, follow_redirects=False)
+
+
+def test_pages_render(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    for path in ["/", "/tasks", "/listings", "/settings"]:
+        response = client.get(path)
+        assert response.status_code == 200, path
+
+
+def test_create_and_list_tasks(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    response = client.post(
+        "/api/tasks",
+        json={"keyword": "iPhone 13", "max_price": 3000, "min_condition_score": 6},
+    )
+    assert response.status_code == 200
+    data = client.get("/api/tasks").json()
+    assert len(data) == 1
+    assert data[0]["keyword"] == "iPhone 13"
+    assert data[0]["max_price"] == 3000.0
+
+
+def test_toggle_and_delete(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    response = client.post(f"/tasks/{task['id']}/toggle")
+    assert response.status_code == 303
+    assert client.get("/api/tasks").json()[0]["enabled"] is False
+    response = client.post(f"/tasks/{task['id']}/delete")
+    assert response.status_code == 303
+    assert client.get("/api/tasks").json() == []
+
+
+def test_run_task_uses_run_job(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    calls = []
+    client.app.state.run_job = lambda task_id: calls.append(task_id)
+    response = client.post(f"/tasks/{task['id']}/run")
+    assert response.status_code == 303
+    assert calls == [task["id"]]
+
+
+def test_settings_save(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    response = client.post(
+        "/settings",
+        data={
+            "xianyu_cookie": "a=1",
+            "llm_base_url": "",
+            "llm_api_key": "",
+            "llm_model": "qwen-vl-max",
+            "serverchan_sendkey": "",
+            "proxy": "",
+            "default_crawl_interval_minutes": "30",
+            "default_crawl_jitter_minutes": "5",
+        },
+    )
+    assert response.status_code == 303
+    settings = client.app.state.settings_service.get()
+    assert settings.xianyu_cookie == "a=1"
+    assert settings.default_crawl_interval_minutes == 30

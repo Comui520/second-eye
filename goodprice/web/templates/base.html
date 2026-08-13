@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}闲鱼盯价助手{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+  <nav class="bg-white shadow">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
+      <span class="font-bold text-lg">闲鱼盯价助手</span>
+      <a href="/" class="{{ 'text-blue-600 font-semibold' if active == 'dashboard' else 'text-gray-600' }}">仪表盘</a>
+      <a href="/tasks" class="{{ 'text-blue-600 font-semibold' if active == 'tasks' else 'text-gray-600' }}">监控任务</a>
+      <a href="/listings" class="{{ 'text-blue-600 font-semibold' if active == 'listings' else 'text-gray-600' }}">命中列表</a>
+      <a href="/settings" class="{{ 'text-blue-600 font-semibold' if active == 'settings' else 'text-gray-600' }}">设置</a>
+    </div>
+  </nav>
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

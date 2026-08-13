@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="bg-white rounded shadow p-4"><div class="text-2xl font-bold">{{ stats.tasks }}</div><div class="text-gray-500">监控任务</div></div>
+  <div class="bg-white rounded shadow p-4"><div class="text-2xl font-bold">{{ stats.enabled_tasks }}</div><div class="text-gray-500">启用中</div></div>
+  <div class="bg-white rounded shadow p-4"><div class="text-2xl font-bold">{{ stats.listings }}</div><div class="text-gray-500">收录商品</div></div>
+  <div class="bg-white rounded shadow p-4"><div class="text-2xl font-bold">{{ stats.notified }}</div><div class="text-gray-500">已通知</div></div>
+</div>
+<h2 class="text-lg font-semibold mb-3">最近收录</h2>
+<div class="bg-white rounded shadow divide-y">
+  {% for item in recent %}
+  <div class="p-3 flex items-center gap-3">
+    {% if item.image_urls %}<img src="{{ item.image_urls[0] }}" class="w-14 h-14 object-cover rounded">{% endif %}
+    <div class="flex-1">
+      <a href="{{ item.url }}" target="_blank" class="font-medium hover:text-blue-600">{{ item.title }}</a>
+      <div class="text-sm text-gray-500">{{ item.price }} 元 · 品相分 {{ item.condition_score or '未评估' }}</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="p-4 text-gray-500">暂无数据，先去「监控任务」添加一个任务吧。</div>
+  {% endfor %}
+</div>
+{% endblock %}

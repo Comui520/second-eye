@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}设置 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<form method="post" action="/settings" class="bg-white rounded shadow p-4 max-w-2xl space-y-4">
+  <div>
+    <label class="block text-sm font-medium mb-1">闲鱼 Cookie</label>
+    <textarea name="xianyu_cookie" rows="4" class="w-full border rounded px-3 py-2 font-mono text-xs">{{ settings.xianyu_cookie }}</textarea>
+    <p class="text-xs text-gray-500 mt-1">登录 https://www.goofish.com 后，从浏览器开发者工具复制 Cookie 粘贴到这里。</p>
+  </div>
+  <div class="grid grid-cols-2 gap-3">
+    <div><label class="block text-sm font-medium mb-1">LLM Base URL</label>
+      <input name="llm_base_url" class="w-full border rounded px-3 py-2" value="{{ settings.llm_base_url }}" placeholder="如 https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
+    <div><label class="block text-sm font-medium mb-1">LLM API Key</label>
+      <input name="llm_api_key" type="password" class="w-full border rounded px-3 py-2" value="{{ settings.llm_api_key }}"></div>
+    <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
+      <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
+    <div><label class="block text-sm font-medium mb-1">Server酱 SendKey</label>
+      <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-2" value="{{ settings.serverchan_sendkey }}"></div>
+  </div>
+  <div class="grid grid-cols-2 gap-3">
+    <div><label class="block text-sm font-medium mb-1">代理（可选）</label>
+      <input name="proxy" class="w-full border rounded px-3 py-2" value="{{ settings.proxy }}" placeholder="http://127.0.0.1:7890"></div>
+    <div><label class="block text-sm font-medium mb-1">默认间隔（分钟）</label>
+      <input name="default_crawl_interval_minutes" type="number" min="1" class="w-full border rounded px-3 py-2" value="{{ settings.default_crawl_interval_minutes }}"></div>
+    <div><label class="block text-sm font-medium mb-1">随机抖动（分钟）</label>
+      <input name="default_crawl_jitter_minutes" type="number" min="0" class="w-full border rounded px-3 py-2" value="{{ settings.default_crawl_jitter_minutes }}"></div>
+  </div>
+  <button class="bg-blue-600 text-white rounded px-4 py-2">保存设置</button>
+</form>
+{% endblock %}

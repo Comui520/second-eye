@@ -7,6 +7,8 @@ from goodprice.models import AppSetting
 
 @dataclass
 class RuntimeSettings:
+    _INT_FIELDS = {"default_crawl_interval_minutes", "default_crawl_jitter_minutes"}
+
     xianyu_cookie: str = ""
     llm_base_url: str = ""
     llm_api_key: str = ""
@@ -21,6 +23,9 @@ class RuntimeSettings:
         values = asdict(cls())
         values.update({k: v for k, v in base.model_dump().items() if k in values})
         values.update({k: v for k, v in overrides.items() if v != "" and k in values})
+        for key in cls._INT_FIELDS:
+            if values.get(key) not in ("", None):
+                values[key] = int(values[key])
         return cls(**values)
 
 
