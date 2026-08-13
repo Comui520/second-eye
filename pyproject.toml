@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "good-price"
+version = "0.1.0"
+description = "闲鱼盯价助手：本地 Web 工具，监控关键词新上架商品，LLM 品相分析 + 微信提醒"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "comui" }]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "sqlalchemy>=2.0",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "apscheduler>=3.10,<4",
+  "playwright>=1.44",
+  "beautifulsoup4>=4.12",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=4.1"]
+
+[project.scripts]
+good-price = "goodprice.main:main"
+
+[tool.setuptools.packages.find]
+include = ["goodprice*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
