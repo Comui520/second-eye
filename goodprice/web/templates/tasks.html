@@ -11,6 +11,7 @@
     <input name="name" placeholder="备注名（可选）" class="border rounded px-3 py-2">
     <input name="condition_requirement" placeholder="品相要求，如“无拆修、屏幕完好”" class="border rounded px-3 py-2 md:col-span-2">
     <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" checked> 立即启用</label>
+    <label class="flex items-center gap-2"><input type="checkbox" name="fetch_detail" value="1" checked> 抓详情描述</label>
     <button class="bg-blue-600 text-white rounded px-4 py-2">添加</button>
   </form>
 </div>
@@ -20,11 +21,12 @@
     <div class="flex-1">
       <div class="font-medium">{{ task.keyword }} <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
       <div class="text-sm text-gray-500">
-        最高价 {{ task.max_price }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟
+        需求：{{ task.condition_requirement or '无' }} · 最高价 {{ task.max_price }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟{% if task.fetch_detail %} · 抓详情{% endif %}
         {% if task.last_run_at %} · 上次运行 {{ task.last_run_at.strftime('%m-%d %H:%M') }}{% endif %}
       </div>
       {% if task.last_error %}<div class="text-sm text-red-600 mt-1">最近错误：{{ task.last_error }}</div>{% endif %}
     </div>
+    {% if task.id in running_ids %}<span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">运行中</span>{% endif %}
     <span class="px-2 py-1 rounded text-xs {{ 'bg-green-100 text-green-700' if task.enabled else 'bg-gray-200 text-gray-600' }}">
       {{ '启用' if task.enabled else '停用' }}
     </span>

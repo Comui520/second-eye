@@ -1,3 +1,5 @@
+import time
+
 from fastapi.testclient import TestClient
 
 from goodprice.main import build_app
@@ -40,14 +42,40 @@ def test_toggle_and_delete(base_settings, session_factory):
     assert client.get("/api/tasks").json() == []
 
 
-def test_run_task_uses_run_job(base_settings, session_factory):
+def test_run_task_executes_in_background(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     task = client.post("/api/tasks", json={"keyword": "k"}).json()
     calls = []
     client.app.state.run_job = lambda task_id: calls.append(task_id)
     response = client.post(f"/tasks/{task['id']}/run")
     assert response.status_code == 303
+    deadline = time.time() + 3
+    while not calls and time.time() < deadline:
+        time.sleep(0.05)
     assert calls == [task["id"]]
+
+
+def test_task_change_triggers_scheduler_sync(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    calls = []
+    client.app.state.sync_scheduler = lambda: calls.append(1)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    client.post(f"/tasks/{task['id']}/toggle")
+    client.post(f"/tasks/{task['id']}/delete")
+    assert len(calls) >= 3
+
+
+def test_tasks_page_shows_requirement_and_running(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post(
+        "/api/tasks", json={"keyword": "iPhone 13", "condition_requirement": "屏幕完好"}
+    ).json()
+    client.app.state.guard.try_start(task["id"])
+    response = client.get("/tasks")
+    assert response.status_code == 200
+    assert "屏幕完好" in response.text
+    assert "运行中" in response.text
+    client.app.state.guard.finish(task["id"])
 
 
 def test_settings_save(base_settings, session_factory):

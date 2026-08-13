@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,7 @@ class TaskCreate(BaseModel):
     min_condition_score: int = 0
     platform: str = "xianyu"
     interval_minutes: int = 20
+    fetch_detail: bool = True
     enabled: bool = True
 
 
@@ -69,7 +71,12 @@ def dashboard(request: Request):
 def tasks_page(request: Request):
     task_service, _ = _services(request)
     tasks = task_service.list_tasks()
-    return templates.TemplateResponse(request, "tasks.html", {"tasks": tasks, "active": "tasks"})
+    running_ids = request.app.state.guard.running_ids()
+    return templates.TemplateResponse(
+        request,
+        "tasks.html",
+        {"tasks": tasks, "running_ids": running_ids, "active": "tasks"},
+    )
 
 
 @router.post("/tasks")
@@ -81,6 +88,7 @@ def create_task_form(
     condition_requirement: str = Form(""),
     min_condition_score: int = Form(0),
     interval_minutes: int = Form(20),
+    fetch_detail: Optional[int] = Form(None),
     enabled: Optional[int] = Form(None),
 ):
     task_service, _ = _services(request)
@@ -92,9 +100,11 @@ def create_task_form(
             "condition_requirement": condition_requirement,
             "min_condition_score": min_condition_score,
             "interval_minutes": interval_minutes,
+            "fetch_detail": bool(fetch_detail),
             "enabled": bool(enabled),
         }
     )
+    request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 
 
@@ -102,12 +112,15 @@ def create_task_form(
 def toggle_task(request: Request, task_id: int):
     task_service, _ = _services(request)
     task_service.toggle_task(task_id)
+    request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 
 
 @router.post("/tasks/{task_id}/run")
 def run_task(request: Request, task_id: int):
-    request.app.state.run_job(task_id)
+    threading.Thread(
+        target=request.app.state.run_job, args=(task_id,), daemon=True
+    ).start()
     return RedirectResponse("/tasks", status_code=303)
 
 
@@ -115,6 +128,7 @@ def run_task(request: Request, task_id: int):
 def delete_task(request: Request, task_id: int):
     task_service, _ = _services(request)
     task_service.delete_task(task_id)
+    request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 
 
@@ -196,6 +210,7 @@ def api_list_tasks(request: Request):
 def api_create_task(request: Request, data: TaskCreate):
     task_service, _ = _services(request)
     task = task_service.create_task(data.model_dump())
+    request.app.state.sync_scheduler()
     return _task_dict(task)
 
 
