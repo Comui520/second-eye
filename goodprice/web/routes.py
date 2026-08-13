@@ -390,11 +390,10 @@ def save_settings(
     vision_base_url: str = Form(""),
     vision_api_key: str = Form(""),
     vision_model: str = Form(""),
-    wecom_corpid: str = Form(""),
-    wecom_agentid: str = Form(""),
-    wecom_secret: str = Form(""),
-    wecom_touser: str = Form("@all"),
     wecom_webhook: str = Form(""),
+    serverchan_enabled: Optional[int] = Form(None),
+    wecom_robot_enabled: Optional[int] = Form(None),
+    vision_enabled: Optional[int] = Form(None),
 ):
     _, settings_service = _services(request)
     values = {
@@ -409,13 +408,12 @@ def save_settings(
         "vision_base_url": vision_base_url,
         "vision_api_key": vision_api_key,
         "vision_model": vision_model,
-        "wecom_corpid": wecom_corpid,
-        "wecom_agentid": wecom_agentid,
-        "wecom_secret": wecom_secret,
-        "wecom_touser": wecom_touser,
         "wecom_webhook": wecom_webhook,
+        "serverchan_enabled": "1" if serverchan_enabled else "0",
+        "wecom_robot_enabled": "1" if wecom_robot_enabled else "0",
+        "vision_enabled": "1" if vision_enabled else "0",
     }
-    for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_secret", "wecom_webhook"):
+    for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_webhook"):
         if values.get(key) == "":
             values.pop(key)  # 留空 = 保持原值
     settings_service.set_many(values)

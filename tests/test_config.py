@@ -21,15 +21,16 @@ def test_round2_settings_defaults():
     settings = Settings(_env_file=None)
     assert settings.vision_model == "qwen-vl-max"
     assert settings.vision_base_url == ""
-    assert settings.wecom_touser == "@all"
-    assert settings.wecom_corpid == ""
+    assert settings.serverchan_enabled is True
+    assert settings.wecom_robot_enabled is True
+    assert settings.vision_enabled is True
 
 
 def test_round2_settings_env_overrides(monkeypatch):
-    monkeypatch.setenv("WECOM_CORPID", "ww123")
+    monkeypatch.setenv("VISION_ENABLED", "false")
     monkeypatch.setenv("VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     settings = Settings(_env_file=None)
-    assert settings.wecom_corpid == "ww123"
+    assert settings.vision_enabled is False
     assert settings.vision_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 

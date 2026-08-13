@@ -25,7 +25,6 @@ def _make_crawl_service(session_factory, settings_service, guard):
     from goodprice.crawler.xianyu import XianyuAdapter
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.serverchan import ServerChanNotifier
-    from goodprice.notify.wecom import WeComNotifier
     from goodprice.notify.wecom_robot import WeComRobotNotifier
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
@@ -35,27 +34,25 @@ def _make_crawl_service(session_factory, settings_service, guard):
         api_key=runtime.llm_api_key,
         model=runtime.llm_model,
     )
-    vision = LLMClient(
-        base_url=runtime.vision_base_url,
-        api_key=runtime.vision_api_key,
-        model=runtime.vision_model,
-        allow_image_fallback=False,
+    vision = (
+        LLMClient(
+            base_url=runtime.vision_base_url,
+            api_key=runtime.vision_api_key,
+            model=runtime.vision_model,
+            allow_image_fallback=False,
+        )
+        if runtime.vision_enabled
+        else LLMClient(base_url="", api_key="", model="")
     )
     notifiers = [("log", LogNotifier())]
-    serverchan = ServerChanNotifier(sendkey=runtime.serverchan_sendkey)
-    if serverchan.enabled:
-        notifiers.append(("serverchan", serverchan))
-    wecom = WeComNotifier(
-        corpid=runtime.wecom_corpid,
-        agentid=runtime.wecom_agentid,
-        secret=runtime.wecom_secret,
-        touser=runtime.wecom_touser,
-    )
-    if wecom.enabled:
-        notifiers.append(("wecom", wecom))
-    robot = WeComRobotNotifier(webhook=runtime.wecom_webhook)
-    if robot.enabled:
-        notifiers.append(("wecom_robot", robot))
+    if runtime.serverchan_enabled:
+        serverchan = ServerChanNotifier(sendkey=runtime.serverchan_sendkey)
+        if serverchan.enabled:
+            notifiers.append(("serverchan", serverchan))
+    if runtime.wecom_robot_enabled:
+        robot = WeComRobotNotifier(webhook=runtime.wecom_webhook)
+        if robot.enabled:
+            notifiers.append(("wecom_robot", robot))
     return CrawlService(
         session_factory=session_factory,
         adapter=adapter,

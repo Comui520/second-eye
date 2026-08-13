@@ -8,6 +8,7 @@ from goodprice.models import AppSetting
 @dataclass
 class RuntimeSettings:
     _INT_FIELDS = {"default_crawl_interval_minutes", "default_crawl_jitter_minutes"}
+    _BOOL_FIELDS = {"serverchan_enabled", "wecom_robot_enabled", "vision_enabled"}
 
     xianyu_cookie: str = ""
     llm_base_url: str = ""
@@ -20,11 +21,10 @@ class RuntimeSettings:
     vision_base_url: str = ""
     vision_api_key: str = ""
     vision_model: str = ""
-    wecom_corpid: str = ""
-    wecom_agentid: str = ""
-    wecom_secret: str = ""
-    wecom_touser: str = "@all"
     wecom_webhook: str = ""
+    serverchan_enabled: bool = True
+    wecom_robot_enabled: bool = True
+    vision_enabled: bool = True
 
     @classmethod
     def from_sources(cls, base: Settings, overrides: dict[str, str]) -> "RuntimeSettings":
@@ -34,6 +34,9 @@ class RuntimeSettings:
         for key in cls._INT_FIELDS:
             if values.get(key) not in ("", None):
                 values[key] = int(values[key])
+        for key in cls._BOOL_FIELDS:
+            if values.get(key) not in ("", None):
+                values[key] = str(values[key]).lower() in ("1", "true", "yes", "on")
         return cls(**values)
 
 

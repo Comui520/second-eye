@@ -271,12 +271,16 @@ def test_settings_secret_empty_keeps_old_value(base_settings, session_factory):
     assert client.app.state.settings_service.get().llm_api_key == "secret1"
 
 
-def test_settings_save_wecom(base_settings, session_factory):
+def test_settings_save_toggles(base_settings, session_factory):
     client = _client(base_settings, session_factory)
-    client.post("/settings", data={**_settings_form(), "wecom_corpid": "ww123", "wecom_secret": "sec"})
+    client.post(
+        "/settings",
+        data={**_settings_form(), "serverchan_enabled": "", "vision_enabled": ""},
+    )
     settings = client.app.state.settings_service.get()
-    assert settings.wecom_corpid == "ww123"
-    assert settings.wecom_secret == "sec"
+    assert settings.serverchan_enabled is False
+    assert settings.vision_enabled is False
+    assert settings.wecom_robot_enabled is True
 
 
 def _settings_form():
@@ -295,6 +299,8 @@ def _settings_form():
         "wecom_corpid": "",
         "wecom_agentid": "",
         "wecom_secret": "",
-        "wecom_touser": "@all",
         "wecom_webhook": "",
+        "serverchan_enabled": "1",
+        "wecom_robot_enabled": "1",
+        "vision_enabled": "1",
     }

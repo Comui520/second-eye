@@ -27,11 +27,10 @@ class Settings(BaseSettings):
     vision_base_url: str = ""
     vision_api_key: str = ""
     vision_model: str = "qwen-vl-max"
-    wecom_corpid: str = ""
-    wecom_agentid: str = ""
-    wecom_secret: str = ""
-    wecom_touser: str = "@all"
     wecom_webhook: str = ""
+    serverchan_enabled: bool = True
+    wecom_robot_enabled: bool = True
+    vision_enabled: bool = True
 
 
 @lru_cache
