@@ -114,6 +114,66 @@ def tasks_progress(request: Request):
     return templates.TemplateResponse(request, "progress.html", {"running": running, "items": items})
 
 
+@router.get("/notifications", response_class=HTMLResponse)
+def notifications_page(request: Request):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing, Notification
+
+        rows = (
+            session.query(Notification, Listing)
+            .outerjoin(Listing, Listing.id == Notification.listing_id)
+            .order_by(Notification.id.desc())
+            .limit(200)
+            .all()
+        )
+    return templates.TemplateResponse(
+        request, "notifications.html", {"rows": rows, "active": "notifications"}
+    )
+
+
+@router.post("/notifications/delete-batch")
+def delete_notifications_batch(request: Request, ids: list[int] = Form(...)):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Notification
+
+        session.query(Notification).filter(Notification.id.in_(ids)).delete(
+            synchronize_session=False
+        )
+        session.commit()
+    return RedirectResponse("/notifications", status_code=303)
+
+
+@router.post("/notifications/{notification_id}/delete")
+def delete_notification(request: Request, notification_id: int):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Notification
+
+        row = session.get(Notification, notification_id)
+        if row:
+            session.delete(row)
+            session.commit()
+    return RedirectResponse("/notifications", status_code=303)
+
+
+@router.get("/api/notifications")
+def api_list_notifications(request: Request):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Notification
+
+        rows = session.query(Notification).order_by(Notification.id.desc()).limit(200).all()
+    return [
+        {
+            "id": r.id,
+            "channel": r.channel,
+            "status": r.status,
+            "title": r.title,
+            "content": r.content,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.post("/tasks")
 def create_task_form(
     request: Request,

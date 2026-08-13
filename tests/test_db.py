@@ -45,3 +45,14 @@ def test_migrate_adds_block_columns(tmp_db):
         sc = {r[1] for r in session.execute(text("PRAGMA table_info(sellers)"))}
     assert "blocked" in lc and "blocked" in sc
     assert "task_id" in lc
+
+
+def test_migrate_adds_notification_columns(tmp_db):
+    engine = create_engine(tmp_db)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE notifications (id INTEGER PRIMARY KEY)"))
+    factory = make_session_factory(tmp_db)
+    migrate_schema(factory)
+    with factory() as session:
+        cols = {r[1] for r in session.execute(text("PRAGMA table_info(notifications)"))}
+    assert {"title", "content"} <= cols

@@ -338,7 +338,12 @@ class CrawlService:
                 notifier.send(message)
                 session.add(
                     Notification(
-                        listing_id=listing.id, task_id=task.id, channel=channel, status="sent"
+                        listing_id=listing.id,
+                        task_id=task.id,
+                        channel=channel,
+                        status="sent",
+                        title=message.title,
+                        content=message.content,
                     )
                 )
             except Exception as exc:
@@ -350,6 +355,8 @@ class CrawlService:
                         channel=channel,
                         status="failed",
                         detail=str(exc),
+                        title=message.title,
+                        content=message.content,
                     )
                 )
         listing.notified_at = datetime.now()

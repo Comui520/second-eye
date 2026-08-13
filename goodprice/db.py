@@ -50,6 +50,10 @@ def migrate_schema(session_factory) -> None:
             ("credit_label", "credit_label TEXT"),
             ("blocked", "blocked BOOLEAN DEFAULT 0"),
         ],
+        "notifications": [
+            ("title", "title TEXT"),
+            ("content", "content TEXT"),
+        ],
     }
     with session_factory() as session:
         existing_tables = {

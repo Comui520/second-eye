@@ -217,6 +217,31 @@ def test_listings_sort(base_settings, session_factory):
     assert [d["title"] for d in client.get("/api/listings?sort=price_desc").json()] == ["a", "b"]
 
 
+def test_notifications_page_and_delete(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    from goodprice.models import Notification
+
+    with session_factory() as session:
+        session.add(Notification(channel="log", status="sent", title="消息甲", content="内容甲"))
+        session.add(Notification(channel="serverchan", status="failed", title="消息乙", content="内容乙"))
+        session.commit()
+        ids = [r.id for r in session.query(Notification).order_by(Notification.id).all()]
+    page = client.get("/notifications")
+    assert page.status_code == 200
+    assert "消息甲" in page.text and "消息乙" in page.text
+    assert "select-all" in page.text  # 全选
+    resp = client.post(f"/notifications/{ids[0]}/delete")
+    assert resp.status_code == 303
+    assert len(client.get("/api/notifications").json()) == 1
+    with session_factory() as session:
+        session.add(Notification(channel="log", status="sent", title="x", content="y"))
+        session.add(Notification(channel="log", status="sent", title="y", content="z"))
+        session.commit()
+        ids2 = [r.id for r in session.query(Notification).all()]
+    client.post("/notifications/delete-batch", data={"ids": ids2})
+    assert client.get("/api/notifications").json() == []
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(

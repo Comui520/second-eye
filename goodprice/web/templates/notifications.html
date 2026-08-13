@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}消息通知 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<div class="bg-white rounded shadow">
+  <form method="post" action="/notifications/delete-batch" onsubmit="return confirm('确认删除选中的消息？')">
+    <div class="p-3 flex items-center gap-4">
+      <label class="flex items-center gap-2"><input type="checkbox" id="select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
+      <button class="bg-red-600 text-white rounded px-4 py-1">批量删除</button>
+    </div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-gray-500 border-b">
+        <th class="p-2"></th><th class="p-2">通道</th><th class="p-2">状态</th><th class="p-2">内容</th><th class="p-2">时间</th><th class="p-2">操作</th>
+      </tr></thead>
+      <tbody>
+        {% for n, listing in rows %}
+        <tr class="border-b">
+          <td class="p-2"><input type="checkbox" class="row-check" name="ids" value="{{ n.id }}"></td>
+          <td class="p-2">{{ n.channel }}</td>
+          <td class="p-2">{{ n.status }}</td>
+          <td class="p-2">
+            {% if listing %}<a href="{{ listing.url }}" target="_blank" class="hover:text-blue-600">{{ n.title }}</a>
+            {% else %}{{ n.title }}{% endif %}
+            <div class="text-gray-500 text-xs">{{ n.content }}</div>
+          </td>
+          <td class="p-2 text-gray-500">{{ n.created_at.strftime('%m-%d %H:%M') }}</td>
+          <td class="p-2">
+            <form method="post" action="/notifications/{{ n.id }}/delete" class="inline" onsubmit="return confirm('确认删除该消息？')">
+              <button class="text-red-600">删除</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td class="p-4 text-gray-500" colspan="6">暂无消息。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </form>
+</div>
+{% endblock %}

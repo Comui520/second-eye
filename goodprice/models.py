@@ -105,6 +105,8 @@ class Notification(Base):
     channel: Mapped[str] = mapped_column(String(50), default="log")
     status: Mapped[str] = mapped_column(String(20), default="sent")
     detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title: Mapped[str] = mapped_column(String(500), default="")
+    content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     listing: Mapped[Optional[Listing]] = relationship(back_populates="notifications")
