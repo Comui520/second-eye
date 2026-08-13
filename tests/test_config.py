@@ -31,3 +31,8 @@ def test_round2_settings_env_overrides(monkeypatch):
     settings = Settings(_env_file=None)
     assert settings.wecom_corpid == "ww123"
     assert settings.vision_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
+def test_wecom_webhook_setting(monkeypatch):
+    monkeypatch.setenv("WECOM_WEBHOOK", "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc")
+    assert Settings(_env_file=None).wecom_webhook == "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc"

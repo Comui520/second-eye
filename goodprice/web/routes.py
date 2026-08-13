@@ -214,6 +214,7 @@ def save_settings(
     wecom_agentid: str = Form(""),
     wecom_secret: str = Form(""),
     wecom_touser: str = Form("@all"),
+    wecom_webhook: str = Form(""),
 ):
     _, settings_service = _services(request)
     values = {
@@ -232,8 +233,9 @@ def save_settings(
         "wecom_agentid": wecom_agentid,
         "wecom_secret": wecom_secret,
         "wecom_touser": wecom_touser,
+        "wecom_webhook": wecom_webhook,
     }
-    for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_secret"):
+    for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_secret", "wecom_webhook"):
         if values.get(key) == "":
             values.pop(key)  # 留空 = 保持原值
     settings_service.set_many(values)

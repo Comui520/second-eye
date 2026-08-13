@@ -25,6 +25,7 @@ def _make_crawl_service(session_factory, settings_service, guard):
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.serverchan import ServerChanNotifier
     from goodprice.notify.wecom import WeComNotifier
+    from goodprice.notify.wecom_robot import WeComRobotNotifier
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     llm = LLMClient(
@@ -50,6 +51,9 @@ def _make_crawl_service(session_factory, settings_service, guard):
     )
     if wecom.enabled:
         notifiers.append(("wecom", wecom))
+    robot = WeComRobotNotifier(webhook=runtime.wecom_webhook)
+    if robot.enabled:
+        notifiers.append(("wecom_robot", robot))
     return CrawlService(
         session_factory=session_factory,
         adapter=adapter,

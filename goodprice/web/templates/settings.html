@@ -39,6 +39,8 @@
         <input name="wecom_secret" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
       <div><label class="block text-sm font-medium mb-1">接收人 Touser</label>
         <input name="wecom_touser" class="w-full border rounded px-3 py-2" value="{{ settings.wecom_touser }}" placeholder="@all 或成员 userid"></div>
+      <div class="col-span-2"><label class="block text-sm font-medium mb-1">群机器人 Webhook（推荐，无需域名/IP）</label>
+        <input name="wecom_webhook" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
     </div>
     <p class="text-xs text-gray-500 mt-1">应用消息需在企业微信后台把本机出口 IP 加入"企业可信 IP"。</p>
   </div>

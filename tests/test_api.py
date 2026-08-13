@@ -197,4 +197,5 @@ def _settings_form():
         "wecom_agentid": "",
         "wecom_secret": "",
         "wecom_touser": "@all",
+        "wecom_webhook": "",
     }

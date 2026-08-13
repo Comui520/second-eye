@@ -24,6 +24,7 @@ class RuntimeSettings:
     wecom_agentid: str = ""
     wecom_secret: str = ""
     wecom_touser: str = "@all"
+    wecom_webhook: str = ""
 
     @classmethod
     def from_sources(cls, base: Settings, overrides: dict[str, str]) -> "RuntimeSettings":

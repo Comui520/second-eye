@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     wecom_agentid: str = ""
     wecom_secret: str = ""
     wecom_touser: str = "@all"
+    wecom_webhook: str = ""
 
 
 @lru_cache
