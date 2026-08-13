@@ -44,3 +44,4 @@ def test_migrate_adds_block_columns(tmp_db):
         lc = {r[1] for r in session.execute(text("PRAGMA table_info(listings)"))}
         sc = {r[1] for r in session.execute(text("PRAGMA table_info(sellers)"))}
     assert "blocked" in lc and "blocked" in sc
+    assert "task_id" in lc

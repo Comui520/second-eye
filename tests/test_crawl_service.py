@@ -154,6 +154,7 @@ def test_seller_advisory_in_notification_and_cache(session_factory, base_setting
         listing = session.query(Listing).one()
         assert listing.seller_uid == "2672367114"
         assert listing.seller_risk["risk_level"] == "低"
+        assert listing.task_id == task.id
 
 
 def test_seller_fetch_failure_does_not_block(session_factory, base_settings):

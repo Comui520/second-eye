@@ -189,6 +189,21 @@ def test_block_unblock_listing(base_settings, session_factory):
     assert client.get("/api/listings?show=blocked").json() == []
 
 
+def test_listings_filter_by_task(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    with session_factory() as session:
+        from goodprice.models import Listing
+
+        session.add(Listing(platform="xianyu", external_id="1", title="甲", price=1, url="u", task_id=task["id"]))
+        session.add(Listing(platform="xianyu", external_id="2", title="乙", price=1, url="v", task_id=999))
+        session.commit()
+    data = client.get(f"/api/listings?task_id={task['id']}").json()
+    assert [d["title"] for d in data] == ["甲"]
+    page = client.get("/tasks")
+    assert f"/listings?task_id={task['id']}" in page.text
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(

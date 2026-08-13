@@ -141,6 +141,7 @@ class CrawlService:
                 seller=data.seller,
                 location=data.location,
                 published_at=data.published_at,
+                task_id=task.id,
             )
             session.add(listing)
             session.flush()

@@ -69,6 +69,9 @@ class Listing(Base):
     seller_risk: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     blocked: Mapped[bool] = mapped_column(default=False)
     satisfaction: Mapped[float] = mapped_column(Float, default=0.0)
+    task_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("watch_tasks.id", ondelete="SET NULL"), nullable=True
+    )
 
     snapshots: Mapped[list["PriceSnapshot"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"

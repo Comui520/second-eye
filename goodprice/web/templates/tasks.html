@@ -45,7 +45,7 @@
   {% for task in tasks %}
   <div class="p-4 flex items-center gap-4">
     <div class="flex-1">
-      <div class="font-medium">{{ task.keyword }} <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
+      <div class="font-medium"><a href="/listings?task_id={{ task.id }}" class="hover:text-blue-600">{{ task.keyword }}</a> <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
       <div class="text-sm text-gray-500">
         需求：{{ task.condition_requirement or '无' }} · 最高价 {{ task.max_price }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟{% if task.fetch_detail %} · 抓详情{% endif %}
         {% if task.last_run_at %} · 上次运行 {{ task.last_run_at.strftime('%m-%d %H:%M') }}{% endif %}

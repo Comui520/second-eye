@@ -44,6 +44,7 @@ def migrate_schema(session_factory) -> None:
             ("seller_risk", "seller_risk JSON"),
             ("blocked", "blocked BOOLEAN DEFAULT 0"),
             ("satisfaction", "satisfaction FLOAT DEFAULT 0"),
+            ("task_id", "task_id INTEGER"),
         ],
         "sellers": [
             ("credit_label", "credit_label TEXT"),
