@@ -72,9 +72,8 @@ conda run -n good-price python -m goodprice
 
 阶段一「需求匹配」使用现有 LLM 配置（DeepSeek 即可）。阶段二「品相分析」需要视觉模型，在「设置」页单独配置：
 
-- 通义千问：Base URL `https://dashscope.aliyuncs.com/compatible-mode/v1`，模型 `qwen-vl-max`
-- 智谱：Base URL `https://open.bigmodel.cn/api/paas/v4`，模型 `glm-4v-flash`（免费）
-- 硅基流动：Base URL `https://api.siliconflow.cn/v1`，模型 `Qwen/Qwen2.5-VL-72B-Instruct`
+- **推荐：智谱 GLM-4.1V-Thinking-Flash（免费）**：Base URL `https://open.bigmodel.cn/api/paas/v4`，模型 `glm-4.1v-thinking-flash`。本项目实测可用，免费，支持图片与视频理解，适合商品品相判断。
+- 其他视觉模型我们未实际使用过，暂不做推荐；OpenAI 兼容接口理论上一律可配置。
 
 未配置视觉模型或关闭「视觉品相分析」开关时，品相分析会被跳过并在通知中注明；
 满足程度评分自动切换为「需求匹配 70 + 卖家风险 30」，需求匹配不受影响。
@@ -97,10 +96,10 @@ conda run -n good-price python -m goodprice
 | `XIANYU_COOKIE` | 闲鱼登录 Cookie |
 | `LLM_BASE_URL` | OpenAI 兼容服务地址，如 `https://dashscope.aliyuncs.com/compatible-mode/v1`（通义千问） |
 | `LLM_API_KEY` | 大模型 API Key |
-| `LLM_MODEL` | 模型名，默认 `qwen-vl-max`（多模态）；也支持 `gpt-4o-mini` 等 |
+| `LLM_MODEL` | 模型名，阶段一需求匹配使用（如 DeepSeek `deepseek-v4-flash`） |
 | `SERVERCHAN_SENDKEY` | Server酱 SendKey（<https://sct.ftqq.com>），留空则只写日志 |
-| `VISION_BASE_URL` / `VISION_API_KEY` / `VISION_MODEL` | 阶段二视觉模型（如通义千问 qwen-vl-max、智谱 glm-4v-flash）；不填则跳过品相分析 |
-| `WECOM_CORPID` / `WECOM_AGENTID` / `WECOM_SECRET` / `WECOM_TOUSER` | 企业微信应用消息推送（免费，可推到微信） |
+| `VISION_BASE_URL` / `VISION_API_KEY` / `VISION_MODEL` | 阶段二视觉模型（推荐智谱 `glm-4.1v-thinking-flash`，免费）；不填则跳过品相分析 |
+| `WECOM_WEBHOOK` | 企业微信群机器人 Webhook（推荐，无需域名/IP） |
 | `PROXY` | 可选 HTTP 代理，如 `http://127.0.0.1:7890` |
 | `DEFAULT_CRAWL_INTERVAL_MINUTES` | 默认抓取间隔（分钟） |
 | `DEFAULT_CRAWL_JITTER_MINUTES` | 请求随机抖动（分钟），降低风控概率 |
