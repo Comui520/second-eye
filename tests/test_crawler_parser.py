@@ -27,10 +27,11 @@ def test_parse_search_html():
     assert first.external_id == "1001"
     assert first.title == "iPhone 13 128G 蓝色"
     assert first.price == 2999.0
-    assert first.url == "https://www.goofish.com/item?id=1001"
-    assert first.image_urls == ["https://img.goofish.com/1001.jpg"]
-    assert first.seller == "小明"
+    assert first.url == "https://www.goofish.com/item?id=1001&categoryId=1"
+    assert first.image_urls == ["https://img.alicdn.com/1001.jpg"]
+    assert first.seller == "杭州"
     assert first.location == "杭州"
     second = items[1]
     assert second.external_id == "1002"
+    assert second.price == 450.0
     assert second.seller is None

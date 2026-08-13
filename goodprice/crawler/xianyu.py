@@ -57,9 +57,27 @@ class XianyuAdapter:
                 page = context.new_page()
                 url = SEARCH_URL.format(keyword=quote(keyword))
                 page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                page.wait_for_selector(sel.RESULT_CARD, timeout=30000)
                 if "login" in (page.url or ""):
                     raise CrawlerAuthError("闲鱼 Cookie 已失效或未登录，请重新获取")
-                return parse_search_html(page.content())[:max_items]
+                card_selector = sel.RESULT_CARD
+                try:
+                    page.wait_for_selector(card_selector, timeout=30000)
+                except Exception:
+                    if page.locator(sel.RESULT_CARD_FALLBACK).count() > 0:
+                        card_selector = sel.RESULT_CARD_FALLBACK
+                    else:
+                        body_text = ""
+                        try:
+                            body_text = page.inner_text("body")[:300]
+                        except Exception:
+                            pass
+                        if "加载中" in body_text:
+                            raise CrawlerAuthError(
+                                "搜索结果一直显示加载中，Cookie 可能已失效或未登录，请重新获取"
+                            )
+                        raise RuntimeError(
+                            f"未在页面中找到商品卡片，页面可能改版或触发风控。页面摘要: {body_text[:150]}"
+                        )
+                return parse_search_html(page.content(), card_selector=card_selector)[:max_items]
             finally:
                 browser.close()

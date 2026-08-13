@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from goodprice.crawler import selectors as sel
 from goodprice.crawler.base import CrawlerAuthError
 from goodprice.crawler.xianyu import XianyuAdapter
 
@@ -9,18 +10,44 @@ FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_search.html"
 
 
 class FakePage:
-    def __init__(self, html, url="https://www.goofish.com/search?q=test"):
+    def __init__(
+        self,
+        html,
+        url="https://www.goofish.com/search?q=test",
+        wait_ok=True,
+        body_text="",
+        fallback_count=0,
+    ):
         self._html = html
         self.url = url
+        self._wait_ok = wait_ok
+        self._body_text = body_text
+        self._fallback_count = fallback_count
 
     def goto(self, *args, **kwargs):
         pass
 
     def wait_for_selector(self, *args, **kwargs):
-        pass
+        if not self._wait_ok:
+            raise TimeoutError("Timeout 30000ms exceeded")
 
     def content(self):
         return self._html
+
+    def inner_text(self, selector):
+        return self._body_text
+
+    def locator(self, selector):
+        count = self._fallback_count if selector == sel.RESULT_CARD_FALLBACK else 0
+        return FakeLocator(count)
+
+
+class FakeLocator:
+    def __init__(self, count):
+        self._count = count
+
+    def count(self):
+        return self._count
 
 
 class FakeContext:
@@ -105,3 +132,20 @@ def test_cookie_parsing():
     adapter = XianyuAdapter(cookie="a=1; b=2")
     assert adapter._cookies() == {"a": "1", "b": "2"}
     assert XianyuAdapter(cookie="")._cookies() == {}
+
+
+def test_search_raises_auth_error_when_results_stuck_loading():
+    html = "<html><body>加载中...</body></html>"
+    page = FakePage(html, wait_ok=False, body_text="搜索 | 加载中... | 综合")
+    adapter, _ = _adapter(page)
+    with pytest.raises(CrawlerAuthError, match="加载中"):
+        adapter.search("iPhone")
+
+
+def test_search_uses_fallback_selector_when_primary_times_out():
+    html = FIXTURE.read_text(encoding="utf-8")
+    page = FakePage(html, wait_ok=False, fallback_count=4)
+    adapter, _ = _adapter(page)
+    items = adapter.search("iPhone")
+    assert len(items) == 2
+    assert items[0].external_id == "1001"

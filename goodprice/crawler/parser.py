@@ -32,13 +32,16 @@ def _absolute(url: str) -> str:
     return urljoin(BASE_URL, url)
 
 
-def parse_search_html(html: str) -> list[ListingData]:
+def parse_search_html(html: str, card_selector: str = sel.RESULT_CARD) -> list[ListingData]:
     soup = BeautifulSoup(html, "html.parser")
     items: list[ListingData] = []
     seen: set[str] = set()
-    for card in soup.select(sel.RESULT_CARD):
-        link_el = card.select_one(sel.LINK)
-        href = link_el.get("href") if link_el else None
+    for card in soup.select(card_selector):
+        if card.name == "a" and card.get("href"):
+            href = card.get("href")
+        else:
+            link_el = card.select_one("a[href]")
+            href = link_el.get("href") if link_el else None
         if not href:
             continue
         external_id = extract_id(href)

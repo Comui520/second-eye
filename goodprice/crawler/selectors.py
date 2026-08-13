@@ -1,8 +1,11 @@
-# 闲鱼网页版搜索结果卡片选择器（goofish.com）。平台改版时只需调整本文件。
-RESULT_CARD = ".s-item-card"
-TITLE = ".s-title"
-PRICE = ".s-price strong"
-LINK = "a"
-IMAGE = "img"
-SELLER = ".seller"
-LOCATION = ".location"
+# 闲鱼网页版搜索结果卡片选择器（goofish.com）。
+# 真实 DOM 使用带哈希的 CSS Modules 类名（如 feeds-item-wrap--rGdH_KoF），
+# 因此用“模块名前缀 + --”做稳定匹配；data-spm 是阿里系稳定埋点属性。
+# 平台改版时只需调整本文件。
+RESULT_CARD = "div[data-spm='searchFeedList'] > a[href*='item']"
+RESULT_CARD_FALLBACK = "a[href*='/item?id=']"
+TITLE = "[class*='main-title--']"
+PRICE = "[class*='price-wrap--']"
+IMAGE = "img[class*='feeds-image--']"
+SELLER = "[class*='seller-text--']"
+LOCATION = "[class*='seller-text--']"
