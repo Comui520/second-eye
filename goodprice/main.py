@@ -6,7 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from goodprice.config import Settings, get_settings
-from goodprice.db import init_db
+from goodprice.db import init_db, migrate_schema
 from goodprice.scheduler import build_scheduler
 from goodprice.services.crawl_service import CrawlService
 from goodprice.services.settings_service import SettingsService
@@ -58,6 +58,7 @@ def build_app(
         from goodprice.db import Base
 
         Base.metadata.create_all(session_factory().get_bind())
+    migrate_schema(session_factory)
 
     settings_service = SettingsService(session_factory, base=settings)
     task_service = TaskService(session_factory)

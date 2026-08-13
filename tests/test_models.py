@@ -39,3 +39,19 @@ def test_listing_relations(session_factory):
         session.refresh(listing)
         assert len(listing.snapshots) == 1
         assert len(listing.notifications) == 1
+
+
+def test_round2_model_columns(session_factory):
+    with session_factory() as session:
+        task = WatchTask(keyword="k")
+        session.add(task)
+        session.flush()
+        listing = Listing(
+            platform="xianyu", external_id="1", title="t", price=1.0, url="u", description="d"
+        )
+        session.add(listing)
+        session.commit()
+        assert task.fetch_detail is True
+        assert listing.description == "d"
+        assert listing.requirement_match is None
+        assert listing.requirement_reason is None

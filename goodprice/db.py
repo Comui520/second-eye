@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -29,3 +29,22 @@ def init_db(database_url: str) -> None:
 
     factory = make_session_factory(database_url)
     Base.metadata.create_all(factory().get_bind())
+
+
+def migrate_schema(session_factory) -> None:
+    """幂等迁移：为已有数据库补齐新列。"""
+    columns = {
+        "watch_tasks": [("fetch_detail", "fetch_detail BOOLEAN DEFAULT 1")],
+        "listings": [
+            ("description", "description TEXT"),
+            ("requirement_match", "requirement_match BOOLEAN"),
+            ("requirement_reason", "requirement_reason TEXT"),
+        ],
+    }
+    with session_factory() as session:
+        for table, cols in columns.items():
+            existing = {row[1] for row in session.execute(text(f"PRAGMA table_info({table})"))}
+            for col, ddl in cols:
+                if col not in existing:
+                    session.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+        session.commit()

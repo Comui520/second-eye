@@ -3,6 +3,7 @@ from typing import Optional
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -32,6 +33,7 @@ class WatchTask(Base):
     platform: Mapped[str] = mapped_column(String(50), default="xianyu")
     interval_minutes: Mapped[int] = mapped_column(Integer, default=20)
     enabled: Mapped[bool] = mapped_column(default=True)
+    fetch_detail: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -59,6 +61,9 @@ class Listing(Base):
     condition_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     condition_detail: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requirement_match: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    requirement_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     snapshots: Mapped[list["PriceSnapshot"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
