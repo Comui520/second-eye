@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from goodprice.crawler.base import ListingData
+from goodprice.crawler.parser import is_product_image
 from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
 from goodprice.notify.base import NotificationMessage
 
@@ -158,9 +159,9 @@ class CrawlService:
             return
         if detail.description:
             listing.description = detail.description
-        merged = list(listing.image_urls or [])
+        merged = [u for u in (listing.image_urls or []) if is_product_image(u)]
         for url in detail.image_urls:
-            if url not in merged:
+            if url not in merged and is_product_image(url):
                 merged.append(url)
         listing.image_urls = merged[:8]
         if detail.seller_uid:
@@ -221,19 +222,27 @@ class CrawlService:
     def _condition_analysis(self, session, listing: Listing, task: WatchTask) -> None:
         if not self.vision.enabled:
             return
-        try:
-            verdict = self.vision.analyze_condition(
-                title=listing.title,
-                price=listing.price,
-                description=listing.description or "",
-                requirement=task.condition_requirement or "",
-                image_urls=listing.image_urls,
-            )
-        except Exception as exc:
-            logger.warning("品相分析失败: %s", exc)
+        valid = [u for u in (listing.image_urls or []) if is_product_image(u)]
+        if not valid:
+            listing.condition_detail = {"error": "无有效商品图"}
             return
-        listing.condition_score = verdict["condition_score"]
-        listing.condition_detail = verdict
+        last_exc = None
+        for _attempt in range(2):
+            try:
+                verdict = self.vision.analyze_condition(
+                    title=listing.title,
+                    price=listing.price,
+                    description=listing.description or "",
+                    requirement=task.condition_requirement or "",
+                    image_urls=valid,
+                )
+            except Exception as exc:
+                last_exc = exc
+                continue
+            listing.condition_score = verdict["condition_score"]
+            listing.condition_detail = verdict
+            return
+        listing.condition_detail = {"error": str(last_exc)[:200]}
 
     def _backfill(self, session, listing: Listing, task: WatchTask) -> bool:
         changed = False
@@ -278,7 +287,10 @@ class CrawlService:
         if listing.condition_score is not None:
             score_line = f"品相分：{listing.condition_score}\n"
         elif self.vision.enabled:
-            score_line = "品相分：分析失败\n"
+            err = ""
+            if isinstance(listing.condition_detail, dict):
+                err = listing.condition_detail.get("error") or ""
+            score_line = f"品相分：未评估（{err or '分析失败'}）\n"
         else:
             score_line = "品相分：未配置视觉模型，未评估\n"
         extra = ""
@@ -291,7 +303,7 @@ class CrawlService:
             level = risk.get("risk_level")
             reason = risk.get("risk_reason") or ""
             rate = risk.get("positive_rate")
-            rate_txt = f"好评率 {rate:.0f}%" if isinstance(rate, (int, float)) else ""
+            rate_txt = f"好评率 {rate * 100:.0f}%" if isinstance(rate, (int, float)) else ""
             seller_line = f"卖家：{name} {rate_txt} · 风险{level}（{reason}）\n"
         message = NotificationMessage(
             title=f"[{task.keyword}] {listing.title}",

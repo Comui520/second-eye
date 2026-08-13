@@ -89,7 +89,7 @@ def parse_detail_html(html: str) -> ListingDetail:
     images: list[str] = []
     for img in soup.select(sel.DETAIL_IMAGE):
         src = img.get("src")
-        if src:
+        if src and is_product_image(src):
             url = _absolute(src)
             if url not in images:
                 images.append(url)
@@ -117,6 +117,11 @@ def extract_user_id(href: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def is_product_image(url: str) -> bool:
+    """真实商品图判定：alicdn 产品图路径含 bao/uploaded；占位图/图标（tps-）一律排除。"""
+    return "bao/uploaded" in (url or "")
+
+
 def _parse_seller_block(seller_link):
     if seller_link is None:
         return None, None, None, None
@@ -127,7 +132,7 @@ def _parse_seller_block(seller_link):
     sold_count = None
     m = re.search(r"好评率\s*([\d.]+)%", block_text)
     if m:
-        positive_rate = float(m.group(1))
+        positive_rate = float(m.group(1)) / 100
     m = re.search(r"卖出\s*(\d+)\s*件", block_text)
     if m:
         sold_count = int(m.group(1))

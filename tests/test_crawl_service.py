@@ -74,7 +74,7 @@ def _item(external_id="1001", price=100.0):
         title=f"商品{external_id}",
         price=price,
         url=f"https://x/{external_id}",
-        image_urls=[f"https://x/{external_id}.jpg"],
+        image_urls=[f"https://img.alicdn.com/bao/uploaded/{external_id}.jpg"],
     )
 
 
@@ -93,7 +93,7 @@ def _service(session_factory, base_settings, adapter=None, llm=None, vision=None
 
 
 class SellerFakeAdapter(FakeAdapter):
-    def __init__(self, items=None, seller_data=None, seller_error=None, credit_label="卖家信用极好", positive_rate=100.0):
+    def __init__(self, items=None, seller_data=None, seller_error=None, credit_label="卖家信用极好", positive_rate=1.0):
         super().__init__(items=items)
         self.seller_data = seller_data or SellerData(
             seller_uid="2672367114", positive_count=133, total_count=194, tags=["沟通愉快 13"]
@@ -108,7 +108,7 @@ class SellerFakeAdapter(FakeAdapter):
 
         return ListingDetail(
             description="屏幕完好",
-            image_urls=["https://x/d.jpg"],
+            image_urls=["https://img.alicdn.com/bao/uploaded/d.jpg"],
             seller_uid="2672367114",
             seller_name="饼住呼吸",
             credit_label=self.credit_label,
@@ -147,6 +147,7 @@ def test_seller_advisory_in_notification_and_cache(session_factory, base_setting
     assert len(notifier.messages) == 1
     assert "卖家" in notifier.messages[0].content
     assert "低" in notifier.messages[0].content
+    assert "好评率 100%" in notifier.messages[0].content
     crawl.run_task(task.id)
     assert adapter.seller_calls == 1  # 缓存命中
     with session_factory() as session:
@@ -175,6 +176,51 @@ def test_no_seller_uid_skips_seller_stage(session_factory, base_settings):
     with session_factory() as session:
         listing = session.query(Listing).one()
         assert listing.seller_risk is None
+
+
+def test_condition_analysis_retries_once_and_records_error(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    vision = FakeVision(error=RuntimeError("模型超时"))
+    crawl, _, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]), vision=vision)
+    crawl.run_task(task.id)
+    assert len(vision.calls) == 2  # 重试一次
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.condition_detail["error"] == "模型超时"
+        assert listing.condition_score is None
+
+
+def test_no_valid_image_skips_vision(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    vision = FakeVision()
+
+    class NoImgAdapter(FakeAdapter):
+        def __init__(self):
+            from goodprice.crawler.base import ListingData
+
+            item = ListingData(
+                external_id="1001",
+                title="商品1001",
+                price=100.0,
+                url="https://x/1001",
+                image_urls=["https://img.alicdn.com/imgextra/xx-2-tps-2-2.png"],
+            )
+            super().__init__(items=[item])
+
+        def fetch_detail(self, url):
+            from goodprice.crawler.base import ListingDetail
+
+            return ListingDetail(
+                description="无图",
+                image_urls=["https://img.alicdn.com/imgextra/xx-2-tps-2-2.png"],
+            )
+
+    crawl, _, _ = _service(session_factory, base_settings, adapter=NoImgAdapter(), vision=vision)
+    crawl.run_task(task.id)
+    assert vision.calls == []
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.condition_detail["error"] == "无有效商品图"
 
 
 def test_seller_without_credit_label_still_works(session_factory, base_settings):
