@@ -8,7 +8,8 @@ from fastapi import FastAPI
 from goodprice.config import Settings, get_settings
 from goodprice.db import init_db, migrate_schema
 from goodprice.scheduler import build_scheduler
-from goodprice.services.crawl_service import CrawlService
+from goodprice.scheduler import _sync_tasks, build_scheduler
+from goodprice.services.crawl_service import CrawlService, TaskRunGuard
 from goodprice.services.settings_service import SettingsService
 from goodprice.services.task_service import TaskService
 from goodprice.web.routes import router
@@ -17,12 +18,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger(__name__)
 
 
-def _make_crawl_service(session_factory, settings_service):
+def _make_crawl_service(session_factory, settings_service, guard):
     runtime = settings_service.get()
     from goodprice.analysis.llm import LLMClient
     from goodprice.crawler.xianyu import XianyuAdapter
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.serverchan import ServerChanNotifier
+    from goodprice.notify.wecom import WeComNotifier
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     llm = LLMClient(
@@ -30,16 +32,32 @@ def _make_crawl_service(session_factory, settings_service):
         api_key=runtime.llm_api_key,
         model=runtime.llm_model,
     )
+    vision = LLMClient(
+        base_url=runtime.vision_base_url,
+        api_key=runtime.vision_api_key,
+        model=runtime.vision_model,
+        allow_image_fallback=False,
+    )
     notifiers = [("log", LogNotifier())]
     serverchan = ServerChanNotifier(sendkey=runtime.serverchan_sendkey)
     if serverchan.enabled:
         notifiers.append(("serverchan", serverchan))
+    wecom = WeComNotifier(
+        corpid=runtime.wecom_corpid,
+        agentid=runtime.wecom_agentid,
+        secret=runtime.wecom_secret,
+        touser=runtime.wecom_touser,
+    )
+    if wecom.enabled:
+        notifiers.append(("wecom", wecom))
     return CrawlService(
         session_factory=session_factory,
         adapter=adapter,
         llm=llm,
+        vision=vision,
         notifiers=notifiers,
         settings_service=settings_service,
+        guard=guard,
     )
 
 
@@ -62,15 +80,27 @@ def build_app(
 
     settings_service = SettingsService(session_factory, base=settings)
     task_service = TaskService(session_factory)
-    run_job = lambda task_id: _make_crawl_service(session_factory, settings_service).run_task(task_id)
+    guard = TaskRunGuard()
+
+    def run_job(task_id: int) -> None:
+        try:
+            _make_crawl_service(session_factory, settings_service, guard).run_task(task_id)
+        except Exception:
+            logger.exception("任务 %s 执行失败", task_id)
+
+    scheduler = build_scheduler(session_factory, run_job, task_service) if with_scheduler else None
+
+    def sync_scheduler() -> None:
+        if scheduler is not None:
+            _sync_tasks(session_factory, run_job, task_service, scheduler)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if with_scheduler:
-            app.state.scheduler = build_scheduler(session_factory, run_job, task_service)
+        if scheduler is not None:
+            app.state.scheduler = scheduler
             app.state.scheduler.start()
         yield
-        if with_scheduler:
+        if scheduler is not None:
             app.state.scheduler.shutdown(wait=False)
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -78,6 +108,8 @@ def build_app(
     app.state.settings_service = settings_service
     app.state.task_service = task_service
     app.state.run_job = run_job
+    app.state.guard = guard
+    app.state.sync_scheduler = sync_scheduler
     app.include_router(router)
     return app
 

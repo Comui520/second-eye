@@ -1,5 +1,6 @@
 import logging
 import random
+import threading
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -11,16 +12,58 @@ from goodprice.notify.base import NotificationMessage
 logger = logging.getLogger(__name__)
 
 
+class TaskRunGuard:
+    """进程内任务防重入守卫。"""
+
+    def __init__(self):
+        self._running: set[int] = set()
+        self._lock = threading.Lock()
+
+    def try_start(self, task_id: int) -> bool:
+        with self._lock:
+            if task_id in self._running:
+                return False
+            self._running.add(task_id)
+            return True
+
+    def finish(self, task_id: int) -> None:
+        with self._lock:
+            self._running.discard(task_id)
+
+    def running_ids(self) -> set[int]:
+        with self._lock:
+            return set(self._running)
+
+
 class CrawlService:
-    def __init__(self, session_factory, adapter, llm, notifiers, settings_service):
+    def __init__(
+        self,
+        session_factory,
+        adapter,
+        llm,
+        vision,
+        notifiers,
+        settings_service,
+        guard=None,
+    ):
         self._session_factory = session_factory
         self.adapter = adapter
         self.llm = llm
-        self.notifiers = notifiers  # [(channel_name, notifier), ...]
+        self.vision = vision
+        self.notifiers = notifiers
         self.settings_service = settings_service
+        self.guard = guard or TaskRunGuard()
 
-    def run_task(self, task_id: int) -> dict[str, int]:
-        stats = {"found": 0, "new": 0, "notified": 0}
+    def run_task(self, task_id: int) -> dict[str, Any]:
+        if not self.guard.try_start(task_id):
+            return {"found": 0, "new": 0, "notified": 0, "skipped": "already_running"}
+        try:
+            return self._run_impl(task_id)
+        finally:
+            self.guard.finish(task_id)
+
+    def _run_impl(self, task_id: int) -> dict[str, Any]:
+        stats = {"found": 0, "new": 0, "notified": 0, "backfilled": 0}
         settings = self.settings_service.get()
         jitter = int(settings.default_crawl_jitter_minutes)
         if jitter:
@@ -43,22 +86,30 @@ class CrawlService:
             for data in items:
                 if task.max_price and data.price > task.max_price:
                     continue
-                listing = self._upsert_listing(session, task, data)
-                if listing is None:
-                    continue
-                stats["new"] += 1
-                verdict = self._analyze(session, listing, task)
-                if verdict is not None and verdict["condition_score"] < task.min_condition_score:
-                    continue
-                if listing.notified_at is None:
-                    self._notify(session, task, listing)
-                    stats["notified"] += 1
+                listing, is_new = self._upsert_listing(session, task, data)
+                if is_new:
+                    stats["new"] += 1
+                    if task.fetch_detail:
+                        self._fetch_detail(session, listing)
+                    if not self._requirement_pass(session, listing, task):
+                        continue
+                    self._condition_analysis(session, listing, task)
+                    if (
+                        task.min_condition_score
+                        and listing.condition_score is not None
+                        and listing.condition_score < task.min_condition_score
+                    ):
+                        continue
+                    if listing.notified_at is None:
+                        self._notify(session, task, listing)
+                        stats["notified"] += 1
+                else:
+                    if self._backfill(session, listing, task):
+                        stats["backfilled"] += 1
             session.commit()
         return stats
 
-    def _upsert_listing(
-        self, session, task: WatchTask, data: ListingData
-    ) -> Optional[Listing]:
+    def _upsert_listing(self, session, task: WatchTask, data: ListingData):
         listing = (
             session.query(Listing)
             .filter(Listing.platform == task.platform, Listing.external_id == data.external_id)
@@ -79,41 +130,117 @@ class CrawlService:
             session.add(listing)
             session.flush()
             session.add(PriceSnapshot(listing_id=listing.id, price=data.price))
-            return listing
+            return listing, True
         if abs(listing.price - data.price) > 0.001:
             listing.price = data.price
             session.add(PriceSnapshot(listing_id=listing.id, price=data.price))
         listing.last_seen_at = datetime.now()
-        return None
+        return listing, False
 
-    def _analyze(self, session, listing: Listing, task: WatchTask) -> Optional[dict[str, Any]]:
-        if not self.llm.enabled:
-            return None
+    def _fetch_detail(self, session, listing: Listing) -> None:
+        if not listing.url or listing.description:
+            return
         try:
-            verdict = self.llm.analyze_listing(
+            detail = self.adapter.fetch_detail(listing.url)
+        except Exception as exc:
+            logger.warning("详情抓取失败，退回标题判断: %s", exc)
+            return
+        if detail.description:
+            listing.description = detail.description
+        merged = list(listing.image_urls or [])
+        for url in detail.image_urls:
+            if url not in merged:
+                merged.append(url)
+        listing.image_urls = merged[:8]
+
+    def _requirement_pass(self, session, listing: Listing, task: WatchTask) -> bool:
+        requirement = (task.condition_requirement or "").strip()
+        if not requirement or not self.llm.enabled:
+            return True
+        try:
+            verdict = self.llm.analyze_requirement(
+                title=listing.title,
+                description=listing.description or "",
+                requirement=requirement,
+            )
+        except Exception as exc:
+            logger.warning("需求分析失败，不拦截: %s", exc)
+            listing.requirement_match = None
+            listing.requirement_reason = "需求分析失败，未过滤"
+            return True
+        listing.requirement_match = verdict["matched"]
+        listing.requirement_reason = verdict["reason"]
+        return bool(verdict["matched"])
+
+    def _condition_analysis(self, session, listing: Listing, task: WatchTask) -> None:
+        if not self.vision.enabled:
+            return
+        try:
+            verdict = self.vision.analyze_condition(
                 title=listing.title,
                 price=listing.price,
-                description=task.condition_requirement,
-                requirement=task.condition_requirement,
+                description=listing.description or "",
+                requirement=task.condition_requirement or "",
                 image_urls=listing.image_urls,
             )
         except Exception as exc:
-            logger.warning("LLM 分析失败，降级为仅价格命中: %s", exc)
-            return None
+            logger.warning("品相分析失败: %s", exc)
+            return
         listing.condition_score = verdict["condition_score"]
         listing.condition_detail = verdict
-        return verdict
+
+    def _backfill(self, session, listing: Listing, task: WatchTask) -> bool:
+        changed = False
+        requirement = (task.condition_requirement or "").strip()
+        if requirement and self.llm.enabled and listing.requirement_match is None:
+            try:
+                verdict = self.llm.analyze_requirement(
+                    title=listing.title,
+                    description=listing.description or "",
+                    requirement=requirement,
+                )
+                listing.requirement_match = verdict["matched"]
+                listing.requirement_reason = verdict["reason"]
+                changed = True
+            except Exception as exc:
+                logger.warning("回填需求分析失败: %s", exc)
+        if self.vision.enabled and listing.condition_score is None:
+            try:
+                verdict = self.vision.analyze_condition(
+                    title=listing.title,
+                    price=listing.price,
+                    description=listing.description or "",
+                    requirement=requirement,
+                    image_urls=listing.image_urls,
+                )
+                listing.condition_score = verdict["condition_score"]
+                listing.condition_detail = verdict
+                changed = True
+            except Exception as exc:
+                logger.warning("回填品相分析失败: %s", exc)
+        return changed
 
     def _notify(self, session, task: WatchTask, listing: Listing) -> None:
-        reason = ""
+        requirement_line = ""
+        if listing.requirement_match is not None:
+            status = "是" if listing.requirement_match else "否"
+            reason = listing.requirement_reason or ""
+            requirement_line = f"需求匹配：{status}"
+            if reason:
+                requirement_line += f"（{reason}）"
+            requirement_line += "\n"
+        if listing.condition_score is not None:
+            score_line = f"品相分：{listing.condition_score}\n"
+        elif self.vision.enabled:
+            score_line = "品相分：分析失败\n"
+        else:
+            score_line = "品相分：未配置视觉模型，未评估\n"
+        extra = ""
         if listing.condition_detail:
-            reason = listing.condition_detail.get("reason", "")
+            extra = listing.condition_detail.get("reason", "")
         message = NotificationMessage(
             title=f"[{task.keyword}] {listing.title}",
-            content=(
-                f"价格：{listing.price} 元\n"
-                f"品相分：{listing.condition_score or '未评估'}\n{reason}"
-            ),
+            content=f"价格：{listing.price} 元\n{requirement_line}{score_line}{extra}",
             url=listing.url,
         )
         for channel, notifier in self.notifiers:

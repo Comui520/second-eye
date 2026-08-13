@@ -24,6 +24,7 @@ class TaskService:
             min_condition_score=int(data.get("min_condition_score") or 0),
             platform=data.get("platform", "xianyu"),
             interval_minutes=int(data.get("interval_minutes") or 20),
+            fetch_detail=bool(data.get("fetch_detail", True)),
             enabled=bool(data.get("enabled", True)),
         )
         with self._session_factory() as session:
