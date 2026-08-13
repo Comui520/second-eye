@@ -242,6 +242,14 @@ def test_notifications_page_and_delete(base_settings, session_factory):
     assert client.get("/api/notifications").json() == []
 
 
+def test_listings_page_has_task_filter(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "镜头"}).json()
+    page = client.get("/listings")
+    assert f'value="{task["id"]}"' in page.text
+    assert "镜头" in page.text
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(

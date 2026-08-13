@@ -2,6 +2,10 @@
 {% block title %}命中列表 - 闲鱼盯价助手{% endblock %}
 {% block content %}
 <form method="get" action="/listings" class="flex items-center gap-3 mb-4">
+  <select name="task_id" class="border rounded px-3 py-2">
+    <option value="">全部任务</option>
+    {% for t in tasks %}<option value="{{ t.id }}" {{ 'selected' if task_id == t.id }}>{{ t.keyword }}</option>{% endfor %}
+  </select>
   <select name="sort" class="border rounded px-3 py-2">
     <option value="satisfaction" {{ 'selected' if sort == 'satisfaction' }}>按满足程度</option>
     <option value="price_asc" {{ 'selected' if sort == 'price_asc' }}>价格升序</option>

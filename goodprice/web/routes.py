@@ -276,9 +276,10 @@ def listings_page(
     show: str = "active",
 ):
     with request.app.state.session_factory() as session:
-        from goodprice.models import Listing
+        from goodprice.models import Listing, WatchTask
 
         query = session.query(Listing)
+        tasks = session.query(WatchTask).order_by(WatchTask.id).all()
         if task_id:
             query = query.filter(Listing.task_id == task_id)
         if show == "active":
@@ -303,6 +304,7 @@ def listings_page(
         "listings.html",
         {
             "listings": listings,
+            "tasks": tasks,
             "running_ids": running_ids,
             "task_id": task_id,
             "sort": sort,
