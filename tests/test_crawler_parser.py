@@ -43,3 +43,15 @@ def test_parse_detail_html():
     assert "屏幕完好" in detail.description
     assert "带原装盒" in detail.description
     assert detail.image_urls == ["https://img.alicdn.com/d1.jpg", "https://img.alicdn.com/d2.jpg"]
+    assert detail.seller_uid == "2672367114"
+    assert detail.seller_name == "饼住呼吸"
+    assert detail.credit_label == "卖家信用极好"
+    assert detail.positive_rate == 100.0
+    assert detail.sold_count == 264
+
+
+def test_extract_user_id():
+    from goodprice.crawler.parser import extract_user_id
+
+    assert extract_user_id("https://www.goofish.com/personal?userId=2672367114") == "2672367114"
+    assert extract_user_id("https://x/other") is None

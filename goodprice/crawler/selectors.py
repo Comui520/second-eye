@@ -13,3 +13,8 @@ LOCATION = "[class*='seller-text--']"
 # 商品详情页（实测：描述 span[class*='desc--']，主图 img.ant-image-img）
 DETAIL_DESC = "span[class*='desc--']"
 DETAIL_IMAGE = "img[class*='ant-image-img']"
+
+# 商品详情页卖家区块（实测：链接 /personal?userId=，昵称 item-user-info-nick--，信用 credit-container--）
+DETAIL_SELLER_LINK = "a[href*='/personal?userId=']"
+DETAIL_SELLER_NICK = "[class*='item-user-info-nick--']"
+DETAIL_CREDIT_LABEL = "[class*='credit-container--']"

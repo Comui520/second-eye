@@ -93,4 +93,42 @@ def parse_detail_html(html: str) -> ListingDetail:
             url = _absolute(src)
             if url not in images:
                 images.append(url)
-    return ListingDetail(description=desc[:2000], image_urls=images[:8])
+    seller_link = soup.select_one(sel.DETAIL_SELLER_LINK)
+    seller_uid = extract_user_id(seller_link.get("href")) if seller_link else None
+    seller_name, positive_rate, sold_count, _ = _parse_seller_block(seller_link)
+    nick_el = soup.select_one(sel.DETAIL_SELLER_NICK)
+    if nick_el:
+        seller_name = nick_el.get_text(strip=True) or seller_name
+    credit_el = soup.select_one(sel.DETAIL_CREDIT_LABEL)
+    credit_label = credit_el.get_text(strip=True) if credit_el else None
+    return ListingDetail(
+        description=desc[:2000],
+        image_urls=images[:8],
+        seller_uid=seller_uid,
+        seller_name=seller_name,
+        credit_label=credit_label,
+        positive_rate=positive_rate,
+        sold_count=sold_count,
+    )
+
+
+def extract_user_id(href: str) -> Optional[str]:
+    match = re.search(r"userId=([^&]+)", href or "")
+    return match.group(1) if match else None
+
+
+def _parse_seller_block(seller_link):
+    if seller_link is None:
+        return None, None, None, None
+    block_text = seller_link.get_text(" ", strip=True)
+    first_line = seller_link.get_text("\n", strip=True).splitlines()
+    name = first_line[0] if first_line else None
+    positive_rate = None
+    sold_count = None
+    m = re.search(r"好评率\s*([\d.]+)%", block_text)
+    if m:
+        positive_rate = float(m.group(1))
+    m = re.search(r"卖出\s*(\d+)\s*件", block_text)
+    if m:
+        sold_count = int(m.group(1))
+    return name, positive_rate, sold_count, block_text
