@@ -39,10 +39,21 @@ def migrate_schema(session_factory) -> None:
             ("description", "description TEXT"),
             ("requirement_match", "requirement_match BOOLEAN"),
             ("requirement_reason", "requirement_reason TEXT"),
+            ("seller_uid", "seller_uid TEXT"),
+            ("seller_name", "seller_name TEXT"),
+            ("seller_risk", "seller_risk JSON"),
         ],
     }
     with session_factory() as session:
+        existing_tables = {
+            row[0]
+            for row in session.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+        }
         for table, cols in columns.items():
+            if table not in existing_tables:
+                continue
             existing = {row[1] for row in session.execute(text(f"PRAGMA table_info({table})"))}
             for col, ddl in cols:
                 if col not in existing:

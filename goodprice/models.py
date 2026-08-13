@@ -64,6 +64,9 @@ class Listing(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     requirement_match: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     requirement_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    seller_uid: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    seller_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    seller_risk: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     snapshots: Mapped[list["PriceSnapshot"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
@@ -107,3 +110,20 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+class Seller(Base):
+    __tablename__ = "sellers"
+    __table_args__ = (
+        UniqueConstraint("platform", "seller_uid", name="uq_seller_platform_uid"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[str] = mapped_column(String(50))
+    seller_uid: Mapped[str] = mapped_column(String(100))
+    nickname: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    positive_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    positive_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

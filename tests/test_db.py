@@ -20,3 +20,14 @@ def test_migrate_adds_new_columns(tmp_db):
 def test_migrate_is_idempotent(session_factory):
     migrate_schema(session_factory)
     migrate_schema(session_factory)
+
+
+def test_migrate_adds_seller_columns(tmp_db):
+    engine = create_engine(tmp_db)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE listings (id INTEGER PRIMARY KEY, external_id TEXT)"))
+    factory = make_session_factory(tmp_db)
+    migrate_schema(factory)
+    with factory() as session:
+        cols = {row[1] for row in session.execute(text("PRAGMA table_info(listings)"))}
+    assert {"seller_uid", "seller_name", "seller_risk"} <= cols

@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
+from goodprice.models import Seller
 
 
 def test_watch_task_crud(session_factory):
@@ -55,3 +56,25 @@ def test_round2_model_columns(session_factory):
         assert listing.description == "d"
         assert listing.requirement_match is None
         assert listing.requirement_reason is None
+
+
+def test_seller_crud_and_listing_columns(session_factory):
+    with session_factory() as session:
+        seller = Seller(platform="xianyu", seller_uid="2672367114", positive_count=133, total_count=194)
+        session.add(seller)
+        session.flush()
+        listing = Listing(
+            platform="xianyu",
+            external_id="3001",
+            title="t",
+            price=1.0,
+            url="u",
+            seller_uid="2672367114",
+            seller_name="饼住呼吸",
+            seller_risk={"risk_level": "低", "risk_reason": "好评率 100%"},
+        )
+        session.add(listing)
+        session.commit()
+        assert seller.positive_count == 133
+        assert listing.seller_name == "饼住呼吸"
+        assert listing.seller_risk["risk_level"] == "低"
