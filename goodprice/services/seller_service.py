@@ -53,9 +53,25 @@ class SellerService:
             )
 
     def ensure_fresh(
-        self, platform: str, seller_uid: str, nickname: Optional[str] = None
+        self,
+        platform: str,
+        seller_uid: str,
+        nickname: Optional[str] = None,
+        session=None,
     ) -> Optional[Seller]:
-        seller = self.get(platform, seller_uid)
+        if session is None:
+            with self._session_factory() as own_session:
+                result = self._ensure_fresh(own_session, platform, seller_uid, nickname)
+                own_session.commit()
+                return result
+        return self._ensure_fresh(session, platform, seller_uid, nickname)
+
+    def _ensure_fresh(self, session, platform, seller_uid, nickname):
+        seller = (
+            session.query(Seller)
+            .filter_by(platform=platform, seller_uid=seller_uid)
+            .first()
+        )
         stale = (
             seller is None
             or seller.last_fetched_at is None
@@ -68,25 +84,17 @@ class SellerService:
         except Exception as exc:
             logger.warning("卖家 %s 数据抓取失败: %s", seller_uid, exc)
             return seller
-        with self._session_factory() as session:
-            seller = (
-                session.query(Seller)
-                .filter_by(platform=platform, seller_uid=seller_uid)
-                .first()
-            )
-            if seller is None:
-                seller = Seller(platform=platform, seller_uid=seller_uid)
-                session.add(seller)
-            if data.nickname:
-                seller.nickname = data.nickname
-            elif nickname:
-                seller.nickname = nickname
-            seller.positive_count = data.positive_count
-            seller.total_count = data.total_count
-            seller.tags = data.tags
-            if data.positive_count is not None and data.total_count:
-                seller.positive_rate = data.positive_count / data.total_count
-            seller.last_fetched_at = datetime.now()
-            session.commit()
-            session.refresh(seller)
-            return seller
+        if seller is None:
+            seller = Seller(platform=platform, seller_uid=seller_uid)
+            session.add(seller)
+        if data.nickname:
+            seller.nickname = data.nickname
+        elif nickname:
+            seller.nickname = nickname
+        seller.positive_count = data.positive_count
+        seller.total_count = data.total_count
+        seller.tags = data.tags
+        if data.positive_count is not None and data.total_count:
+            seller.positive_rate = data.positive_count / data.total_count
+        seller.last_fetched_at = datetime.now()
+        return seller

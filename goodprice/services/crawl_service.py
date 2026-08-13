@@ -45,6 +45,7 @@ class CrawlService:
         notifiers,
         settings_service,
         guard=None,
+        seller_service=None,
     ):
         self._session_factory = session_factory
         self.adapter = adapter
@@ -53,6 +54,7 @@ class CrawlService:
         self.notifiers = notifiers
         self.settings_service = settings_service
         self.guard = guard or TaskRunGuard()
+        self.seller_service = seller_service
 
     def run_task(self, task_id: int) -> dict[str, Any]:
         if not self.guard.try_start(task_id):
@@ -102,6 +104,7 @@ class CrawlService:
                     ):
                         session.commit()
                         continue
+                    self._seller_check(session, listing, task)
                     if listing.notified_at is None:
                         self._notify(session, task, listing)
                         stats["notified"] += 1
@@ -155,6 +158,37 @@ class CrawlService:
             if url not in merged:
                 merged.append(url)
         listing.image_urls = merged[:8]
+        if detail.seller_uid:
+            listing.seller_uid = detail.seller_uid
+            listing.seller_name = detail.seller_name or listing.seller_name
+            listing.seller_risk = {
+                "credit_label": detail.credit_label,
+                "positive_rate": detail.positive_rate,
+                "sold_count": detail.sold_count,
+            }
+
+    def _seller_check(self, session, listing: Listing, task: WatchTask) -> None:
+        if not listing.seller_uid or self.seller_service is None:
+            return
+        seller = self.seller_service.ensure_fresh(
+            task.platform, listing.seller_uid, nickname=listing.seller_name, session=session
+        )
+        from goodprice.services.seller_service import compute_risk
+
+        raw = dict(listing.seller_risk or {})
+        level, reason = compute_risk(
+            seller,
+            credit_label=raw.get("credit_label"),
+            detail_rate=raw.get("positive_rate"),
+        )
+        raw["risk_level"] = level
+        raw["risk_reason"] = reason
+        if seller is not None:
+            raw["positive_count"] = seller.positive_count
+            raw["total_count"] = seller.total_count
+            raw["tags"] = seller.tags or []
+        raw["nickname"] = listing.seller_name or (seller.nickname if seller else None)
+        listing.seller_risk = raw
 
     def _requirement_pass(self, session, listing: Listing, task: WatchTask) -> bool:
         requirement = (task.condition_requirement or "").strip()
@@ -241,9 +275,18 @@ class CrawlService:
         extra = ""
         if listing.condition_detail:
             extra = listing.condition_detail.get("reason", "")
+        seller_line = ""
+        if listing.seller_risk:
+            risk = listing.seller_risk
+            name = risk.get("nickname") or "卖家"
+            level = risk.get("risk_level")
+            reason = risk.get("risk_reason") or ""
+            rate = risk.get("positive_rate")
+            rate_txt = f"好评率 {rate:.0f}%" if isinstance(rate, (int, float)) else ""
+            seller_line = f"卖家：{name} {rate_txt} · 风险{level}（{reason}）\n"
         message = NotificationMessage(
             title=f"[{task.keyword}] {listing.title}",
-            content=f"价格：{listing.price} 元\n{requirement_line}{score_line}{extra}",
+            content=f"价格：{listing.price} 元\n{requirement_line}{score_line}{seller_line}{extra}",
             url=listing.url,
         )
         for channel, notifier in self.notifiers:

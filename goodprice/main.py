@@ -10,6 +10,7 @@ from goodprice.db import init_db, migrate_schema
 from goodprice.scheduler import build_scheduler
 from goodprice.scheduler import _sync_tasks, build_scheduler
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
+from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
 from goodprice.services.task_service import TaskService
 from goodprice.web.routes import router
@@ -28,6 +29,7 @@ def _make_crawl_service(session_factory, settings_service, guard):
     from goodprice.notify.wecom_robot import WeComRobotNotifier
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
+    seller_service = SellerService(session_factory, adapter=adapter)
     llm = LLMClient(
         base_url=runtime.llm_base_url,
         api_key=runtime.llm_api_key,
@@ -62,6 +64,7 @@ def _make_crawl_service(session_factory, settings_service, guard):
         notifiers=notifiers,
         settings_service=settings_service,
         guard=guard,
+        seller_service=seller_service,
     )
 
 

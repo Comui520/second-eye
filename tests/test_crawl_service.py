@@ -1,8 +1,9 @@
 import pytest
 
-from goodprice.crawler.base import CrawlerAuthError, ListingData
+from goodprice.crawler.base import CrawlerAuthError, ListingData, SellerData
 from goodprice.models import Listing
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
+from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
 from goodprice.services.task_service import TaskService
 
@@ -89,6 +90,89 @@ def _service(session_factory, base_settings, adapter=None, llm=None, vision=None
         settings_service=settings_service,
     )
     return crawl, notifier, settings_service
+
+
+class SellerFakeAdapter(FakeAdapter):
+    def __init__(self, items=None, seller_data=None, seller_error=None):
+        super().__init__(items=items)
+        self.seller_data = seller_data or SellerData(
+            seller_uid="2672367114", positive_count=133, total_count=194, tags=["沟通愉快 13"]
+        )
+        self.seller_error = seller_error
+        self.seller_calls = 0
+
+    def fetch_detail(self, url):
+        from goodprice.crawler.base import ListingDetail
+
+        return ListingDetail(
+            description="屏幕完好",
+            image_urls=["https://x/d.jpg"],
+            seller_uid="2672367114",
+            seller_name="饼住呼吸",
+            credit_label="卖家信用极好",
+            positive_rate=100.0,
+            sold_count=264,
+        )
+
+    def fetch_seller(self, user_id):
+        self.seller_calls += 1
+        if self.seller_error:
+            raise self.seller_error
+        return self.seller_data
+
+
+def _service_with_seller(session_factory, base_settings, adapter, **kwargs):
+    settings_service = SettingsService(session_factory, base=base_settings)
+    notifier = FakeNotifier()
+    seller_service = SellerService(session_factory, adapter=adapter)
+    crawl = CrawlService(
+        session_factory=session_factory,
+        adapter=adapter,
+        llm=kwargs.get("llm") or FakeLLM(),
+        vision=kwargs.get("vision") if "vision" in kwargs else FakeVision(),
+        notifiers=[("log", notifier)],
+        settings_service=settings_service,
+        seller_service=seller_service,
+    )
+    return crawl, notifier
+
+
+def test_seller_advisory_in_notification_and_cache(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = SellerFakeAdapter([_item()])
+    crawl, notifier = _service_with_seller(session_factory, base_settings, adapter)
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+    assert "卖家" in notifier.messages[0].content
+    assert "低" in notifier.messages[0].content
+    crawl.run_task(task.id)
+    assert adapter.seller_calls == 1  # 缓存命中
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.seller_uid == "2672367114"
+        assert listing.seller_risk["risk_level"] == "低"
+
+
+def test_seller_fetch_failure_does_not_block(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = SellerFakeAdapter([_item()], seller_error=RuntimeError("主页超时"))
+    crawl, notifier = _service_with_seller(session_factory, base_settings, adapter)
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.seller_risk["risk_level"] == "低"  # 详情页好评率 100% 仍可用
+
+
+def test_no_seller_uid_skips_seller_stage(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = FakeAdapter([_item()])
+    crawl, notifier = _service_with_seller(session_factory, base_settings, adapter)
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.seller_risk is None
 
 
 def test_happy_path_and_dedup(session_factory, base_settings):
