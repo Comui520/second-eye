@@ -2,7 +2,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -271,17 +271,18 @@ def delete_task(request: Request, task_id: int):
 def listings_page(
     request: Request,
     partial: int = 0,
-    task_id: Optional[int] = None,
-    sort: str = "satisfaction",
-    show: str = "active",
+    task_id: str = Query(""),
+    sort: str = Query("satisfaction"),
+    show: str = Query("active"),
 ):
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing, WatchTask
 
         query = session.query(Listing)
         tasks = session.query(WatchTask).order_by(WatchTask.id).all()
-        if task_id:
-            query = query.filter(Listing.task_id == task_id)
+        task_id_int = int(task_id) if task_id else None
+        if task_id_int:
+            query = query.filter(Listing.task_id == task_id_int)
         if show == "active":
             query = query.filter(Listing.blocked.is_(False))
         elif show == "blocked":
@@ -449,16 +450,17 @@ def api_update_task(request: Request, task_id: int, data: TaskCreate):
 @router.get("/api/listings")
 def api_list_listings(
     request: Request,
-    task_id: Optional[int] = None,
-    sort: str = "satisfaction",
-    show: str = "active",
+    task_id: str = Query(""),
+    sort: str = Query("satisfaction"),
+    show: str = Query("active"),
 ):
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing
 
         query = session.query(Listing)
-        if task_id:
-            query = query.filter(Listing.task_id == task_id)
+        task_id_int = int(task_id) if task_id else None
+        if task_id_int:
+            query = query.filter(Listing.task_id == task_id_int)
         if show == "active":
             query = query.filter(Listing.blocked.is_(False))
         elif show == "blocked":

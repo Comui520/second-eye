@@ -250,6 +250,15 @@ def test_listings_page_has_task_filter(base_settings, session_factory):
     assert "镜头" in page.text
 
 
+def test_listings_filter_empty_task_id_ok(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    resp = client.get("/listings?task_id=&sort=price_asc&show=active")
+    assert resp.status_code == 200
+    resp2 = client.get("/listings?partial=1&task_id=&sort=satisfaction&show=active")
+    assert resp2.status_code == 200
+    assert client.get("/api/listings?task_id=&sort=satisfaction").status_code == 200
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(
