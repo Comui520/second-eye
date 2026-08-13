@@ -316,6 +316,29 @@ def listings_page(
     )
 
 
+@router.post("/listings/delete-batch")
+def delete_listings_batch(request: Request, ids: list[int] = Form(...)):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing
+
+        for row in session.query(Listing).filter(Listing.id.in_(ids)).all():
+            session.delete(row)
+        session.commit()
+    return RedirectResponse("/listings", status_code=303)
+
+
+@router.post("/listings/{listing_id}/delete")
+def delete_listing(request: Request, listing_id: int):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing
+
+        row = session.get(Listing, listing_id)
+        if row:
+            session.delete(row)
+            session.commit()
+    return RedirectResponse("/listings", status_code=303)
+
+
 @router.post("/listings/{listing_id}/block")
 def block_listing(request: Request, listing_id: int):
     _set_blocked(request, listing_id, True, seller=False)

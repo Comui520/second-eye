@@ -259,6 +259,29 @@ def test_listings_filter_empty_task_id_ok(base_settings, session_factory):
     assert client.get("/api/listings?task_id=&sort=satisfaction").status_code == 200
 
 
+def test_listings_delete_single_and_batch(base_settings, session_factory):
+    from goodprice.models import Listing, Notification
+
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        l1 = Listing(platform="xianyu", external_id="1", title="甲", price=1, url="u")
+        l2 = Listing(platform="xianyu", external_id="2", title="乙", price=2, url="v")
+        session.add_all([l1, l2])
+        session.flush()
+        session.add(Notification(listing_id=l1.id, channel="log", status="sent", title="t"))
+        session.commit()
+        ids = [l1.id, l2.id]
+    resp = client.post(f"/listings/{ids[0]}/delete")
+    assert resp.status_code == 303
+    assert len(client.get("/api/listings").json()) == 1
+    with session_factory() as session:
+        assert session.query(Notification).count() == 0  # 级联删除
+    client.post("/listings/delete-batch", data={"ids": [ids[1]]})
+    assert client.get("/api/listings").json() == []
+    page = client.get("/listings")
+    assert "listings-select-all" in page.text
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(

@@ -23,5 +23,11 @@
 {% if running_ids %}
 <div hx-get="{{ partial_url }}" hx-trigger="every 2s" hx-target="#listings-grid" hx-swap="outerHTML"></div>
 {% endif %}
+<form method="post" action="/listings/delete-batch" onsubmit="return confirm('确认删除选中的商品？')">
+  <div class="flex items-center gap-4 mb-3">
+    <label class="flex items-center gap-2"><input type="checkbox" id="listings-select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
+    <button class="bg-red-600 text-white rounded px-4 py-1">批量删除</button>
+  </div>
 {% include "listings_grid.html" %}
+</form>
 {% endblock %}

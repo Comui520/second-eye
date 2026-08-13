@@ -19,9 +19,11 @@
     {% endif %}
     <div class="mt-2 flex items-center gap-1 flex-wrap">
       {% if item.blocked %}<span class="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-600">已拉黑</span>{% endif %}
+      <label class="flex items-center gap-1 text-xs"><input type="checkbox" class="row-check" name="ids" value="{{ item.id }}"> 选</label>
       <form method="post" action="/listings/{{ item.id }}/block" class="inline"><button class="border rounded px-2 py-0.5 text-xs text-red-600">拉黑商品</button></form>
       {% if item.seller_uid %}<form method="post" action="/listings/{{ item.id }}/block-seller" class="inline"><button class="border rounded px-2 py-0.5 text-xs text-orange-600">拉黑卖家</button></form>{% endif %}
       {% if item.blocked %}<form method="post" action="/listings/{{ item.id }}/unblock" class="inline"><button class="border rounded px-2 py-0.5 text-xs">恢复</button></form>{% endif %}
+      <form method="post" action="/listings/{{ item.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="border rounded px-2 py-0.5 text-xs text-gray-600">删除</button></form>
     </div>
   </div>
   {% else %}
