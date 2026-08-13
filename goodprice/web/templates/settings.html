@@ -11,11 +11,36 @@
     <div><label class="block text-sm font-medium mb-1">LLM Base URL</label>
       <input name="llm_base_url" class="w-full border rounded px-3 py-2" value="{{ settings.llm_base_url }}" placeholder="如 https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
     <div><label class="block text-sm font-medium mb-1">LLM API Key</label>
-      <input name="llm_api_key" type="password" class="w-full border rounded px-3 py-2" value="{{ settings.llm_api_key }}"></div>
+      <input name="llm_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
     <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
       <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
     <div><label class="block text-sm font-medium mb-1">Server酱 SendKey</label>
-      <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-2" value="{{ settings.serverchan_sendkey }}"></div>
+      <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
+  </div>
+  <div class="border-t pt-4">
+    <h3 class="text-md font-semibold mb-3">视觉模型（阶段二看图，必填才做品相分析）</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-sm font-medium mb-1">Vision Base URL</label>
+        <input name="vision_base_url" class="w-full border rounded px-3 py-2" value="{{ settings.vision_base_url }}" placeholder="如 https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
+      <div><label class="block text-sm font-medium mb-1">Vision API Key</label>
+        <input name="vision_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
+      <div><label class="block text-sm font-medium mb-1">Vision 模型</label>
+        <input name="vision_model" class="w-full border rounded px-3 py-2" value="{{ settings.vision_model }}" placeholder="如 qwen-vl-max / glm-4v-flash"></div>
+    </div>
+  </div>
+  <div class="border-t pt-4">
+    <h3 class="text-md font-semibold mb-3">企业微信（应用消息推送）</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-sm font-medium mb-1">CorpID</label>
+        <input name="wecom_corpid" class="w-full border rounded px-3 py-2" value="{{ settings.wecom_corpid }}"></div>
+      <div><label class="block text-sm font-medium mb-1">AgentID</label>
+        <input name="wecom_agentid" class="w-full border rounded px-3 py-2" value="{{ settings.wecom_agentid }}"></div>
+      <div><label class="block text-sm font-medium mb-1">Secret</label>
+        <input name="wecom_secret" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
+      <div><label class="block text-sm font-medium mb-1">接收人 Touser</label>
+        <input name="wecom_touser" class="w-full border rounded px-3 py-2" value="{{ settings.wecom_touser }}" placeholder="@all 或成员 userid"></div>
+    </div>
+    <p class="text-xs text-gray-500 mt-1">应用消息需在企业微信后台把本机出口 IP 加入"企业可信 IP"。</p>
   </div>
   <div class="grid grid-cols-2 gap-3">
     <div><label class="block text-sm font-medium mb-1">代理（可选）</label>

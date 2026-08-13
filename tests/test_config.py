@@ -15,3 +15,19 @@ def test_settings_defaults():
     assert settings.app_name == "闲鱼盯价助手"
     assert settings.default_crawl_interval_minutes == 20
     assert settings.default_crawl_jitter_minutes == 10
+
+
+def test_round2_settings_defaults():
+    settings = Settings(_env_file=None)
+    assert settings.vision_model == "qwen-vl-max"
+    assert settings.vision_base_url == ""
+    assert settings.wecom_touser == "@all"
+    assert settings.wecom_corpid == ""
+
+
+def test_round2_settings_env_overrides(monkeypatch):
+    monkeypatch.setenv("WECOM_CORPID", "ww123")
+    monkeypatch.setenv("VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    settings = Settings(_env_file=None)
+    assert settings.wecom_corpid == "ww123"
+    assert settings.vision_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"

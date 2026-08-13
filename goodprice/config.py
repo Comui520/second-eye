@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     proxy: str = ""
     default_crawl_interval_minutes: int = 20
     default_crawl_jitter_minutes: int = 10
+    vision_base_url: str = ""
+    vision_api_key: str = ""
+    vision_model: str = "qwen-vl-max"
+    wecom_corpid: str = ""
+    wecom_agentid: str = ""
+    wecom_secret: str = ""
+    wecom_touser: str = "@all"
 
 
 @lru_cache

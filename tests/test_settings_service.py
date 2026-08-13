@@ -24,3 +24,12 @@ def test_empty_value_clears_override(session_factory, base_settings):
     service.set_many({"xianyu_cookie": "a=1"})
     service.set_many({"xianyu_cookie": ""})
     assert service.get().xianyu_cookie == ""
+
+
+def test_round2_settings_persist(session_factory, base_settings):
+    service = SettingsService(session_factory, base=base_settings)
+    service.set_many({"wecom_corpid": "ww123", "wecom_touser": "@all", "vision_model": "glm-4v-flash"})
+    settings = service.get()
+    assert settings.wecom_corpid == "ww123"
+    assert settings.vision_model == "glm-4v-flash"
+    assert settings.wecom_touser == "@all"

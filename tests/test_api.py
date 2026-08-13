@@ -54,18 +54,46 @@ def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(
         "/settings",
-        data={
-            "xianyu_cookie": "a=1",
-            "llm_base_url": "",
-            "llm_api_key": "",
-            "llm_model": "qwen-vl-max",
-            "serverchan_sendkey": "",
-            "proxy": "",
-            "default_crawl_interval_minutes": "30",
-            "default_crawl_jitter_minutes": "5",
-        },
+        data={**_settings_form(), "xianyu_cookie": "a=1",
+              "default_crawl_interval_minutes": "30",
+              "default_crawl_jitter_minutes": "5"},
     )
     assert response.status_code == 303
     settings = client.app.state.settings_service.get()
     assert settings.xianyu_cookie == "a=1"
     assert settings.default_crawl_interval_minutes == 30
+
+
+def test_settings_secret_empty_keeps_old_value(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    client.post("/settings", data={**_settings_form(), "llm_api_key": "secret1"})
+    client.post("/settings", data={**_settings_form(), "llm_api_key": ""})
+    assert client.app.state.settings_service.get().llm_api_key == "secret1"
+
+
+def test_settings_save_wecom(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    client.post("/settings", data={**_settings_form(), "wecom_corpid": "ww123", "wecom_secret": "sec"})
+    settings = client.app.state.settings_service.get()
+    assert settings.wecom_corpid == "ww123"
+    assert settings.wecom_secret == "sec"
+
+
+def _settings_form():
+    return {
+        "xianyu_cookie": "",
+        "llm_base_url": "",
+        "llm_api_key": "",
+        "llm_model": "qwen-vl-max",
+        "serverchan_sendkey": "",
+        "proxy": "",
+        "default_crawl_interval_minutes": "20",
+        "default_crawl_jitter_minutes": "10",
+        "vision_base_url": "",
+        "vision_api_key": "",
+        "vision_model": "",
+        "wecom_corpid": "",
+        "wecom_agentid": "",
+        "wecom_secret": "",
+        "wecom_touser": "@all",
+    }

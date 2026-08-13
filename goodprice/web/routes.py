@@ -153,20 +153,36 @@ def save_settings(
     proxy: str = Form(""),
     default_crawl_interval_minutes: int = Form(20),
     default_crawl_jitter_minutes: int = Form(10),
+    vision_base_url: str = Form(""),
+    vision_api_key: str = Form(""),
+    vision_model: str = Form(""),
+    wecom_corpid: str = Form(""),
+    wecom_agentid: str = Form(""),
+    wecom_secret: str = Form(""),
+    wecom_touser: str = Form("@all"),
 ):
     _, settings_service = _services(request)
-    settings_service.set_many(
-        {
-            "xianyu_cookie": xianyu_cookie,
-            "llm_base_url": llm_base_url,
-            "llm_api_key": llm_api_key,
-            "llm_model": llm_model,
-            "serverchan_sendkey": serverchan_sendkey,
-            "proxy": proxy,
-            "default_crawl_interval_minutes": str(default_crawl_interval_minutes),
-            "default_crawl_jitter_minutes": str(default_crawl_jitter_minutes),
-        }
-    )
+    values = {
+        "xianyu_cookie": xianyu_cookie,
+        "llm_base_url": llm_base_url,
+        "llm_api_key": llm_api_key,
+        "llm_model": llm_model,
+        "serverchan_sendkey": serverchan_sendkey,
+        "proxy": proxy,
+        "default_crawl_interval_minutes": str(default_crawl_interval_minutes),
+        "default_crawl_jitter_minutes": str(default_crawl_jitter_minutes),
+        "vision_base_url": vision_base_url,
+        "vision_api_key": vision_api_key,
+        "vision_model": vision_model,
+        "wecom_corpid": wecom_corpid,
+        "wecom_agentid": wecom_agentid,
+        "wecom_secret": wecom_secret,
+        "wecom_touser": wecom_touser,
+    }
+    for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_secret"):
+        if values.get(key) == "":
+            values.pop(key)  # 留空 = 保持原值
+    settings_service.set_many(values)
     return RedirectResponse("/settings", status_code=303)
 
 

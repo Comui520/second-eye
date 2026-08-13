@@ -17,6 +17,13 @@ class RuntimeSettings:
     proxy: str = ""
     default_crawl_interval_minutes: int = 20
     default_crawl_jitter_minutes: int = 10
+    vision_base_url: str = ""
+    vision_api_key: str = ""
+    vision_model: str = ""
+    wecom_corpid: str = ""
+    wecom_agentid: str = ""
+    wecom_secret: str = ""
+    wecom_touser: str = "@all"
 
     @classmethod
     def from_sources(cls, base: Settings, overrides: dict[str, str]) -> "RuntimeSettings":
