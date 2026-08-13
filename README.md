@@ -24,9 +24,9 @@
 要求：已安装 [conda](https://docs.conda.io/)、Git。
 
 ```bash
-# 1. 克隆项目（或直接在项目目录内执行）
-git clone <你的仓库地址> good-price
-cd good-price
+# 1. 克隆项目
+git clone https://github.com/Comui520/second-eye.git
+cd second-eye
 
 # 2. 创建 conda 环境并安装依赖
 conda env create -f environment.yml
