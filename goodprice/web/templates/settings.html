@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}设置 - 闲鱼盯价助手{% endblock %}
 {% block content %}
-<form method="post" action="/settings" class="bg-white rounded shadow p-4 max-w-2xl space-y-4">
+<form method="post" action="/settings" class="bg-white rounded shadow p-4 max-w-2xl mx-auto space-y-4">
   <div>
     <label class="block text-sm font-medium mb-1">闲鱼 Cookie</label>
     <textarea name="xianyu_cookie" rows="4" class="w-full border rounded px-3 py-2 font-mono text-xs">{{ settings.xianyu_cookie }}</textarea>
@@ -14,8 +14,6 @@
       <input name="llm_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
     <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
       <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
-    <div><label class="block text-sm font-medium mb-1">Server酱 SendKey</label>
-      <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
   </div>
   <div class="border-t pt-4">
     <h3 class="text-md font-semibold mb-3">视觉模型（阶段二看图，必填才做品相分析）</h3>
@@ -34,6 +32,11 @@
     <div class="grid grid-cols-2 gap-3">
       <label class="flex items-center gap-2"><input type="checkbox" name="serverchan_enabled" value="1" {{ 'checked' if settings.serverchan_enabled }}> Server酱（微信推送）</label>
       <label class="flex items-center gap-2"><input type="checkbox" name="wecom_robot_enabled" value="1" {{ 'checked' if settings.wecom_robot_enabled }}> 企业微信群机器人</label>
+    </div>
+    <div class="mt-3">
+      <label class="block text-sm font-medium mb-1">Server酱 SendKey</label>
+      <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
+      <p class="text-xs text-gray-500 mt-1">https://sct.ftqq.com 获取；关闭开关则不发。</p>
     </div>
     <div class="mt-3">
       <label class="block text-sm font-medium mb-1">群机器人 Webhook</label>

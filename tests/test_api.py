@@ -282,6 +282,14 @@ def test_listings_delete_single_and_batch(base_settings, session_factory):
     assert "listings-select-all" in page.text
 
 
+def test_settings_page_layout(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    page = client.get("/settings")
+    assert page.status_code == 200
+    assert "消息通知" in page.text
+    assert "max-w-2xl mx-auto" in page.text
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(
