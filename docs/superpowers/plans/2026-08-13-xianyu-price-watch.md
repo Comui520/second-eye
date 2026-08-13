@@ -138,7 +138,7 @@ from pathlib import Path
 import pytest
 
 from goodprice.config import Settings
-from goodprice.db import make_session_factory
+from goodprice.db import Base, make_session_factory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -150,7 +150,9 @@ def tmp_db(tmp_path):
 
 @pytest.fixture
 def session_factory(tmp_db):
-    return make_session_factory(tmp_db)
+    factory = make_session_factory(tmp_db)
+    Base.metadata.create_all(factory().get_bind())
+    return factory
 
 
 @pytest.fixture
