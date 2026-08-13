@@ -6,10 +6,11 @@
 
 - **关键词盯价**：为每个监控任务设置关键词、最高价、品相要求与最低品相分
 - **定时抓取**：APScheduler 按可配置间隔（默认 20 分钟 + 随机抖动）扫描闲鱼搜索页新上架商品
-- **LLM 品相分析**：把商品标题、价格、描述和图片发给 OpenAI 兼容的多模态大模型，返回品相分（1-10）、瑕疵列表、是否推荐与一句话理由；品相分低于阈值不提醒
+- **两阶段筛选**：先抓商品详情描述做「需求匹配」（纯文本，DeepSeek 也可用），匹配后再把图片发给视觉模型做「品相分析」（品相分 1-10、瑕疵、理由）；需求不匹配或品相分低于阈值不提醒
+- **视觉模型可选**：未配置视觉模型时自动跳过品相分析并注明，需求匹配仍生效
 - **去重与通知**：同一商品只提醒一次；命中后站内记录，并通过 Server酱推送到微信（可插拔通知通道，内置日志通道）
 - **本地 Web 界面**：仪表盘、监控任务管理、命中列表、设置页；服务端渲染，无 Node 构建链
-- **降级策略**：未配置 LLM 或 LLM 调用失败时，自动降级为仅按价格命中
+- **降级策略**：需求分析/详情抓取失败时不拦截（宁多勿漏）；阶段一使用文本模型即可
 
 ## 快速开始
 
@@ -35,6 +36,26 @@ conda run -n good-price python -m goodprice
 
 浏览器打开 <http://127.0.0.1:8000>。
 
+## 企业微信通知配置（推荐，免费）
+
+1. 用微信扫码注册/登录[企业微信管理后台](https://work.weixin.qq.com)（个人可免费创建企业，未认证不影响 API）
+2. 「应用管理」→「自建」→ 创建应用，拿到 `AgentId` 和 `Secret`；`CorpID` 在「我的企业」页
+3. 在应用详情页把本机出口 IP 加入「企业可信 IP」（家庭宽带 IP 变化后需更新）
+4. 在「我的企业」→「微信插件」邀请自己的微信加入，之后企业微信应用消息会推到微信
+5. 把四个参数填入本工具「设置」页（接收人默认 `@all`，也可填自己的 userid）
+
+企业微信推送完全免费，额度远高于个人使用场景；出错时任务页会显示具体原因（如 IP 不在可信列表）。
+
+## 视觉模型配置
+
+阶段一「需求匹配」使用现有 LLM 配置（DeepSeek 即可）。阶段二「品相分析」需要视觉模型，在「设置」页单独配置：
+
+- 通义千问：Base URL `https://dashscope.aliyuncs.com/compatible-mode/v1`，模型 `qwen-vl-max`
+- 智谱：Base URL `https://open.bigmodel.cn/api/paas/v4`，模型 `glm-4v-flash`（免费）
+- 硅基流动：Base URL `https://api.siliconflow.cn/v1`，模型 `Qwen/Qwen2.5-VL-72B-Instruct`
+
+未配置视觉模型时，品相分析会被跳过并在通知中注明，需求匹配不受影响。
+
 ## 获取闲鱼 Cookie
 
 1. 用浏览器（建议 Chrome/Edge）登录 <https://www.goofish.com>
@@ -55,6 +76,8 @@ conda run -n good-price python -m goodprice
 | `LLM_API_KEY` | 大模型 API Key |
 | `LLM_MODEL` | 模型名，默认 `qwen-vl-max`（多模态）；也支持 `gpt-4o-mini` 等 |
 | `SERVERCHAN_SENDKEY` | Server酱 SendKey（<https://sct.ftqq.com>），留空则只写日志 |
+| `VISION_BASE_URL` / `VISION_API_KEY` / `VISION_MODEL` | 阶段二视觉模型（如通义千问 qwen-vl-max、智谱 glm-4v-flash）；不填则跳过品相分析 |
+| `WECOM_CORPID` / `WECOM_AGENTID` / `WECOM_SECRET` / `WECOM_TOUSER` | 企业微信应用消息推送（免费，可推到微信） |
 | `PROXY` | 可选 HTTP 代理，如 `http://127.0.0.1:7890` |
 | `DEFAULT_CRAWL_INTERVAL_MINUTES` | 默认抓取间隔（分钟） |
 | `DEFAULT_CRAWL_JITTER_MINUTES` | 请求随机抖动（分钟），降低风控概率 |
