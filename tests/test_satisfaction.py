@@ -15,6 +15,17 @@ def test_compute_satisfaction():
     assert compute_satisfaction(_listing(requirement_match=False, condition_score=3, seller_risk={"risk_level": "高"})) == 12.0
 
 
+def test_compute_satisfaction_vision_off():
+    assert compute_satisfaction(_listing(), vision_enabled=False) == 100.0  # 70 + 30
+    assert (
+        compute_satisfaction(
+            _listing(requirement_match=None, condition_score=None, seller_risk={"risk_level": "高"}),
+            vision_enabled=False,
+        )
+        == 35.0
+    )
+
+
 def test_backfill(session_factory):
     from goodprice.models import Listing
 

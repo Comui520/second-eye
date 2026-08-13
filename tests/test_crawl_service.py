@@ -343,6 +343,7 @@ def test_vision_disabled_skips_stage2(session_factory, base_settings):
     )
     crawl.run_task(task.id)
     assert len(notifier.messages) == 1
+    assert "视觉模型未启用" in notifier.messages[0].content
     with session_factory() as session:
         listing = session.query(Listing).one()
         assert listing.condition_score is None

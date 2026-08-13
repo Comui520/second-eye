@@ -117,7 +117,9 @@ class CrawlService:
                     else:
                         if self._backfill(session, listing, task):
                             stats["backfilled"] += 1
-                    listing.satisfaction = compute_satisfaction(listing)
+                    listing.satisfaction = compute_satisfaction(
+                        listing, vision_enabled=self.vision.enabled
+                    )
                     session.commit()
             except Exception as exc:
                 task.last_error = f"处理商品时出错: {exc}"[:1000]
@@ -315,7 +317,7 @@ class CrawlService:
                 err = listing.condition_detail.get("error") or ""
             score_line = f"品相分：未评估（{err or '分析失败'}）\n"
         else:
-            score_line = "品相分：未配置视觉模型，未评估\n"
+            score_line = "品相分：视觉模型未启用，未评估\n"
         extra = ""
         if listing.condition_detail:
             extra = listing.condition_detail.get("reason", "")

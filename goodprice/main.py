@@ -81,12 +81,12 @@ def build_app(
 
         Base.metadata.create_all(session_factory().get_bind())
     migrate_schema(session_factory)
-    from goodprice.services.satisfaction import backfill_satisfaction
-
-    backfill_satisfaction(session_factory)
 
     settings_service = SettingsService(session_factory, base=settings)
     task_service = TaskService(session_factory)
+    from goodprice.services.satisfaction import backfill_satisfaction
+
+    backfill_satisfaction(session_factory, vision_enabled=settings_service.get().vision_enabled)
     guard = TaskRunGuard()
 
     def run_job(task_id: int) -> None:
