@@ -39,3 +39,13 @@ def test_delete(session_factory):
     assert service.delete_task(task.id) is True
     assert service.get_task(task.id) is None
     assert service.delete_task(999) is False
+
+
+def test_update_task(session_factory):
+    service = TaskService(session_factory)
+    task = service.create_task({"keyword": "a"})
+    updated = service.update_task(task.id, {"keyword": "b", "max_price": "500", "condition_requirement": "屏幕完好"})
+    assert updated.keyword == "b"
+    assert updated.max_price == 500.0
+    assert updated.condition_requirement == "屏幕完好"
+    assert service.update_task(999, {"keyword": "x"}) is None

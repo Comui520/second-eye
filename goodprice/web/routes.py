@@ -143,6 +143,46 @@ def create_task_form(
     return RedirectResponse("/tasks", status_code=303)
 
 
+@router.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
+def edit_task_page(request: Request, task_id: int):
+    task_service, _ = _services(request)
+    task = task_service.get_task(task_id)
+    if task is None:
+        return RedirectResponse("/tasks", status_code=303)
+    return templates.TemplateResponse(request, "tasks_edit.html", {"task": task, "active": "tasks"})
+
+
+@router.post("/tasks/{task_id}/edit")
+def edit_task_form(
+    request: Request,
+    task_id: int,
+    keyword: str = Form(...),
+    name: str = Form(""),
+    max_price: float = Form(0),
+    condition_requirement: str = Form(""),
+    min_condition_score: int = Form(0),
+    interval_minutes: int = Form(20),
+    fetch_detail: Optional[int] = Form(None),
+    enabled: Optional[int] = Form(None),
+):
+    task_service, _ = _services(request)
+    task_service.update_task(
+        task_id,
+        {
+            "keyword": keyword.strip(),
+            "name": name.strip(),
+            "max_price": max_price,
+            "condition_requirement": condition_requirement,
+            "min_condition_score": min_condition_score,
+            "interval_minutes": interval_minutes,
+            "fetch_detail": bool(fetch_detail),
+            "enabled": bool(enabled),
+        },
+    )
+    request.app.state.sync_scheduler()
+    return RedirectResponse("/tasks", status_code=303)
+
+
 @router.post("/tasks/{task_id}/toggle")
 def toggle_task(request: Request, task_id: int):
     task_service, _ = _services(request)
@@ -252,6 +292,18 @@ def api_list_tasks(request: Request):
 def api_create_task(request: Request, data: TaskCreate):
     task_service, _ = _services(request)
     task = task_service.create_task(data.model_dump())
+    request.app.state.sync_scheduler()
+    return _task_dict(task)
+
+
+@router.put("/api/tasks/{task_id}")
+def api_update_task(request: Request, task_id: int, data: TaskCreate):
+    from fastapi import HTTPException
+
+    task_service, _ = _services(request)
+    task = task_service.update_task(task_id, data.model_dump())
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
     request.app.state.sync_scheduler()
     return _task_dict(task)
 

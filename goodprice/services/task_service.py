@@ -54,3 +54,28 @@ class TaskService:
     def enabled_tasks(self) -> list[WatchTask]:
         with self._session_factory() as session:
             return session.query(WatchTask).filter(WatchTask.enabled.is_(True)).all()
+
+    def update_task(self, task_id: int, data: dict) -> Optional[WatchTask]:
+        with self._session_factory() as session:
+            task = session.get(WatchTask, task_id)
+            if not task:
+                return None
+            if data.get("keyword"):
+                task.keyword = data["keyword"].strip()
+            if "name" in data:
+                task.name = data.get("name", "").strip()
+            if "max_price" in data:
+                task.max_price = float(data.get("max_price") or 0)
+            if "condition_requirement" in data:
+                task.condition_requirement = data.get("condition_requirement", "")
+            if "min_condition_score" in data:
+                task.min_condition_score = int(data.get("min_condition_score") or 0)
+            if "interval_minutes" in data:
+                task.interval_minutes = int(data.get("interval_minutes") or 20)
+            if "fetch_detail" in data:
+                task.fetch_detail = bool(data.get("fetch_detail"))
+            if "enabled" in data:
+                task.enabled = bool(data.get("enabled"))
+            session.commit()
+            session.refresh(task)
+            return task

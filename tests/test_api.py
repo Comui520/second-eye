@@ -99,6 +99,29 @@ def test_tasks_page_shows_requirement_and_running(base_settings, session_factory
     client.app.state.guard.finish(task["id"])
 
 
+def test_edit_task_api_and_page(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "旧词"}).json()
+    response = client.put(f"/api/tasks/{task['id']}", json={"keyword": "新词", "max_price": 300})
+    assert response.status_code == 200
+    assert response.json()["keyword"] == "新词"
+    page = client.get(f"/tasks/{task['id']}/edit")
+    assert page.status_code == 200
+    assert "新词" in page.text
+    calls = []
+    client.app.state.sync_scheduler = lambda: calls.append(1)
+    resp = client.post(
+        f"/tasks/{task['id']}/edit",
+        data={
+            "keyword": "改后", "name": "", "max_price": "100", "condition_requirement": "",
+            "min_condition_score": "0", "interval_minutes": "30", "fetch_detail": "1", "enabled": "1",
+        },
+    )
+    assert resp.status_code == 303
+    assert client.get("/api/tasks").json()[0]["keyword"] == "改后"
+    assert calls == [1]
+
+
 def test_tasks_progress_fragment(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     task = client.post("/api/tasks", json={"keyword": "k"}).json()

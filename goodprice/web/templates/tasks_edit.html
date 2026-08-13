@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}编辑任务 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<div class="bg-white rounded shadow p-4 max-w-3xl">
+  <h2 class="text-lg font-semibold mb-3">编辑监控任务 #{{ task.id }}</h2>
+  <form method="post" action="/tasks/{{ task.id }}/edit" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div class="md:col-span-3">
+      <label class="block text-sm text-gray-600 mb-1">关键词:</label>
+      <input name="keyword" required value="{{ task.keyword }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">最高价（留空不限）:</label>
+      <input name="max_price" type="number" step="0.01" min="0" value="{{ task.max_price or '' }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">最低品相分（0-10）:</label>
+      <input name="min_condition_score" type="number" min="0" max="10" value="{{ task.min_condition_score }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">间隔分钟:</label>
+      <input name="interval_minutes" type="number" min="1" value="{{ task.interval_minutes }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">备注名（可选）:</label>
+      <input name="name" value="{{ task.name }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm text-gray-600 mb-1">品相要求:</label>
+      <input name="condition_requirement" value="{{ task.condition_requirement }}" placeholder="如 屏幕完好、电池健康" class="w-full border rounded px-3 py-2">
+    </div>
+    <div class="md:col-span-3 flex items-center gap-6">
+      <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" {{ 'checked' if task.enabled }}> 启用</label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="fetch_detail" value="1" {{ 'checked' if task.fetch_detail }}> 抓详情描述</label>
+      <button class="bg-blue-600 text-white rounded px-4 py-2">保存</button>
+      <a href="/tasks" class="text-gray-600 px-2">取消</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
