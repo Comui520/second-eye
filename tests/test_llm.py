@@ -58,3 +58,43 @@ def test_parse_analysis_json_tolerates_fence_and_clamps():
 def test_parse_analysis_json_raises_on_no_json():
     with pytest.raises(ValueError):
         parse_analysis_json("抱歉，我无法判断")
+
+
+def test_image_unsupported_falls_back_to_text_only():
+    calls = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        has_image = any(item.get("type") == "image_url" for item in body["messages"][1]["content"])
+        calls.append(has_image)
+        if has_image:
+            return httpx.Response(400, json={"error": {"message": "image_url not supported"}})
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"condition_score": 6, "defects": [], "recommended": true, "reason": "文本判断"}'
+                        }
+                    }
+                ]
+            },
+        )
+
+    verdict = _client(handler).analyze_listing("t", 1, image_urls=["https://x/1.jpg"])
+    assert verdict["condition_score"] == 6
+    assert calls == [True, False]  # 先带图失败，再纯文本成功
+
+
+def test_other_400_not_retried():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(400, json={"error": {"message": "Model Not Exist"}})
+
+    client = _client(handler)
+    with pytest.raises(httpx.HTTPStatusError):
+        client.analyze_listing("t", 1, image_urls=["https://x/1.jpg"])
+    assert len(calls) == 1
