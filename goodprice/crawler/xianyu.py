@@ -7,7 +7,9 @@ from goodprice.crawler import selectors as sel
 from goodprice.crawler.base import CrawlerAuthError, ListingData, ListingDetail, SellerData
 from goodprice.crawler.parser import parse_detail_html, parse_search_html, parse_seller_html
 
-SEARCH_URL = "https://www.goofish.com/search?q={keyword}"
+SEARCH_URL = "https://www.goofish.com/search?q={keyword}&spm=a21ybx.search.searchInput.0"
+SEARCH_ATTEMPTS = 3
+SEARCH_ATTEMPT_GAP_MS = 5000
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -40,7 +42,11 @@ class XianyuAdapter:
                 result[key.strip()] = value.strip()
         return result
 
-    def search(self, keyword: str, max_items: int = 30) -> list[ListingData]:
+    def search(
+        self, keyword: str, max_items: int = 30, attempts: int = SEARCH_ATTEMPTS
+    ) -> list[ListingData]:
+        """搜索并合并多次尝试的结果（闲鱼后端间歇性返回不同结果集，重试可提高命中率）。"""
+        seen: dict[str, ListingData] = {}
         with self._playwright_factory() as playwright:
             browser = playwright.chromium.launch(
                 headless=self.headless,
@@ -56,29 +62,36 @@ class XianyuAdapter:
                 )
                 page = context.new_page()
                 url = SEARCH_URL.format(keyword=quote(keyword))
-                page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                if "login" in (page.url or ""):
-                    raise CrawlerAuthError("闲鱼 Cookie 已失效或未登录，请重新获取")
-                card_selector = sel.RESULT_CARD
-                try:
-                    page.wait_for_selector(card_selector, timeout=30000)
-                except Exception:
-                    if page.locator(sel.RESULT_CARD_FALLBACK).count() > 0:
-                        card_selector = sel.RESULT_CARD_FALLBACK
-                    else:
-                        body_text = ""
-                        try:
-                            body_text = page.inner_text("body")[:300]
-                        except Exception:
-                            pass
-                        if "加载中" in body_text:
-                            raise CrawlerAuthError(
-                                "搜索结果一直显示加载中，Cookie 可能已失效或未登录，请重新获取"
+                for attempt in range(max(1, attempts)):
+                    if attempt:
+                        page.wait_for_timeout(SEARCH_ATTEMPT_GAP_MS)
+                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    if "login" in (page.url or ""):
+                        raise CrawlerAuthError("闲鱼 Cookie 已失效或未登录，请重新获取")
+                    card_selector = sel.RESULT_CARD
+                    try:
+                        page.wait_for_selector(card_selector, timeout=30000)
+                    except Exception:
+                        if page.locator(sel.RESULT_CARD_FALLBACK).count() > 0:
+                            card_selector = sel.RESULT_CARD_FALLBACK
+                        else:
+                            body_text = ""
+                            try:
+                                body_text = page.inner_text("body")[:300]
+                            except Exception:
+                                pass
+                            if "加载中" in body_text:
+                                raise CrawlerAuthError(
+                                    "搜索结果一直显示加载中，Cookie 可能已失效或未登录，请重新获取"
+                                )
+                            raise RuntimeError(
+                                f"未在页面中找到商品卡片，页面可能改版或触发风控。页面摘要: {body_text[:150]}"
                             )
-                        raise RuntimeError(
-                            f"未在页面中找到商品卡片，页面可能改版或触发风控。页面摘要: {body_text[:150]}"
-                        )
-                return parse_search_html(page.content(), card_selector=card_selector)[:max_items]
+                    for item in parse_search_html(page.content(), card_selector=card_selector):
+                        seen.setdefault(item.external_id, item)
+                    if len(seen) >= max_items:
+                        break
+                return list(seen.values())[:max_items]
             finally:
                 browser.close()
 

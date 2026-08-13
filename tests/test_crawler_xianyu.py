@@ -19,28 +19,34 @@ class FakePage:
         wait_ok=True,
         body_text="",
         fallback_count=0,
+        htmls=None,
     ):
         self._html = html
+        self._htmls = htmls or [html]
+        self._idx = 0
         self.url = url
         self._wait_ok = wait_ok
         self._body_text = body_text
         self._fallback_count = fallback_count
+        self.wait_calls = 0
+        self._goto_count = 0
 
     def goto(self, *args, **kwargs):
-        pass
+        self._idx = min(self._goto_count, len(self._htmls) - 1)
+        self._goto_count += 1
 
     def wait_for_selector(self, *args, **kwargs):
         if not self._wait_ok:
             raise TimeoutError("Timeout 30000ms exceeded")
 
     def wait_for_timeout(self, *args, **kwargs):
-        pass
+        self.wait_calls += 1
 
     def evaluate(self, *args, **kwargs):
         return True
 
     def content(self):
-        return self._html
+        return self._htmls[self._idx]
 
     def inner_text(self, selector):
         return self._body_text
@@ -157,6 +163,17 @@ def test_search_uses_fallback_selector_when_primary_times_out():
     items = adapter.search("iPhone")
     assert len(items) == 2
     assert items[0].external_id == "1001"
+
+
+def test_search_unions_multiple_attempts():
+    fixture = FIXTURE.read_text(encoding="utf-8")
+    junk = fixture.replace("1001", "9001").replace("1002", "9002")
+    lens = fixture.replace("1001", "9003").replace("1002", "9001")
+    page = FakePage(html=junk, htmls=[junk, lens])
+    adapter, _ = _adapter(page)
+    items = adapter.search("尼康1685")
+    assert [i.external_id for i in items] == ["9001", "9002", "9003"]
+    assert page.wait_calls >= 1  # 两次尝试之间有等待
 
 
 def test_fetch_detail_parses_page():
