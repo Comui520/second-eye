@@ -204,6 +204,19 @@ def test_listings_filter_by_task(base_settings, session_factory):
     assert f"/listings?task_id={task['id']}" in page.text
 
 
+def test_listings_sort(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        from goodprice.models import Listing
+
+        session.add(Listing(platform="xianyu", external_id="1", title="a", price=100, url="u", satisfaction=20))
+        session.add(Listing(platform="xianyu", external_id="2", title="b", price=10, url="v", satisfaction=90))
+        session.commit()
+    assert [d["title"] for d in client.get("/api/listings?sort=satisfaction").json()] == ["b", "a"]
+    assert [d["title"] for d in client.get("/api/listings?sort=price_asc").json()] == ["b", "a"]
+    assert [d["title"] for d in client.get("/api/listings?sort=price_desc").json()] == ["a", "b"]
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(

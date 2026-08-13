@@ -84,6 +84,9 @@ def build_app(
 
         Base.metadata.create_all(session_factory().get_bind())
     migrate_schema(session_factory)
+    from goodprice.services.satisfaction import backfill_satisfaction
+
+    backfill_satisfaction(session_factory)
 
     settings_service = SettingsService(session_factory, base=settings)
     task_service = TaskService(session_factory)

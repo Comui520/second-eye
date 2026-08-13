@@ -9,6 +9,7 @@ from goodprice.crawler.base import ListingData
 from goodprice.crawler.parser import is_product_image
 from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
 from goodprice.notify.base import NotificationMessage
+from goodprice.services.satisfaction import compute_satisfaction
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,7 @@ class CrawlService:
                     else:
                         if self._backfill(session, listing, task):
                             stats["backfilled"] += 1
+                    listing.satisfaction = compute_satisfaction(listing)
                     session.commit()
             except Exception as exc:
                 task.last_error = f"处理商品时出错: {exc}"[:1000]

@@ -140,7 +140,7 @@ def _service_with_seller(session_factory, base_settings, adapter, **kwargs):
 
 
 def test_seller_advisory_in_notification_and_cache(session_factory, base_settings):
-    task = TaskService(session_factory).create_task({"keyword": "k"})
+    task = TaskService(session_factory).create_task({"keyword": "k", "condition_requirement": "屏幕完好"})
     adapter = SellerFakeAdapter([_item()])
     crawl, notifier = _service_with_seller(session_factory, base_settings, adapter)
     crawl.run_task(task.id)
@@ -155,6 +155,7 @@ def test_seller_advisory_in_notification_and_cache(session_factory, base_setting
         assert listing.seller_uid == "2672367114"
         assert listing.seller_risk["risk_level"] == "低"
         assert listing.task_id == task.id
+        assert listing.satisfaction == 92.0
 
 
 def test_seller_fetch_failure_does_not_block(session_factory, base_settings):
