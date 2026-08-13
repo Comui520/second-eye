@@ -4,8 +4,8 @@ from urllib.parse import quote
 from playwright.sync_api import sync_playwright
 
 from goodprice.crawler import selectors as sel
-from goodprice.crawler.base import CrawlerAuthError, ListingData, ListingDetail
-from goodprice.crawler.parser import parse_detail_html, parse_search_html
+from goodprice.crawler.base import CrawlerAuthError, ListingData, ListingDetail, SellerData
+from goodprice.crawler.parser import parse_detail_html, parse_search_html, parse_seller_html
 
 SEARCH_URL = "https://www.goofish.com/search?q={keyword}"
 USER_AGENT = (
@@ -105,5 +105,35 @@ class XianyuAdapter:
                 except Exception:
                     pass  # 描述缺失时仍解析
                 return parse_detail_html(page.content())
+            finally:
+                browser.close()
+
+    def fetch_seller(self, user_id: str) -> SellerData:
+        with self._playwright_factory() as playwright:
+            browser = playwright.chromium.launch(
+                headless=self.headless,
+                proxy={"server": self.proxy} if self.proxy else None,
+            )
+            try:
+                context = browser.new_context(user_agent=USER_AGENT)
+                context.add_cookies(
+                    [
+                        {"name": k, "value": v, "domain": ".goofish.com", "path": "/"}
+                        for k, v in self._cookies().items()
+                    ]
+                )
+                page = context.new_page()
+                url = f"https://www.goofish.com/personal?userId={quote(user_id)}"
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                if "login" in (page.url or ""):
+                    raise CrawlerAuthError("闲鱼 Cookie 已失效或未登录，请重新获取")
+                page.wait_for_timeout(5000)
+                page.evaluate(
+                    "() => { const re = /信用及评价/; "
+                    "const el = [...document.querySelectorAll('*')].find(e => e.children.length === 0 && re.test(e.textContent)); "
+                    "if (el) { el.click(); return true; } return false; }"
+                )
+                page.wait_for_timeout(4000)
+                return parse_seller_html(page.content(), user_id)
             finally:
                 browser.close()

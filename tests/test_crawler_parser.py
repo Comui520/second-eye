@@ -2,10 +2,17 @@ from pathlib import Path
 
 import pytest
 
-from goodprice.crawler.parser import extract_id, parse_detail_html, parse_price, parse_search_html
+from goodprice.crawler.parser import (
+    extract_id,
+    parse_detail_html,
+    parse_price,
+    parse_search_html,
+    parse_seller_html,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_search.html"
 DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_detail.html"
+SELLER_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_seller.html"
 
 
 def test_parse_price():
@@ -55,3 +62,11 @@ def test_extract_user_id():
 
     assert extract_user_id("https://www.goofish.com/personal?userId=2672367114") == "2672367114"
     assert extract_user_id("https://x/other") is None
+
+
+def test_parse_seller_html():
+    data = parse_seller_html(SELLER_FIXTURE.read_text(encoding="utf-8"), "2672367114")
+    assert data.seller_uid == "2672367114"
+    assert data.positive_count == 133
+    assert data.total_count == 194
+    assert any("沟通愉快 13" in t for t in data.tags)

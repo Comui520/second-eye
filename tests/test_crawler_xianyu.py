@@ -8,6 +8,7 @@ from goodprice.crawler.xianyu import XianyuAdapter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_search.html"
 DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_detail.html"
+SELLER_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_seller.html"
 
 
 class FakePage:
@@ -31,6 +32,12 @@ class FakePage:
     def wait_for_selector(self, *args, **kwargs):
         if not self._wait_ok:
             raise TimeoutError("Timeout 30000ms exceeded")
+
+    def wait_for_timeout(self, *args, **kwargs):
+        pass
+
+    def evaluate(self, *args, **kwargs):
+        return True
 
     def content(self):
         return self._html
@@ -159,3 +166,11 @@ def test_fetch_detail_parses_page():
     assert "屏幕完好" in detail.description
     assert len(detail.image_urls) == 2
     assert playwright.browser.context.cookies
+
+
+def test_fetch_seller_parses_page():
+    html = SELLER_FIXTURE.read_text(encoding="utf-8")
+    adapter, _ = _adapter(FakePage(html))
+    data = adapter.fetch_seller("2672367114")
+    assert data.positive_count == 133
+    assert data.total_count == 194

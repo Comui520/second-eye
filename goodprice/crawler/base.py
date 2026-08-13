@@ -26,5 +26,14 @@ class ListingDetail:
     sold_count: Optional[int] = None
 
 
+@dataclass
+class SellerData:
+    seller_uid: str
+    nickname: str = ""
+    positive_count: Optional[int] = None
+    total_count: Optional[int] = None
+    tags: list[str] = field(default_factory=list)
+
+
 class CrawlerAuthError(RuntimeError):
     """登录态失效或需要登录。"""

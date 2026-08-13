@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from goodprice.crawler import selectors as sel
-from goodprice.crawler.base import ListingData, ListingDetail
+from goodprice.crawler.base import ListingData, ListingDetail, SellerData
 
 BASE_URL = "https://www.goofish.com"
 _PRICE_RE = re.compile(r"(\d+(?:\.\d+)?)")
@@ -132,3 +132,27 @@ def _parse_seller_block(seller_link):
     if m:
         sold_count = int(m.group(1))
     return name, positive_rate, sold_count, block_text
+
+
+_TAG_NAMES = ("沟通愉快", "收货快", "回复快", "下单爽快", "描述真实", "发货快")
+
+
+def parse_seller_html(html: str, seller_uid: str) -> SellerData:
+    soup = BeautifulSoup(html, "html.parser")
+    body = soup.get_text("\n", strip=True)
+    positive = None
+    total = None
+    m = re.search(r"好评\s*(\d+)", body)
+    if m:
+        positive = int(m.group(1))
+    m = re.search(r"信用及评价\s*(\d+)", body)
+    if m:
+        total = int(m.group(1))
+    tags = []
+    for tag in _TAG_NAMES:
+        m = re.search(re.escape(tag) + r"\s*(\d+)", body)
+        if m:
+            tags.append(f"{tag} {m.group(1)}")
+    return SellerData(
+        seller_uid=seller_uid, positive_count=positive, total_count=total, tags=tags
+    )
