@@ -18,7 +18,7 @@
       {% if item.notified_at %}<span class="px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700">已通知</span>{% endif %}
       {% if item.seller_risk and item.seller_risk.risk_level %}
         {% set lv = item.seller_risk.risk_level %}
-        <span class="px-1.5 py-0.5 rounded text-xs {% if lv == '低' %}bg-green-100 text-green-700{% elif lv == '中' %}bg-yellow-100 text-yellow-700{% elif lv == '高' %}bg-red-100 text-red-700{% else %}bg-gray-200 text-gray-600{% endif %}">卖家{{ lv }}</span>
+        <span class="px-1.5 py-0.5 rounded text-xs {% if lv == '低' %}bg-green-100 text-green-700{% elif lv == '中' %}bg-yellow-100 text-yellow-700{% elif lv == '高' %}bg-red-100 text-red-700{% else %}bg-gray-200 text-gray-600{% endif %}">风险{{ lv }}</span>
       {% endif %}
     </li>
     {% endfor %}
