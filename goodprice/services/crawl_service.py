@@ -85,33 +85,38 @@ class CrawlService:
         stats["found"] = len(items)
         with self._session_factory() as session:
             task = session.get(WatchTask, task_id)
-            for data in items:
-                if task.max_price and data.price > task.max_price:
-                    continue
-                listing, is_new = self._upsert_listing(session, task, data)
-                if is_new:
-                    stats["new"] += 1
-                    if task.fetch_detail:
-                        self._fetch_detail(session, listing)
-                    if not self._requirement_pass(session, listing, task):
-                        session.commit()
+            try:
+                for data in items:
+                    if task.max_price and data.price > task.max_price:
                         continue
-                    self._condition_analysis(session, listing, task)
-                    if (
-                        task.min_condition_score
-                        and listing.condition_score is not None
-                        and listing.condition_score < task.min_condition_score
-                    ):
-                        session.commit()
-                        continue
-                    self._seller_check(session, listing, task)
-                    if listing.notified_at is None:
-                        self._notify(session, task, listing)
-                        stats["notified"] += 1
-                else:
-                    if self._backfill(session, listing, task):
-                        stats["backfilled"] += 1
+                    listing, is_new = self._upsert_listing(session, task, data)
+                    if is_new:
+                        stats["new"] += 1
+                        if task.fetch_detail:
+                            self._fetch_detail(session, listing)
+                        if not self._requirement_pass(session, listing, task):
+                            session.commit()
+                            continue
+                        self._condition_analysis(session, listing, task)
+                        if (
+                            task.min_condition_score
+                            and listing.condition_score is not None
+                            and listing.condition_score < task.min_condition_score
+                        ):
+                            session.commit()
+                            continue
+                        self._seller_check(session, listing, task)
+                        if listing.notified_at is None:
+                            self._notify(session, task, listing)
+                            stats["notified"] += 1
+                    else:
+                        if self._backfill(session, listing, task):
+                            stats["backfilled"] += 1
+                    session.commit()
+            except Exception as exc:
+                task.last_error = f"处理商品时出错: {exc}"[:1000]
                 session.commit()
+                raise
             session.commit()
         return stats
 
@@ -170,12 +175,16 @@ class CrawlService:
     def _seller_check(self, session, listing: Listing, task: WatchTask) -> None:
         if not listing.seller_uid or self.seller_service is None:
             return
+        raw = dict(listing.seller_risk or {})
         seller = self.seller_service.ensure_fresh(
-            task.platform, listing.seller_uid, nickname=listing.seller_name, session=session
+            task.platform,
+            listing.seller_uid,
+            nickname=listing.seller_name,
+            credit_label=raw.get("credit_label"),
+            session=session,
         )
         from goodprice.services.seller_service import compute_risk
 
-        raw = dict(listing.seller_risk or {})
         level, reason = compute_risk(
             seller,
             credit_label=raw.get("credit_label"),

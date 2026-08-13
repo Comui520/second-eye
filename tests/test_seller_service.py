@@ -68,3 +68,23 @@ def test_compute_risk_rules():
 def test_compute_risk_prefers_detail_rate():
     seller = SimpleNamespace(positive_rate=0.68, positive_count=133, total_count=194, credit_label="")
     assert compute_risk(seller, detail_rate=100.0)[0] == "低"
+
+
+def test_compute_risk_real_seller_without_label(session_factory):
+    with session_factory() as session:
+        session.add(Seller(platform="xianyu", seller_uid="9", positive_count=133, total_count=194))
+        session.commit()
+    with session_factory() as session:
+        seller = session.query(Seller).one()
+    level, reason = compute_risk(seller, credit_label=None)
+    assert level == "高"
+    assert "133/194" in reason
+
+
+def test_ensure_fresh_stores_credit_label(session_factory):
+    adapter = FakeSellerAdapter()
+    service = SellerService(session_factory, adapter=adapter)
+    service.ensure_fresh("xianyu", "1", credit_label="卖家信用极好")
+    with session_factory() as session:
+        seller = session.query(Seller).one()
+    assert seller.credit_label == "卖家信用极好"

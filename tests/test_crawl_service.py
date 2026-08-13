@@ -93,13 +93,15 @@ def _service(session_factory, base_settings, adapter=None, llm=None, vision=None
 
 
 class SellerFakeAdapter(FakeAdapter):
-    def __init__(self, items=None, seller_data=None, seller_error=None):
+    def __init__(self, items=None, seller_data=None, seller_error=None, credit_label="卖家信用极好", positive_rate=100.0):
         super().__init__(items=items)
         self.seller_data = seller_data or SellerData(
             seller_uid="2672367114", positive_count=133, total_count=194, tags=["沟通愉快 13"]
         )
         self.seller_error = seller_error
         self.seller_calls = 0
+        self.credit_label = credit_label
+        self.positive_rate = positive_rate
 
     def fetch_detail(self, url):
         from goodprice.crawler.base import ListingDetail
@@ -109,8 +111,8 @@ class SellerFakeAdapter(FakeAdapter):
             image_urls=["https://x/d.jpg"],
             seller_uid="2672367114",
             seller_name="饼住呼吸",
-            credit_label="卖家信用极好",
-            positive_rate=100.0,
+            credit_label=self.credit_label,
+            positive_rate=self.positive_rate,
             sold_count=264,
         )
 
@@ -173,6 +175,33 @@ def test_no_seller_uid_skips_seller_stage(session_factory, base_settings):
     with session_factory() as session:
         listing = session.query(Listing).one()
         assert listing.seller_risk is None
+
+
+def test_seller_without_credit_label_still_works(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = SellerFakeAdapter([_item()], credit_label=None, positive_rate=None)
+    crawl, notifier = _service_with_seller(session_factory, base_settings, adapter)
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        assert listing.seller_risk["risk_level"] == "高"  # 按卖家主页好评 133/194 判定
+
+
+def test_seller_stage_crash_records_last_error(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = SellerFakeAdapter([_item()])
+    crawl, _ = _service_with_seller(session_factory, base_settings, adapter)
+
+    def boom(platform, seller_uid, nickname=None, credit_label=None, session=None):
+        raise RuntimeError("卖家服务崩溃")
+
+    crawl.seller_service.ensure_fresh = boom
+    with pytest.raises(RuntimeError, match="卖家服务崩溃"):
+        crawl.run_task(task.id)
+    with session_factory() as session:
+        loaded = session.get(type(task), task.id)
+        assert "卖家服务崩溃" in loaded.last_error
 
 
 def test_happy_path_and_dedup(session_factory, base_settings):

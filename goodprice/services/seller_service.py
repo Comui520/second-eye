@@ -15,7 +15,7 @@ def compute_risk(
 ):
     """返回 (风险等级, 一句话理由)。只提示不拦截。"""
     rate = detail_rate if detail_rate is not None else (seller.positive_rate if seller else None)
-    label = credit_label or (seller.credit_label if seller else "")
+    label = credit_label or getattr(seller, "credit_label", None) or ""
     if rate is not None:
         pct = rate * 100
         if rate >= 0.98:
@@ -57,16 +57,19 @@ class SellerService:
         platform: str,
         seller_uid: str,
         nickname: Optional[str] = None,
+        credit_label: Optional[str] = None,
         session=None,
     ) -> Optional[Seller]:
         if session is None:
             with self._session_factory() as own_session:
-                result = self._ensure_fresh(own_session, platform, seller_uid, nickname)
+                result = self._ensure_fresh(
+                    own_session, platform, seller_uid, nickname, credit_label
+                )
                 own_session.commit()
                 return result
-        return self._ensure_fresh(session, platform, seller_uid, nickname)
+        return self._ensure_fresh(session, platform, seller_uid, nickname, credit_label)
 
-    def _ensure_fresh(self, session, platform, seller_uid, nickname):
+    def _ensure_fresh(self, session, platform, seller_uid, nickname, credit_label):
         seller = (
             session.query(Seller)
             .filter_by(platform=platform, seller_uid=seller_uid)
@@ -91,6 +94,8 @@ class SellerService:
             seller.nickname = data.nickname
         elif nickname:
             seller.nickname = nickname
+        if credit_label:
+            seller.credit_label = credit_label
         seller.positive_count = data.positive_count
         seller.total_count = data.total_count
         seller.tags = data.tags

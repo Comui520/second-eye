@@ -43,6 +43,7 @@ def migrate_schema(session_factory) -> None:
             ("seller_name", "seller_name TEXT"),
             ("seller_risk", "seller_risk JSON"),
         ],
+        "sellers": [("credit_label", "credit_label TEXT")],
     }
     with session_factory() as session:
         existing_tables = {

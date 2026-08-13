@@ -122,6 +122,7 @@ class Seller(Base):
     platform: Mapped[str] = mapped_column(String(50))
     seller_uid: Mapped[str] = mapped_column(String(100))
     nickname: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    credit_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     positive_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
