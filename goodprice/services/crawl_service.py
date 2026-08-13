@@ -91,6 +91,9 @@ class CrawlService:
                     if task.max_price and data.price > task.max_price:
                         continue
                     listing, is_new = self._upsert_listing(session, task, data)
+                    if self._is_blocked(session, listing):
+                        session.commit()
+                        continue
                     if is_new:
                         stats["new"] += 1
                         if task.fetch_detail:
@@ -148,6 +151,23 @@ class CrawlService:
             session.add(PriceSnapshot(listing_id=listing.id, price=data.price))
         listing.last_seen_at = datetime.now()
         return listing, False
+
+    def _is_blocked(self, session, listing: Listing) -> bool:
+        if listing.blocked:
+            return True
+        if not listing.seller_uid:
+            return False
+        from goodprice.models import Seller
+
+        seller = (
+            session.query(Seller)
+            .filter_by(platform=listing.platform, seller_uid=listing.seller_uid)
+            .first()
+        )
+        if seller and seller.blocked:
+            listing.blocked = True
+            return True
+        return False
 
     def _fetch_detail(self, session, listing: Listing) -> None:
         if not listing.url or listing.description:

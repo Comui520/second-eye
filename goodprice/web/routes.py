@@ -208,21 +208,99 @@ def delete_task(request: Request, task_id: int):
 
 
 @router.get("/listings", response_class=HTMLResponse)
-def listings_page(request: Request, partial: int = 0):
+def listings_page(
+    request: Request,
+    partial: int = 0,
+    task_id: Optional[int] = None,
+    sort: str = "satisfaction",
+    show: str = "active",
+):
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing
 
-        listings = (
-            session.query(Listing).order_by(Listing.first_seen_at.desc()).limit(100).all()
-        )
+        query = session.query(Listing)
+        if task_id:
+            query = query.filter(Listing.task_id == task_id)
+        if show == "active":
+            query = query.filter(Listing.blocked.is_(False))
+        elif show == "blocked":
+            query = query.filter(Listing.blocked.is_(True))
+        if sort == "price_asc":
+            query = query.order_by(Listing.price.asc())
+        elif sort == "price_desc":
+            query = query.order_by(Listing.price.desc())
+        elif sort == "newest":
+            query = query.order_by(Listing.first_seen_at.desc())
+        else:
+            query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
+        listings = query.limit(100).all()
+    partial_url = f"/listings?partial=1&task_id={task_id or ''}&sort={sort}&show={show}"
     if partial:
         return templates.TemplateResponse(request, "listings_grid.html", {"listings": listings})
     running_ids = request.app.state.guard.running_ids()
     return templates.TemplateResponse(
         request,
         "listings.html",
-        {"listings": listings, "running_ids": running_ids, "active": "listings"},
+        {
+            "listings": listings,
+            "running_ids": running_ids,
+            "task_id": task_id,
+            "sort": sort,
+            "show": show,
+            "partial_url": partial_url,
+            "active": "listings",
+        },
     )
+
+
+@router.post("/listings/{listing_id}/block")
+def block_listing(request: Request, listing_id: int):
+    _set_blocked(request, listing_id, True, seller=False)
+    return RedirectResponse("/listings", status_code=303)
+
+
+@router.post("/listings/{listing_id}/unblock")
+def unblock_listing(request: Request, listing_id: int):
+    _set_blocked(request, listing_id, False, seller=False)
+    return RedirectResponse("/listings", status_code=303)
+
+
+@router.post("/listings/{listing_id}/block-seller")
+def block_seller(request: Request, listing_id: int):
+    _set_blocked(request, listing_id, True, seller=True)
+    return RedirectResponse("/listings", status_code=303)
+
+
+@router.post("/listings/{listing_id}/unblock-seller")
+def unblock_seller(request: Request, listing_id: int):
+    _set_blocked(request, listing_id, False, seller=True)
+    return RedirectResponse("/listings", status_code=303)
+
+
+def _set_blocked(request: Request, listing_id: int, blocked: bool, seller: bool) -> None:
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing, Seller
+
+        listing = session.get(Listing, listing_id)
+        if listing is None:
+            return
+        if seller and listing.seller_uid:
+            s = (
+                session.query(Seller)
+                .filter_by(platform=listing.platform, seller_uid=listing.seller_uid)
+                .first()
+            )
+            if s is None:
+                s = Seller(platform=listing.platform, seller_uid=listing.seller_uid)
+                session.add(s)
+            s.blocked = blocked
+            session.query(Listing).filter(
+                Listing.platform == listing.platform,
+                Listing.seller_uid == listing.seller_uid,
+            ).update({Listing.blocked: blocked})
+        else:
+            listing.blocked = blocked
+        session.commit()
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -309,11 +387,31 @@ def api_update_task(request: Request, task_id: int, data: TaskCreate):
 
 
 @router.get("/api/listings")
-def api_list_listings(request: Request):
+def api_list_listings(
+    request: Request,
+    task_id: Optional[int] = None,
+    sort: str = "satisfaction",
+    show: str = "active",
+):
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing
 
-        rows = session.query(Listing).order_by(Listing.first_seen_at.desc()).limit(100).all()
+        query = session.query(Listing)
+        if task_id:
+            query = query.filter(Listing.task_id == task_id)
+        if show == "active":
+            query = query.filter(Listing.blocked.is_(False))
+        elif show == "blocked":
+            query = query.filter(Listing.blocked.is_(True))
+        if sort == "price_asc":
+            query = query.order_by(Listing.price.asc())
+        elif sort == "price_desc":
+            query = query.order_by(Listing.price.desc())
+        elif sort == "newest":
+            query = query.order_by(Listing.first_seen_at.desc())
+        else:
+            query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
+        rows = query.limit(100).all()
     return [
         {
             "id": row.id,

@@ -250,6 +250,31 @@ def test_seller_stage_crash_records_last_error(session_factory, base_settings):
         assert "卖家服务崩溃" in loaded.last_error
 
 
+def test_blocked_listing_and_seller_skipped(session_factory, base_settings):
+    from goodprice.models import Seller
+
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    adapter = SellerFakeAdapter([_item()])
+    crawl, notifier = _service_with_seller(session_factory, base_settings, adapter)
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+
+    with session_factory() as session:
+        listing = session.query(Listing).one()
+        listing.blocked = True
+        session.commit()
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1  # 已拉黑不再处理
+
+    with session_factory() as session:
+        session.query(Listing).update({Listing.blocked: False})
+        seller = session.query(Seller).one()
+        seller.blocked = True
+        session.commit()
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1  # 卖家已拉黑不再通知
+
+
 def test_happy_path_and_dedup(session_factory, base_settings):
     task = TaskService(session_factory).create_task(
         {"keyword": "iPhone", "min_condition_score": "6", "condition_requirement": "屏幕完好"}

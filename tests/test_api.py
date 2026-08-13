@@ -174,6 +174,21 @@ def test_listings_partial_and_poll(base_settings, session_factory):
     client.app.state.guard.finish(task["id"])
 
 
+def test_block_unblock_listing(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        from goodprice.models import Listing
+
+        session.add(Listing(platform="xianyu", external_id="1", title="t", price=1, url="u"))
+        session.commit()
+        listing_id = session.query(Listing).one().id
+    resp = client.post(f"/listings/{listing_id}/block")
+    assert resp.status_code == 303
+    assert [d["title"] for d in client.get("/api/listings?show=blocked").json()] == ["t"]
+    client.post(f"/listings/{listing_id}/unblock")
+    assert client.get("/api/listings?show=blocked").json() == []
+
+
 def test_settings_save(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     response = client.post(

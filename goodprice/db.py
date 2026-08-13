@@ -42,8 +42,13 @@ def migrate_schema(session_factory) -> None:
             ("seller_uid", "seller_uid TEXT"),
             ("seller_name", "seller_name TEXT"),
             ("seller_risk", "seller_risk JSON"),
+            ("blocked", "blocked BOOLEAN DEFAULT 0"),
+            ("satisfaction", "satisfaction FLOAT DEFAULT 0"),
         ],
-        "sellers": [("credit_label", "credit_label TEXT")],
+        "sellers": [
+            ("credit_label", "credit_label TEXT"),
+            ("blocked", "blocked BOOLEAN DEFAULT 0"),
+        ],
     }
     with session_factory() as session:
         existing_tables = {

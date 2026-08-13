@@ -78,3 +78,13 @@ def test_seller_crud_and_listing_columns(session_factory):
         assert seller.positive_count == 133
         assert listing.seller_name == "饼住呼吸"
         assert listing.seller_risk["risk_level"] == "低"
+
+
+def test_blocked_flags(session_factory):
+    with session_factory() as session:
+        l = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u", blocked=True)
+        s = Seller(platform="xianyu", seller_uid="u1", blocked=True)
+        session.add_all([l, s])
+        session.commit()
+        assert l.blocked is True
+        assert s.blocked is True

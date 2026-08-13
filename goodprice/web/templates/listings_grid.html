@@ -17,6 +17,12 @@
     {% if item.condition_detail %}
     <div class="text-sm text-gray-600 mt-1">{{ item.condition_detail.reason }}</div>
     {% endif %}
+    <div class="mt-2 flex items-center gap-1 flex-wrap">
+      {% if item.blocked %}<span class="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-600">已拉黑</span>{% endif %}
+      <form method="post" action="/listings/{{ item.id }}/block" class="inline"><button class="border rounded px-2 py-0.5 text-xs text-red-600">拉黑商品</button></form>
+      {% if item.seller_uid %}<form method="post" action="/listings/{{ item.id }}/block-seller" class="inline"><button class="border rounded px-2 py-0.5 text-xs text-orange-600">拉黑卖家</button></form>{% endif %}
+      {% if item.blocked %}<form method="post" action="/listings/{{ item.id }}/unblock" class="inline"><button class="border rounded px-2 py-0.5 text-xs">恢复</button></form>{% endif %}
+    </div>
   </div>
   {% else %}
   <div class="text-gray-500">还没有命中商品。</div>

@@ -31,3 +31,16 @@ def test_migrate_adds_seller_columns(tmp_db):
     with factory() as session:
         cols = {row[1] for row in session.execute(text("PRAGMA table_info(listings)"))}
     assert {"seller_uid", "seller_name", "seller_risk"} <= cols
+
+
+def test_migrate_adds_block_columns(tmp_db):
+    engine = create_engine(tmp_db)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE listings (id INTEGER PRIMARY KEY)"))
+        conn.execute(text("CREATE TABLE sellers (id INTEGER PRIMARY KEY)"))
+    factory = make_session_factory(tmp_db)
+    migrate_schema(factory)
+    with factory() as session:
+        lc = {r[1] for r in session.execute(text("PRAGMA table_info(listings)"))}
+        sc = {r[1] for r in session.execute(text("PRAGMA table_info(sellers)"))}
+    assert "blocked" in lc and "blocked" in sc

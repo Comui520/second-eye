@@ -67,6 +67,8 @@ class Listing(Base):
     seller_uid: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     seller_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     seller_risk: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    blocked: Mapped[bool] = mapped_column(default=False)
+    satisfaction: Mapped[float] = mapped_column(Float, default=0.0)
 
     snapshots: Mapped[list["PriceSnapshot"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
@@ -128,3 +130,4 @@ class Seller(Base):
     tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     positive_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     last_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    blocked: Mapped[bool] = mapped_column(default=False)
