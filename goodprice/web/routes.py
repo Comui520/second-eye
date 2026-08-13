@@ -73,11 +73,45 @@ def tasks_page(request: Request):
     tasks = task_service.list_tasks()
     running_ids = request.app.state.guard.running_ids()
     just_ran = request.query_params.get("run")
+    running, items = _progress_context(request, just_ran)
     return templates.TemplateResponse(
         request,
         "tasks.html",
-        {"tasks": tasks, "running_ids": running_ids, "just_ran": just_ran, "active": "tasks"},
+        {
+            "tasks": tasks,
+            "running_ids": running_ids,
+            "just_ran": just_ran,
+            "running": running,
+            "items": items,
+            "active": "tasks",
+        },
     )
+
+
+def _progress_context(request: Request, just_ran=None):
+    guard = request.app.state.guard
+    running_ids = guard.running_ids()
+    running = next(iter(running_ids), None) or just_ran
+    items = []
+    if running:
+        with request.app.state.session_factory() as session:
+            from goodprice.models import Listing, WatchTask
+
+            task = session.get(WatchTask, running)
+            if task and task.last_run_at:
+                items = (
+                    session.query(Listing)
+                    .filter(Listing.first_seen_at >= task.last_run_at)
+                    .order_by(Listing.id)
+                    .all()
+                )
+    return running, items
+
+
+@router.get("/tasks/progress")
+def tasks_progress(request: Request):
+    running, items = _progress_context(request)
+    return templates.TemplateResponse(request, "progress.html", {"running": running, "items": items})
 
 
 @router.post("/tasks")
@@ -134,15 +168,20 @@ def delete_task(request: Request, task_id: int):
 
 
 @router.get("/listings", response_class=HTMLResponse)
-def listings_page(request: Request):
+def listings_page(request: Request, partial: int = 0):
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing
 
         listings = (
             session.query(Listing).order_by(Listing.first_seen_at.desc()).limit(100).all()
         )
+    if partial:
+        return templates.TemplateResponse(request, "listings_grid.html", {"listings": listings})
+    running_ids = request.app.state.guard.running_ids()
     return templates.TemplateResponse(
-        request, "listings.html", {"listings": listings, "active": "listings"}
+        request,
+        "listings.html",
+        {"listings": listings, "running_ids": running_ids, "active": "listings"},
     )
 
 

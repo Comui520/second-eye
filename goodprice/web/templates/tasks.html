@@ -6,9 +6,7 @@
   已开始执行任务 #{{ just_ran }}，页面将自动刷新显示进度；完成后可查看「上次运行」与「命中列表」。
 </div>
 {% endif %}
-{% if running_ids %}
-<script>setTimeout(function () { location.reload(); }, 2000);</script>
-{% endif %}
+<div id="progress-area">{% include "progress.html" %}</div>
 <div class="bg-white rounded shadow p-4 mb-6">
   <h2 class="text-lg font-semibold mb-3">新建监控任务</h2>
   <form method="post" action="/tasks" class="grid grid-cols-2 md:grid-cols-3 gap-3">

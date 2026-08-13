@@ -92,6 +92,7 @@ class CrawlService:
                     if task.fetch_detail:
                         self._fetch_detail(session, listing)
                     if not self._requirement_pass(session, listing, task):
+                        session.commit()
                         continue
                     self._condition_analysis(session, listing, task)
                     if (
@@ -99,6 +100,7 @@ class CrawlService:
                         and listing.condition_score is not None
                         and listing.condition_score < task.min_condition_score
                     ):
+                        session.commit()
                         continue
                     if listing.notified_at is None:
                         self._notify(session, task, listing)
@@ -106,6 +108,7 @@ class CrawlService:
                 else:
                     if self._backfill(session, listing, task):
                         stats["backfilled"] += 1
+                session.commit()
             session.commit()
         return stats
 

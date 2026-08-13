@@ -1,8 +1,11 @@
 import time
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 from goodprice.main import build_app
+from goodprice.models import Listing
 
 
 def _client(base_settings, session_factory):
@@ -92,7 +95,59 @@ def test_tasks_page_shows_requirement_and_running(base_settings, session_factory
     assert response.status_code == 200
     assert "屏幕完好" in response.text
     assert "运行中" in response.text
-    assert "setTimeout" in response.text  # 运行中自动刷新
+    assert "hx-get" in response.text  # HTMX 局部轮询替代整页刷新
+    client.app.state.guard.finish(task["id"])
+
+
+def test_tasks_progress_fragment(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    from goodprice.models import WatchTask
+
+    with session_factory() as session:
+        row = session.get(WatchTask, task["id"])
+        row.last_run_at = datetime.now()
+        session.add(
+            Listing(
+                platform="xianyu",
+                external_id="9001",
+                title="本次运行新商品",
+                price=88.0,
+                url="https://x/9001",
+                first_seen_at=datetime.now(),
+            )
+        )
+        session.commit()
+    client.app.state.guard.try_start(task["id"])
+    response = client.get("/tasks/progress")
+    assert response.status_code == 200
+    assert "本次运行新商品" in response.text
+    assert "执行中" in response.text
+    client.app.state.guard.finish(task["id"])
+
+
+def test_listings_partial_and_poll(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        session.add(
+            Listing(
+                platform="xianyu",
+                external_id="9002",
+                title="列表页商品",
+                price=66.0,
+                url="https://x/9002",
+            )
+        )
+        session.commit()
+    response = client.get("/listings?partial=1")
+    assert response.status_code == 200
+    assert "列表页商品" in response.text
+    assert 'id="listings-grid"' in response.text
+
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    client.app.state.guard.try_start(task["id"])
+    page = client.get("/listings")
+    assert "hx-get" in page.text
     client.app.state.guard.finish(task["id"])
 
 

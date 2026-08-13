@@ -1,0 +1,25 @@
+{% if running %}
+<div id="progress-card" class="bg-white rounded shadow p-4 mb-6" hx-get="/tasks/progress" hx-trigger="every 2s" hx-target="#progress-card" hx-swap="outerHTML">
+  <div class="flex items-center justify-between mb-2">
+    <h3 class="font-semibold">任务 #{{ running }} 执行中… 已处理 {{ items|length }} 个</h3>
+    <span class="text-xs text-gray-400">每 2 秒自动刷新</span>
+  </div>
+  <ul class="divide-y">
+    {% for item in items %}
+    <li class="py-1.5 flex items-center gap-2 text-sm">
+      <a href="{{ item.url }}" target="_blank" class="flex-1 truncate hover:text-blue-600">{{ item.title }}</a>
+      <span class="text-red-600 font-medium">¥{{ item.price }}</span>
+      {% if item.requirement_match is not none %}
+      <span class="px-1.5 py-0.5 rounded text-xs {{ 'bg-green-100 text-green-700' if item.requirement_match else 'bg-red-100 text-red-700' }}">需求{{ '匹配' if item.requirement_match else '不匹配' }}</span>
+      {% endif %}
+      {% if item.condition_score %}
+      <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">品相{{ item.condition_score }}</span>
+      {% endif %}
+      {% if item.notified_at %}<span class="px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-700">已通知</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<div id="progress-card"></div>
+{% endif %}

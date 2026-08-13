@@ -1,24 +1,8 @@
 {% extends "base.html" %}
 {% block title %}命中列表 - 闲鱼盯价助手{% endblock %}
 {% block content %}
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-  {% for item in listings %}
-  <div class="bg-white rounded shadow p-3">
-    {% if item.image_urls %}<img src="{{ item.image_urls[0] }}" class="w-full h-40 object-cover rounded mb-2">{% endif %}
-    <a href="{{ item.url }}" target="_blank" class="font-medium hover:text-blue-600">{{ item.title }}</a>
-    <div class="mt-2 flex items-center gap-2">
-      <span class="text-lg font-bold text-red-600">¥{{ item.price }}</span>
-      {% if item.condition_score %}
-      <span class="px-2 py-0.5 rounded text-xs {{ 'bg-green-100 text-green-700' if item.condition_score >= 7 else 'bg-yellow-100 text-yellow-700' }}">品相 {{ item.condition_score }}/10</span>
-      {% endif %}
-      {% if item.notified_at %}<span class="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">已通知</span>{% endif %}
-    </div>
-    {% if item.condition_detail %}
-    <div class="text-sm text-gray-600 mt-1">{{ item.condition_detail.reason }}</div>
-    {% endif %}
-  </div>
-  {% else %}
-  <div class="text-gray-500">还没有命中商品。</div>
-  {% endfor %}
-</div>
+{% if running_ids %}
+<div hx-get="/listings?partial=1" hx-trigger="every 2s" hx-target="#listings-grid" hx-swap="outerHTML"></div>
+{% endif %}
+{% include "listings_grid.html" %}
 {% endblock %}
