@@ -2,9 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from goodprice.crawler.parser import extract_id, parse_price, parse_search_html
+from goodprice.crawler.parser import extract_id, parse_detail_html, parse_price, parse_search_html
 
 FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_search.html"
+DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_detail.html"
 
 
 def test_parse_price():
@@ -35,3 +36,10 @@ def test_parse_search_html():
     assert second.external_id == "1002"
     assert second.price == 450.0
     assert second.seller is None
+
+
+def test_parse_detail_html():
+    detail = parse_detail_html(DETAIL_FIXTURE.read_text(encoding="utf-8"))
+    assert "屏幕完好" in detail.description
+    assert "带原装盒" in detail.description
+    assert detail.image_urls == ["https://img.alicdn.com/d1.jpg", "https://img.alicdn.com/d2.jpg"]

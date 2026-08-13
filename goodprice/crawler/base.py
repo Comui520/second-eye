@@ -15,5 +15,11 @@ class ListingData:
     published_at: Optional[datetime] = None
 
 
+@dataclass
+class ListingDetail:
+    description: str = ""
+    image_urls: list[str] = field(default_factory=list)
+
+
 class CrawlerAuthError(RuntimeError):
     """登录态失效或需要登录。"""

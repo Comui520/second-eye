@@ -4,8 +4,8 @@ from urllib.parse import quote
 from playwright.sync_api import sync_playwright
 
 from goodprice.crawler import selectors as sel
-from goodprice.crawler.base import CrawlerAuthError, ListingData
-from goodprice.crawler.parser import parse_search_html
+from goodprice.crawler.base import CrawlerAuthError, ListingData, ListingDetail
+from goodprice.crawler.parser import parse_detail_html, parse_search_html
 
 SEARCH_URL = "https://www.goofish.com/search?q={keyword}"
 USER_AGENT = (
@@ -79,5 +79,31 @@ class XianyuAdapter:
                             f"未在页面中找到商品卡片，页面可能改版或触发风控。页面摘要: {body_text[:150]}"
                         )
                 return parse_search_html(page.content(), card_selector=card_selector)[:max_items]
+            finally:
+                browser.close()
+
+    def fetch_detail(self, url: str) -> ListingDetail:
+        with self._playwright_factory() as playwright:
+            browser = playwright.chromium.launch(
+                headless=self.headless,
+                proxy={"server": self.proxy} if self.proxy else None,
+            )
+            try:
+                context = browser.new_context(user_agent=USER_AGENT)
+                context.add_cookies(
+                    [
+                        {"name": k, "value": v, "domain": ".goofish.com", "path": "/"}
+                        for k, v in self._cookies().items()
+                    ]
+                )
+                page = context.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                if "login" in (page.url or ""):
+                    raise CrawlerAuthError("闲鱼 Cookie 已失效或未登录，请重新获取")
+                try:
+                    page.wait_for_selector(sel.DETAIL_DESC, timeout=30000)
+                except Exception:
+                    pass  # 描述缺失时仍解析
+                return parse_detail_html(page.content())
             finally:
                 browser.close()

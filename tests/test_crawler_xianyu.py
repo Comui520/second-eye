@@ -7,6 +7,7 @@ from goodprice.crawler.base import CrawlerAuthError
 from goodprice.crawler.xianyu import XianyuAdapter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_search.html"
+DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "xianyu_detail.html"
 
 
 class FakePage:
@@ -149,3 +150,12 @@ def test_search_uses_fallback_selector_when_primary_times_out():
     items = adapter.search("iPhone")
     assert len(items) == 2
     assert items[0].external_id == "1001"
+
+
+def test_fetch_detail_parses_page():
+    html = DETAIL_FIXTURE.read_text(encoding="utf-8")
+    adapter, playwright = _adapter(FakePage(html))
+    detail = adapter.fetch_detail("https://www.goofish.com/item?id=1001")
+    assert "屏幕完好" in detail.description
+    assert len(detail.image_urls) == 2
+    assert playwright.browser.context.cookies

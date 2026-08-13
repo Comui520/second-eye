@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from goodprice.crawler import selectors as sel
-from goodprice.crawler.base import ListingData
+from goodprice.crawler.base import ListingData, ListingDetail
 
 BASE_URL = "https://www.goofish.com"
 _PRICE_RE = re.compile(r"(\d+(?:\.\d+)?)")
@@ -73,3 +73,24 @@ def parse_search_html(html: str, card_selector: str = sel.RESULT_CARD) -> list[L
         )
         seen.add(external_id)
     return items
+
+
+def parse_detail_html(html: str) -> ListingDetail:
+    soup = BeautifulSoup(html, "html.parser")
+    desc = ""
+    desc_el = soup.select_one(sel.DETAIL_DESC)
+    if desc_el:
+        desc = desc_el.get_text(" ", strip=True)
+    if not desc:
+        for el in soup.select("[class*='desc--']"):
+            text = el.get_text(" ", strip=True)
+            if len(text) > len(desc) and "想要" not in text and not text.startswith("¥"):
+                desc = text
+    images: list[str] = []
+    for img in soup.select(sel.DETAIL_IMAGE):
+        src = img.get("src")
+        if src:
+            url = _absolute(src)
+            if url not in images:
+                images.append(url)
+    return ListingDetail(description=desc[:2000], image_urls=images[:8])

@@ -9,3 +9,7 @@ PRICE = "[class*='price-wrap--']"
 IMAGE = "img[class*='feeds-image--']"
 SELLER = "[class*='seller-text--']"
 LOCATION = "[class*='seller-text--']"
+
+# 商品详情页（实测：描述 span[class*='desc--']，主图 img.ant-image-img）
+DETAIL_DESC = "span[class*='desc--']"
+DETAIL_IMAGE = "img[class*='ant-image-img']"
