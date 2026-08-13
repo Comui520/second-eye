@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from goodprice.analysis.llm import LLMClient, parse_analysis_json
+from goodprice.analysis.llm import LLMClient, parse_analysis_json, parse_requirement_json
 
 
 def _client(handler):
@@ -16,7 +16,7 @@ def _client(handler):
     )
 
 
-def test_analyze_listing_returns_verdict():
+def test_analyze_condition_returns_verdict():
     def handler(request):
         body = json.loads(request.content)
         assert body["model"] == "qwen-vl-max"
@@ -34,18 +34,18 @@ def test_analyze_listing_returns_verdict():
             },
         )
 
-    verdict = _client(handler).analyze_listing("iPhone 13", 2999, image_urls=["https://x/1.jpg"])
+    verdict = _client(handler).analyze_condition("iPhone 13", 2999, image_urls=["https://x/1.jpg"])
     assert verdict["condition_score"] == 8
     assert verdict["defects"] == ["轻微划痕"]
     assert verdict["recommended"] is True
     assert verdict["reason"] == "成色不错"
 
 
-def test_analyze_disabled_without_config():
+def test_analyze_condition_disabled_without_config():
     client = LLMClient(base_url="", api_key="", model="")
     assert client.enabled is False
     with pytest.raises(RuntimeError):
-        client.analyze_listing("t", 1)
+        client.analyze_condition("t", 1)
 
 
 def test_parse_analysis_json_tolerates_fence_and_clamps():
@@ -82,7 +82,7 @@ def test_image_unsupported_falls_back_to_text_only():
             },
         )
 
-    verdict = _client(handler).analyze_listing("t", 1, image_urls=["https://x/1.jpg"])
+    verdict = _client(handler).analyze_condition("t", 1, image_urls=["https://x/1.jpg"])
     assert verdict["condition_score"] == 6
     assert calls == [True, False]  # 先带图失败，再纯文本成功
 
@@ -96,5 +96,51 @@ def test_other_400_not_retried():
 
     client = _client(handler)
     with pytest.raises(httpx.HTTPStatusError):
-        client.analyze_listing("t", 1, image_urls=["https://x/1.jpg"])
+        client.analyze_condition("t", 1, image_urls=["https://x/1.jpg"])
     assert len(calls) == 1
+
+
+def test_analyze_requirement_returns_verdict():
+    def handler(request):
+        body = json.loads(request.content)
+        content = body["messages"][1]["content"]
+        assert all(item.get("type") == "text" for item in content)  # 纯文本
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"matched": true, "reason": "屏幕完好，符合要求"}'
+                        }
+                    }
+                ]
+            },
+        )
+
+    verdict = _client(handler).analyze_requirement("iPhone 13", "屏幕完好", "屏幕完好")
+    assert verdict == {"matched": True, "reason": "屏幕完好，符合要求"}
+
+
+def test_parse_requirement_requires_bool():
+    with pytest.raises(ValueError):
+        parse_requirement_json('{"matched": "yes", "reason": "x"}')
+
+
+def test_vision_no_text_fallback_when_disabled():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(400, json={"error": {"message": "unknown variant `image_url`"}})
+
+    client = LLMClient(
+        base_url="https://api.example.com/v1",
+        api_key="k",
+        model="m",
+        transport=httpx.MockTransport(handler),
+        allow_image_fallback=False,
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        client.analyze_condition("t", 1, image_urls=["https://x/1.jpg"])
+    assert len(calls) == 1  # 视觉强依赖：不做纯文本降级
