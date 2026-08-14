@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -29,6 +31,7 @@ def _sync_tasks(session_factory, run_job, task_service, scheduler) -> None:
             trigger=IntervalTrigger(minutes=max(1, task.interval_minutes)),
             args=[task_id],
             id=job_id,
+            next_run_time=datetime.now(),
             replace_existing=True,
             max_instances=1,
         )
