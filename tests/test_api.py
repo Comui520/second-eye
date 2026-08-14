@@ -163,6 +163,7 @@ def test_listings_partial_and_poll(base_settings, session_factory):
                 title="列表页商品",
                 price=66.0,
                 url="https://x/9002",
+                image_urls=["https://img.alicdn.com/bao/uploaded/d2.jpg"],
             )
         )
         session.commit()
