@@ -5,7 +5,12 @@
   <div>
     <label class="block text-sm font-medium mb-1">闲鱼 Cookie</label>
     <textarea name="xianyu_cookie" rows="4" class="w-full border rounded px-3 py-2 font-mono text-xs">{{ settings.xianyu_cookie }}</textarea>
-    <p class="text-xs text-gray-500 mt-1">登录 https://www.goofish.com 后，从浏览器开发者工具复制 Cookie 粘贴到这里。</p>
+    <div class="flex items-center gap-3 mt-2">
+      <form method="post" action="/settings/login"><button class="bg-green-600 text-white rounded px-3 py-1 text-sm">一键登录（免 F12）</button></form>
+      <span class="text-xs text-gray-500">点击后弹出浏览器窗口，扫码或用账号密码登录，登录后自动抓取 Cookie。</span>
+    </div>
+    {% include "login_status.html" %}
+    <p class="text-xs text-gray-500 mt-2">也可以手动登录 https://www.goofish.com 后，从浏览器开发者工具复制 Cookie 粘贴到这里。</p>
   </div>
   <div class="grid grid-cols-2 gap-3">
     <div><label class="block text-sm font-medium mb-1">LLM Base URL</label>

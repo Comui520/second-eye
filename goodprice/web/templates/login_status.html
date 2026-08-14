@@ -1,0 +1,11 @@
+<div id="login-status">
+{% if login_status == 'running' %}
+  <div class="bg-blue-50 text-blue-800 rounded px-3 py-2 text-sm mt-2" hx-get="/settings/login-status" hx-trigger="every 2s" hx-target="#login-status" hx-swap="outerHTML">
+    {{ login_message }} 请在弹出的浏览器窗口完成登录（扫码或密码），登录后会自动保存 Cookie。
+  </div>
+{% elif login_status == 'success' %}
+  <div class="bg-green-50 text-green-800 rounded px-3 py-2 text-sm mt-2">登录成功，Cookie 已保存。</div>
+{% elif login_status == 'error' %}
+  <div class="bg-red-50 text-red-700 rounded px-3 py-2 text-sm mt-2">{{ login_message }}</div>
+{% endif %}
+</div>

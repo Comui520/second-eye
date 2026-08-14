@@ -565,10 +565,40 @@ def _set_blocked(request: Request, listing_id: int, blocked: bool, seller: bool)
 def settings_page(request: Request):
     _, settings_service = _services(request)
     settings = settings_service.get()
+    login_session = getattr(request.app.state, "login_session", None)
+    login_status, login_message = (
+        login_session.status() if login_session else ("idle", "")
+    )
     return templates.TemplateResponse(
         request,
         "settings.html",
-        {"settings": settings, "active": "settings"},
+        {
+            "settings": settings,
+            "login_status": login_status,
+            "login_message": login_message,
+            "active": "settings",
+        },
+    )
+
+
+@router.post("/settings/login")
+def settings_login(request: Request):
+    login_session = getattr(request.app.state, "login_session", None)
+    if login_session:
+        login_session.start()
+    return RedirectResponse("/settings?toast=已打开浏览器窗口，请完成登录", status_code=303)
+
+
+@router.get("/settings/login-status")
+def settings_login_status(request: Request):
+    login_session = getattr(request.app.state, "login_session", None)
+    login_status, login_message = (
+        login_session.status() if login_session else ("idle", "")
+    )
+    return templates.TemplateResponse(
+        request,
+        "login_status.html",
+        {"login_status": login_status, "login_message": login_message},
     )
 
 

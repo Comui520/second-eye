@@ -426,6 +426,30 @@ def test_settings_page_glm_hints(base_settings, session_factory):
     assert "小写" in page.text
 
 
+def test_settings_login_route_and_status(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+
+    class FakeLogin:
+        def __init__(self):
+            self.started = 0
+
+        def start(self):
+            self.started += 1
+
+        def status(self):
+            return ("running", "正在打开浏览器窗口…")
+
+    client.app.state.login_session = FakeLogin()
+    resp = client.post("/settings/login")
+    assert resp.status_code == 303
+    assert "toast" in resp.headers["location"]
+    page = client.get("/settings")
+    assert "一键登录" in page.text
+    frag = client.get("/settings/login-status")
+    assert frag.status_code == 200
+    assert "正在打开浏览器窗口" in frag.text
+
+
 def test_listings_delete_single_and_batch(base_settings, session_factory):
     from goodprice.models import Listing, Notification
 
