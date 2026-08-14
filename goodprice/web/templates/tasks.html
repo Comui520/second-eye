@@ -45,7 +45,7 @@
     <div class="md:col-span-3 flex items-center gap-6">
       <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" checked> 立即启用</label>
       <label class="flex items-center gap-2"><input type="checkbox" name="fetch_detail" value="1" checked> 抓详情描述</label>
-      <button class="bg-blue-600 text-white rounded px-4 py-2">添加</button>
+      <button class="btn btn-primary">添加</button>
     </div>
   </form>
 </div>
@@ -65,14 +65,14 @@
     <span class="px-2 py-1 rounded text-xs {{ 'bg-green-100 text-green-700' if task.enabled else 'bg-gray-200 text-gray-600' }}">
       {{ '启用' if task.enabled else '停用' }}
     </span>
-    <a href="/tasks/{{ task.id }}/edit" class="border rounded px-3 py-1">编辑</a>
-    <a href="/listings?task_id={{ task.id }}" class="border rounded px-3 py-1">命中</a>
-    <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="border rounded px-3 py-1">{{ '停用' if task.enabled else '启用' }}</button></form>
+    <a href="/tasks/{{ task.id }}/edit" class="btn btn-sm btn-outline">编辑</a>
+    <a href="/listings?task_id={{ task.id }}" class="btn btn-sm btn-outline">命中</a>
+    <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="btn btn-sm btn-outline">{{ '停用' if task.enabled else '启用' }}</button></form>
     <form method="post" action="/tasks/{{ task.id }}/run" class="inline">
-      {% if task.id in running_ids %}<button disabled class="border rounded px-3 py-1 bg-gray-200 text-gray-500">执行中...</button>
-      {% else %}<button class="border rounded px-3 py-1 bg-blue-50">立即执行</button>{% endif %}
+      {% if task.id in running_ids %}<button disabled class="btn btn-sm btn-outline opacity-50">执行中...</button>
+      {% else %}<button class="btn btn-sm btn-outline-blue">立即执行</button>{% endif %}
     </form>
-    <form method="post" action="/tasks/{{ task.id }}/delete" class="inline" onsubmit="return confirm('确认删除该任务？')"><button class="border rounded px-3 py-1 text-red-600">删除</button></form>
+    <form method="post" action="/tasks/{{ task.id }}/delete" class="inline" onsubmit="return confirm('确认删除该任务？')"><button class="btn btn-sm btn-outline-red">删除</button></form>
   </div>
   {% else %}
   <div class="p-4 text-gray-500">还没有监控任务。</div>

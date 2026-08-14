@@ -1,9 +1,11 @@
 {% for item in listings %}
-<div class="bg-white rounded shadow p-3">
-  {% if item.image_urls %}<img src="{{ item.image_urls[0] }}" class="w-full h-40 object-cover rounded mb-2">{% endif %}
-  <a href="{{ item.url }}" target="_blank" class="font-medium hover:text-blue-600">{{ item.title }}</a>
-  <div class="mt-2 flex items-center gap-2">
-    <span class="text-lg font-bold text-red-600">¥{{ item.price }}</span>
+<div class="bg-white rounded shadow hover:shadow-md transition p-4 flex flex-col">
+  {% if item.image_urls %}
+  <a href="/listings/{{ item.id }}"><img src="{{ item.image_urls[0] }}" class="w-full h-48 object-cover rounded mb-3 cursor-pointer"></a>
+  {% endif %}
+  <a href="/listings/{{ item.id }}" class="font-semibold text-base leading-snug hover:text-blue-600">{{ item.title }}</a>
+  <div class="mt-2 flex items-center gap-2 flex-wrap">
+    <span class="text-xl font-bold text-red-600">¥{{ item.price }}</span>
     {% if item.status == 'gone' %}<span class="px-2 py-0.5 rounded text-xs bg-gray-300 text-gray-700">已下架</span>{% endif %}
     {% if item.best_of_batch %}<span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">本批最优</span>{% endif %}
     {% if item.condition_score %}
@@ -23,16 +25,16 @@
   {% if item.variants %}
   <div class="text-sm text-gray-500 mt-1">规格：{% for v in item.variants %}{{ v.name }} {{ v.price }} 元{% if not loop.last %} · {% endif %}{% endfor %}</div>
   {% endif %}
-  <div class="mt-2 flex items-center gap-1 flex-wrap">
-    <a href="/listings/{{ item.id }}" class="border rounded px-2 py-0.5 text-xs text-blue-600">详情</a>
+  <div class="mt-3 pt-3 border-t flex items-center gap-1.5 flex-wrap">
+    <a href="/listings/{{ item.id }}" class="btn btn-sm btn-primary">详情</a>
     {% if item.blocked %}<span class="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-600">已拉黑</span>{% endif %}
     <label class="flex items-center gap-1 text-xs"><input type="checkbox" class="row-check" name="ids" value="{{ item.id }}"> 选</label>
-    <form method="post" action="/listings/{{ item.id }}/block" class="inline"><button class="border rounded px-2 py-0.5 text-xs text-red-600">拉黑商品</button></form>
-    {% if item.seller_uid %}<form method="post" action="/listings/{{ item.id }}/block-seller" class="inline"><button class="border rounded px-2 py-0.5 text-xs text-orange-600">拉黑卖家</button></form>{% endif %}
-    {% if item.blocked %}<form method="post" action="/listings/{{ item.id }}/unblock" class="inline"><button class="border rounded px-2 py-0.5 text-xs">恢复</button></form>{% endif %}
-    <form method="post" action="/listings/{{ item.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="border rounded px-2 py-0.5 text-xs text-gray-600">删除</button></form>
+    <form method="post" action="/listings/{{ item.id }}/block" class="inline"><button class="btn btn-sm btn-outline-red">拉黑商品</button></form>
+    {% if item.seller_uid %}<form method="post" action="/listings/{{ item.id }}/block-seller" class="inline"><button class="btn btn-sm btn-outline-orange">拉黑卖家</button></form>{% endif %}
+    {% if item.blocked %}<form method="post" action="/listings/{{ item.id }}/unblock" class="inline"><button class="btn btn-sm btn-outline">恢复</button></form>{% endif %}
+    <form method="post" action="/listings/{{ item.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="btn btn-sm btn-outline">删除</button></form>
   </div>
 </div>
 {% else %}
-<div class="text-gray-500">还没有命中商品。</div>
+<div class="text-gray-500 col-span-full">还没有命中商品。</div>
 {% endfor %}

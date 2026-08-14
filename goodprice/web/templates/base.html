@@ -6,6 +6,34 @@
   <title>{% block title %}闲鱼盯价助手{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    .btn { display: inline-block; padding: 6px 12px; border-radius: 6px; font-size: 13px;
+      line-height: 1.5; cursor: pointer; user-select: none; text-decoration: none;
+      transition: background-color .15s, color .15s, border-color .15s, transform .05s; }
+    .btn:active { transform: translateY(1px); }
+    .btn-sm { padding: 3px 9px; font-size: 12px; border-radius: 5px; }
+    .btn-primary { background: #2563eb; border: 1px solid #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:active { background: #1e40af; }
+    .btn-danger { background: #dc2626; border: 1px solid #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-danger:active { background: #991b1b; }
+    .btn-green { background: #16a34a; border: 1px solid #16a34a; color: #fff; }
+    .btn-green:hover { background: #15803d; }
+    .btn-green:active { background: #166534; }
+    .btn-outline { background: #fff; border: 1px solid #d1d5db; color: #374151; }
+    .btn-outline:hover { background: #f3f4f6; }
+    .btn-outline:active { background: #e5e7eb; }
+    .btn-outline-blue { background: #fff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    .btn-outline-blue:hover { background: #eff6ff; }
+    .btn-outline-blue:active { background: #dbeafe; }
+    .btn-outline-red { background: #fff; border: 1px solid #fecaca; color: #dc2626; }
+    .btn-outline-red:hover { background: #fef2f2; }
+    .btn-outline-red:active { background: #fee2e2; }
+    .btn-outline-orange { background: #fff; border: 1px solid #fed7aa; color: #ea580c; }
+    .btn-outline-orange:hover { background: #fff7ed; }
+    .btn-outline-orange:active { background: #ffedd5; }
+  </style>
 </head>
 <body class="bg-gray-100 text-gray-900">
   <nav class="bg-white shadow">

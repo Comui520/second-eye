@@ -4,7 +4,7 @@
 <div class="bg-white rounded shadow">
   <div class="p-3 flex items-center gap-4">
     <label class="flex items-center gap-2"><input type="checkbox" id="select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
-    <button type="button" class="bg-red-600 text-white rounded px-4 py-1" onclick="batchDeleteNotifications()">批量删除</button>
+    <button type="button" class="btn btn-danger" onclick="batchDeleteNotifications()">批量删除</button>
   </div>
   <table class="w-full text-sm">
       <thead><tr class="text-left text-gray-500 border-b">
@@ -24,7 +24,7 @@
           <td class="p-2 text-gray-500">{{ n.created_at.strftime('%m-%d %H:%M') }}</td>
           <td class="p-2">
             <form method="post" action="/notifications/{{ n.id }}/delete" class="inline" onsubmit="return confirm('确认删除该消息？')">
-              <button class="text-red-600">删除</button>
+              <button class="btn btn-sm btn-outline-red">删除</button>
             </form>
           </td>
         </tr>

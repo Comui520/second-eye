@@ -307,6 +307,7 @@ def test_listing_detail_page_shows_analysis_blocks(base_settings, session_factor
             title="尼康16-85 镜头",
             price=580.0,
             url="https://www.goofish.com/item?id=1",
+            image_urls=["https://img.alicdn.com/bao/uploaded/d1.jpg"],
             description="镜片无霉无划痕，功能正常",
             requirement_match=True,
             requirement_reason="符合买家要求",
@@ -344,6 +345,8 @@ def test_listing_detail_page_shows_analysis_blocks(base_settings, session_factor
     assert "跳转商品页" in page.text
     assert "重新分析" in page.text and f"/listings/{listing_id}/reanalyze" in page.text
     assert "历史通知标题" in page.text
+    assert "lightbox" in page.text
+    assert "cursor-zoom-in" in page.text
 
 
 def test_listing_detail_shows_missing_analysis_reasons(base_settings, session_factory):

@@ -18,14 +18,14 @@
     <option value="blocked" {{ 'selected' if show == 'blocked' }}>已拉黑</option>
     <option value="all" {{ 'selected' if show == 'all' }}>全部</option>
   </select>
-  <button class="bg-blue-600 text-white rounded px-4 py-2">筛选</button>
+  <button class="btn btn-primary">筛选</button>
 </form>
 {% if running_ids %}
 <div hx-get="{{ partial_url }}" hx-trigger="every 2s" hx-target="#listings-grid" hx-swap="outerHTML"></div>
 {% endif %}
 <div class="flex items-center gap-4 mb-3">
   <label class="flex items-center gap-2"><input type="checkbox" id="listings-select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
-  <button type="button" class="bg-red-600 text-white rounded px-4 py-1" onclick="batchDeleteListings()">批量删除</button>
+  <button type="button" class="btn btn-danger" onclick="batchDeleteListings()">批量删除</button>
 </div>
 {% include "listings_grid.html" %}
 {% if more %}

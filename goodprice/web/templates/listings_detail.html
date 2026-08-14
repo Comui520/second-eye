@@ -18,18 +18,19 @@
       {% if drop_pct >= 0.05 %}<span class="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">较首见降价 {{ '%.0f'|format(drop_pct * 100) }}%</span>{% endif %}
     </div>
     <div class="mt-3 flex items-center gap-2 flex-wrap">
-      <a href="{{ listing.url }}" target="_blank" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">跳转商品页</a>
-      <form method="post" action="/listings/{{ listing.id }}/reanalyze" class="inline"><button class="border rounded px-3 py-1 text-sm">重新分析</button></form>
-      <form method="post" action="/listings/{{ listing.id }}/block" class="inline"><button class="border rounded px-3 py-1 text-sm text-red-600">拉黑商品</button></form>
-      {% if listing.seller_uid %}<form method="post" action="/listings/{{ listing.id }}/block-seller" class="inline"><button class="border rounded px-3 py-1 text-sm text-orange-600">拉黑卖家</button></form>{% endif %}
-      {% if listing.blocked %}<form method="post" action="/listings/{{ listing.id }}/unblock" class="inline"><button class="border rounded px-3 py-1 text-sm">恢复</button></form>{% endif %}
-      <form method="post" action="/listings/{{ listing.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="border rounded px-3 py-1 text-sm text-gray-600">删除</button></form>
+      <a href="{{ listing.url }}" target="_blank" class="btn btn-primary">跳转商品页</a>
+      <form method="post" action="/listings/{{ listing.id }}/reanalyze" class="inline"><button class="btn btn-outline-blue">重新分析</button></form>
+      <form method="post" action="/listings/{{ listing.id }}/block" class="inline"><button class="btn btn-outline-red">拉黑商品</button></form>
+      {% if listing.seller_uid %}<form method="post" action="/listings/{{ listing.id }}/block-seller" class="inline"><button class="btn btn-outline-orange">拉黑卖家</button></form>{% endif %}
+      {% if listing.blocked %}<form method="post" action="/listings/{{ listing.id }}/unblock" class="inline"><button class="btn btn-outline">恢复</button></form>{% endif %}
+      <form method="post" action="/listings/{{ listing.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="btn btn-outline-red">删除</button></form>
     </div>
 
     {% if listing.image_urls %}
     <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-      {% for u in listing.image_urls %}<img src="{{ u }}" class="w-full h-28 object-cover rounded">{% endfor %}
+      {% for u in listing.image_urls %}<img src="{{ u }}" onclick="openLightbox(this.src)" class="w-full h-32 object-cover rounded cursor-zoom-in hover:opacity-90 transition">{% endfor %}
     </div>
+    <div class="text-xs text-gray-400 mt-1">点击图片可放大查看</div>
     {% endif %}
 
     <h3 class="font-semibold mt-5 mb-1">描述原文</h3>
@@ -118,4 +119,16 @@
     </div>
   </div>
 </div>
+<div id="lightbox" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-zoom-out" onclick="this.classList.add('hidden')">
+  <img id="lightbox-img" class="max-h-full max-w-full object-contain rounded" src="">
+</div>
+<script>
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.remove('hidden');
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { document.getElementById('lightbox').classList.add('hidden'); }
+});
+</script>
 {% endblock %}
