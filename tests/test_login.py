@@ -8,6 +8,14 @@ class FakePage:
     def goto(self, url, **kwargs):
         pass
 
+    def __init__(self):
+        self.confirmed = False
+
+    def evaluate(self, expr):
+        if "data-se-login-done" in expr:
+            return self.confirmed
+        return None
+
 
 class FakeContext:
     def __init__(self, sequences):
@@ -16,7 +24,11 @@ class FakeContext:
         self._close_handlers = []
 
     def new_page(self):
-        return FakePage()
+        self.page = FakePage()
+        return self.page
+
+    def add_init_script(self, script):
+        self.init_script = script
 
     def on(self, event, handler):
         if event == "close":
@@ -38,7 +50,8 @@ class FakeBrowser:
 
     def launch_persistent_context(self, user_data_dir, **kwargs):
         self.launch_count += 1
-        return FakeContext(self.sequences)
+        self.last_context = FakeContext(self.sequences)
+        return self.last_context
 
 
 class FakePlaywright:
@@ -80,6 +93,7 @@ def test_login_success_saves_goofish_cookie(session_factory, base_settings, tmp_
         [],
         [
             {"name": "t", "value": "abc", "domain": ".goofish.com"},
+            {"name": "unb", "value": "dXNlcg==", "domain": ".taobao.com"},
             {"name": "ck", "value": "x", "domain": ".taobao.com"},
         ],
     ]
@@ -88,6 +102,36 @@ def test_login_success_saves_goofish_cookie(session_factory, base_settings, tmp_
     assert _wait_status(login, "success")
     assert browser.launch_count == 1
     assert settings_service.get().xianyu_cookie == "t=abc"
+
+
+def test_anonymous_cookies_do_not_trigger_success(session_factory, base_settings, tmp_path):
+    """回归：未登录时闲鱼也会种 t/cookie2/_tb_token_，绝不能误判成功。"""
+    settings_service = SettingsService(session_factory, base=base_settings)
+    anonymous = [
+        {"name": "t", "value": "anon", "domain": ".goofish.com"},
+        {"name": "cookie2", "value": "anon", "domain": ".goofish.com"},
+        {"name": "_tb_token_", "value": "anon", "domain": ".goofish.com"},
+    ]
+    login, _ = _login(settings_service, [anonymous], tmp_path, timeout_seconds=0.3)
+    login.start()
+    assert _wait_status(login, "error")
+    assert "登录超时" in login.status()[1]
+    assert settings_service.get().xianyu_cookie == ""
+
+
+def test_manual_confirm_saves_cookie(session_factory, base_settings, tmp_path):
+    settings_service = SettingsService(session_factory, base=base_settings)
+    sequences = [
+        [
+            {"name": "t", "value": "auth", "domain": ".goofish.com"},
+        ]
+    ]
+    login, browser = _login(settings_service, sequences, tmp_path, timeout_seconds=5)
+    login.start()
+    assert _wait_status(login, "running")
+    browser.last_context.page.confirmed = True  # 用户点击了窗口里的"登录完成"按钮
+    assert _wait_status(login, "success")
+    assert settings_service.get().xianyu_cookie == "t=auth"
 
 
 def test_login_error_surfaces_message(session_factory, base_settings, tmp_path):

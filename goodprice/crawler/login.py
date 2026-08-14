@@ -17,6 +17,30 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
+# 淘宝系真正的登录态 cookie（未登录时不会出现）；`t`/`cookie2` 匿名访问也会种，不能作为登录依据
+LOGIN_COOKIES = ("unb", "sn", "uc1", "lgc")
+
+CONFIRM_SCRIPT = r"""
+(function () {
+  function addBtn() {
+    if (document.getElementById('se-login-done')) return;
+    var btn = document.createElement('div');
+    btn.id = 'se-login-done';
+    btn.textContent = '\u2714 登录完成，点这里保存';
+    btn.style.cssText = 'position:fixed;top:16px;right:16px;z-index:999999;' +
+      'background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;' +
+      'font:14px/1.4 sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+    btn.addEventListener('click', function () {
+      document.documentElement.setAttribute('data-se-login-done', '1');
+      btn.textContent = '\u5df2\u786e\u8ba4\uff0c\u6b63\u5728\u4fdd\u5b58...';
+    });
+    document.documentElement.appendChild(btn);
+  }
+  addBtn();
+  document.addEventListener('DOMContentLoaded', addBtn);
+})();
+"""
+
 
 class LoginSession:
     """一键登录：弹出真实浏览器窗口让用户自己完成登录（密码不经过本程序），
@@ -70,11 +94,13 @@ class LoginSession:
                     user_agent=USER_AGENT,
                     viewport={"width": 1280, "height": 900},
                 )
+                context.add_init_script(CONFIRM_SCRIPT)
                 closed = threading.Event()
                 context.on("close", lambda: closed.set())
                 try:
                     page = context.new_page()
                     page.goto(GOOFISH_HOME, wait_until="domcontentloaded", timeout=45000)
+                    self._set_status("running", "浏览器窗口已打开，请扫码或登录，完成后会自动保存")
                     deadline = time.time() + self._timeout_seconds
                     while time.time() < deadline:
                         if self._stop.is_set():
@@ -84,7 +110,7 @@ class LoginSession:
                             self._set_status("error", "浏览器窗口已关闭，未完成登录")
                             return
                         cookies = context.cookies()
-                        if self._has_login_cookie(cookies):
+                        if self._has_login_cookie(cookies) or self._confirmed(page):
                             cookie_str = self._serialize(cookies)
                             self._settings_service.set_many({"xianyu_cookie": cookie_str})
                             logger.info(
@@ -106,7 +132,21 @@ class LoginSession:
 
     @staticmethod
     def _has_login_cookie(cookies) -> bool:
-        return any(c.get("name") == "t" and c.get("value") for c in cookies)
+        return any(
+            c.get("name") in LOGIN_COOKIES and c.get("value") for c in cookies
+        )
+
+    @staticmethod
+    def _confirmed(page) -> bool:
+        try:
+            return (
+                page.evaluate(
+                    "document.documentElement.getAttribute('data-se-login-done') === '1'"
+                )
+                is True
+            )
+        except Exception:
+            return False
 
     @staticmethod
     def _serialize(cookies) -> str:
