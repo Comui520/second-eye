@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -30,15 +31,16 @@ def _setup_logging() -> None:
         root.handlers.clear()
     console = logging.StreamHandler()
     console.setFormatter(formatter)
-    file_handler = RotatingFileHandler(
-        LOG_DIR / "app.log",
-        maxBytes=5 * 1024 * 1024,
-        backupCount=3,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(formatter)
     root.addHandler(console)
-    root.addHandler(file_handler)
+    if "pytest" not in sys.modules:
+        file_handler = RotatingFileHandler(
+            LOG_DIR / "app.log",
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
 
 
 _setup_logging()

@@ -1,4 +1,7 @@
+import logging
+
 from fastapi.testclient import TestClient
+from logging.handlers import RotatingFileHandler
 
 from goodprice.main import build_app
 
@@ -13,3 +16,11 @@ def test_build_app_health(base_settings, session_factory):
 
 def test_main_entry_importable():
     import goodprice.__main__  # noqa: F401
+
+
+def test_logging_skips_file_handler_under_pytest():
+    from goodprice.main import _setup_logging
+
+    _setup_logging()
+    handlers = logging.getLogger().handlers
+    assert not any(isinstance(h, RotatingFileHandler) for h in handlers)
