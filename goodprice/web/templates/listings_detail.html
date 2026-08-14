@@ -28,7 +28,7 @@
 
     {% if listing.image_urls %}
     <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-      {% for u in listing.image_urls %}<img src="{{ u }}" onclick="openLightbox(this.src)" class="w-full h-32 object-cover rounded cursor-zoom-in hover:opacity-90 transition">{% endfor %}
+      {% for u in listing.image_urls %}<div class="bg-gray-100 rounded overflow-hidden aspect-square"><img src="{{ u }}" onclick="openLightbox(this.src)" class="w-full h-full object-contain cursor-zoom-in hover:opacity-90 transition"></div>{% endfor %}
     </div>
     <div class="text-xs text-gray-400 mt-1">点击图片可放大查看</div>
     {% endif %}

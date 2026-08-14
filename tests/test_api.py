@@ -170,6 +170,7 @@ def test_listings_partial_and_poll(base_settings, session_factory):
     assert response.status_code == 200
     assert "列表页商品" in response.text
     assert 'id="listings-grid"' in response.text
+    assert "aspect-[3/4]" in response.text  # 竖版卡片图片区
 
     task = client.post("/api/tasks", json={"keyword": "k"}).json()
     client.app.state.guard.try_start(task["id"])

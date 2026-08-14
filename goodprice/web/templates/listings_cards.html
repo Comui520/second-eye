@@ -1,7 +1,9 @@
 {% for item in listings %}
 <div class="bg-white rounded shadow hover:shadow-md transition p-4 flex flex-col">
   {% if item.image_urls %}
-  <a href="/listings/{{ item.id }}"><img src="{{ item.image_urls[0] }}" class="w-full h-48 object-cover rounded mb-3 cursor-pointer"></a>
+  <a href="/listings/{{ item.id }}" class="block bg-gray-100 rounded overflow-hidden mb-3 aspect-[3/4]">
+    <img src="{{ item.image_urls[0] }}" class="w-full h-full object-contain" alt="商品图">
+  </a>
   {% endif %}
   <a href="/listings/{{ item.id }}" class="font-semibold text-base leading-snug hover:text-blue-600">{{ item.title }}</a>
   <div class="mt-2 flex items-center gap-2 flex-wrap">
