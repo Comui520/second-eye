@@ -86,3 +86,35 @@ def test_migrate_adds_round8_task_columns(tmp_db):
     with factory() as session:
         cols = {r[1] for r in session.execute(text("PRAGMA table_info(watch_tasks)"))}
     assert {"min_price", "exclude_words"} <= cols
+
+
+def test_migrate_rebuilds_listings_for_per_task_unique(tmp_db):
+    engine = create_engine(tmp_db)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE listings ("
+                "id INTEGER PRIMARY KEY, platform TEXT, external_id TEXT, "
+                "title TEXT, price FLOAT, url TEXT, "
+                "CONSTRAINT uq_old UNIQUE (platform, external_id))"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO listings (id, platform, external_id, title, price, url) "
+                "VALUES (1, 'xianyu', '1001', 'a', 1, 'u')"
+            )
+        )
+    factory = make_session_factory(tmp_db)
+    migrate_schema(factory)
+    with factory() as session:
+        session.execute(
+            text(
+                "INSERT INTO listings (platform, external_id, title, price, url, task_id, first_seen_at, last_seen_at) "
+                "VALUES ('xianyu', '1001', 'b', 2, 'v', 7, datetime('now'), datetime('now'))"
+            )
+        )
+        session.commit()
+        assert session.execute(text("SELECT COUNT(*) FROM listings")).scalar() == 2
+        cols = {r[1] for r in session.execute(text("PRAGMA table_info(listings)"))}
+        assert "seller_risk" in cols  # 重建后其它列也齐全

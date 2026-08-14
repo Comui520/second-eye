@@ -45,7 +45,7 @@ class WatchTask(Base):
 class Listing(Base):
     __tablename__ = "listings"
     __table_args__ = (
-        UniqueConstraint("platform", "external_id", name="uq_listing_platform_external"),
+        UniqueConstraint("platform", "external_id", "task_id", name="uq_listing_task_external"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -4,22 +4,22 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 
-def build_scheduler(session_factory, run_job, task_service) -> BackgroundScheduler:
+def build_scheduler(session_factory, submit_fn, task_service) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
     scheduler.add_job(
         _sync_tasks,
         trigger=IntervalTrigger(minutes=5),
-        args=[session_factory, run_job, task_service, scheduler],
+        args=[session_factory, submit_fn, task_service, scheduler],
         id="sync_tasks",
         replace_existing=True,
         max_instances=1,
     )
-    _sync_tasks(session_factory, run_job, task_service, scheduler)
+    _sync_tasks(session_factory, submit_fn, task_service, scheduler)
     return scheduler
 
 
-def _sync_tasks(session_factory, run_job, task_service, scheduler) -> None:
-    enabled_ids = {task.id for task in task_service.enabled_tasks()}
+def _sync_tasks(session_factory, submit_fn, task_service, scheduler) -> None:
+    enabled_ids = sorted(task.id for task in task_service.enabled_tasks())
     job_ids = {job.id for job in scheduler.get_jobs()}
     for task_id in enabled_ids:
         job_id = f"crawl_{task_id}"
@@ -27,7 +27,7 @@ def _sync_tasks(session_factory, run_job, task_service, scheduler) -> None:
             continue
         task = task_service.get_task(task_id)
         scheduler.add_job(
-            run_job,
+            submit_fn,
             trigger=IntervalTrigger(minutes=max(1, task.interval_minutes)),
             args=[task_id],
             id=job_id,

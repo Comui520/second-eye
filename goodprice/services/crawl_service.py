@@ -122,6 +122,7 @@ class CrawlService:
                         .filter(
                             Listing.platform == task.platform,
                             Listing.external_id == data.external_id,
+                            Listing.task_id == task.id,
                         )
                         .first()
                     )
@@ -220,7 +221,11 @@ class CrawlService:
     def _upsert_listing(self, session, task: WatchTask, data: ListingData):
         listing = (
             session.query(Listing)
-            .filter(Listing.platform == task.platform, Listing.external_id == data.external_id)
+            .filter(
+                Listing.platform == task.platform,
+                Listing.external_id == data.external_id,
+                Listing.task_id == task.id,
+            )
             .first()
         )
         if listing is None:

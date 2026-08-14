@@ -395,6 +395,23 @@ def test_reanalyze_listing_updates_fields_without_notify(session_factory, base_s
         assert listing.value_score == 8
 
 
+def test_two_tasks_same_keyword_keep_separate_listings(session_factory, base_settings):
+    task_service = TaskService(session_factory)
+    t1 = task_service.create_task({"keyword": "k"})
+    t2 = task_service.create_task({"keyword": "k"})
+    crawl1, n1, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]))
+    crawl1.run_task(t1.id)
+    assert len(n1.messages) == 1
+
+    crawl2, n2, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]))
+    crawl2.run_task(t2.id)
+    assert len(n2.messages) == 1  # 第二个任务独立通知
+    with session_factory() as session:
+        listings = session.query(Listing).all()
+        assert len(listings) == 2
+        assert {l.task_id for l in listings} == {t1.id, t2.id}
+
+
 def test_seller_fetch_failure_does_not_block(session_factory, base_settings):
     task = TaskService(session_factory).create_task({"keyword": "k"})
     adapter = SellerFakeAdapter([_item()], seller_error=RuntimeError("主页超时"))

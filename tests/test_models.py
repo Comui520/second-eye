@@ -19,14 +19,24 @@ def test_watch_task_crud(session_factory):
         assert loaded.last_error is None
 
 
-def test_listing_unique_platform_external(session_factory):
+def test_listing_unique_per_task(session_factory):
     with session_factory() as session:
-        session.add(Listing(platform="xianyu", external_id="1001", title="a", price=1.0, url="u"))
-        session.commit()
+        t1 = WatchTask(keyword="k1")
+        t2 = WatchTask(keyword="k2")
+        session.add_all([t1, t2])
+        session.flush()
+        session.add(Listing(platform="xianyu", external_id="1001", title="a", price=1, url="u", task_id=t1.id))
+        session.add(Listing(platform="xianyu", external_id="1001", title="b", price=2, url="v", task_id=t2.id))
+        session.commit()  # 不同任务允许同一外部 ID
     with session_factory() as session:
-        session.add(Listing(platform="xianyu", external_id="1001", title="b", price=2.0, url="v"))
+        t = WatchTask(keyword="k")
+        session.add(t)
+        session.flush()
+        session.add(Listing(platform="xianyu", external_id="1001", title="c", price=3, url="w", task_id=t.id))
+        session.flush()
+        session.add(Listing(platform="xianyu", external_id="1001", title="d", price=4, url="x", task_id=t.id))
         with pytest.raises(IntegrityError):
-            session.commit()
+            session.commit()  # 同一任务重复外部 ID 仍拦截
 
 
 def test_listing_relations(session_factory):

@@ -14,6 +14,7 @@ from goodprice.scheduler import _sync_tasks, build_scheduler
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
 from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
+from goodprice.services.task_queue import DEFAULT_GAP_SECONDS, TaskQueue
 from goodprice.services.task_service import TaskService
 from goodprice.web.routes import router
 
@@ -129,29 +130,37 @@ def build_app(
         except Exception:
             logger.exception("重新分析商品 %s 失败", listing_id)
 
-    scheduler = build_scheduler(session_factory, run_job, task_service) if with_scheduler else None
+    task_queue = TaskQueue(run_job, gap_seconds=DEFAULT_GAP_SECONDS)
+    scheduler = (
+        build_scheduler(session_factory, task_queue.submit, task_service)
+        if with_scheduler
+        else None
+    )
 
     def sync_scheduler() -> None:
         if scheduler is not None:
-            _sync_tasks(session_factory, run_job, task_service, scheduler)
+            _sync_tasks(session_factory, task_queue.submit, task_service, scheduler)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        task_queue.start()
         if scheduler is not None:
             app.state.scheduler = scheduler
             app.state.scheduler.start()
         yield
         if scheduler is not None:
             app.state.scheduler.shutdown(wait=False)
+        task_queue.stop()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.state.session_factory = session_factory
     app.state.settings_service = settings_service
     app.state.task_service = task_service
-    app.state.run_job = run_job
+    app.state.run_job = task_queue.submit
     app.state.run_reanalyze = run_reanalyze
     app.state.guard = guard
     app.state.sync_scheduler = sync_scheduler
+    app.state.task_queue = task_queue
     app.include_router(router)
     return app
 
