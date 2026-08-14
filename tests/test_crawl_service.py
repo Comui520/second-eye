@@ -232,12 +232,27 @@ def test_price_change_no_improvement_no_renotify(session_factory, base_settings)
     assert len(notifier.messages) == 1
 
     crawl2, notifier2, _ = _service(
-        session_factory, base_settings, adapter=FakeAdapter([_item(price=80.0)])
+        session_factory, base_settings, adapter=FakeAdapter([_item(price=95.0)])  # 降 5% 不足加成档
     )
     stats = crawl2.run_task(task.id)
     assert stats["reevaluated"] == 1
     assert stats["notified"] == 0
     assert len(notifier2.messages) == 0
+
+
+def test_price_drop_improves_score_and_renotifies(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item(price=100.0)]))
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+
+    crawl2, notifier2, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item(price=80.0)])  # 降 20% → 加成 2 档
+    )
+    stats = crawl2.run_task(task.id)
+    assert stats["reevaluated"] == 1
+    assert stats["notified"] == 1
+    assert "价格更新重推" in notifier2.messages[0].content
 
 
 def test_gone_after_three_misses_and_reappear_reevaluates(session_factory, base_settings):
@@ -342,6 +357,42 @@ def test_detail_variants_stored_and_shown(session_factory, base_settings):
         ]
     assert "最低价 850" in notifier.messages[0].content
     assert "最高价 1299" in notifier.messages[0].content
+
+
+def test_batch_row_carries_requirement(session_factory, base_settings):
+    task = TaskService(session_factory).create_task(
+        {"keyword": "k", "condition_requirement": "只要 128G"}
+    )
+    llm = FakeLLM()
+    crawl, _, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]), llm=llm)
+    crawl.run_task(task.id)
+    assert len(llm.value_calls) == 1
+    assert llm.value_calls[0][0]["requirement"] == "只要 128G"
+
+
+def test_reanalyze_listing_updates_fields_without_notify(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    vision = FakeVision()
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]), vision=vision)
+    crawl.run_task(task.id)
+    assert len(notifier.messages) == 1
+    with session_factory() as session:
+        listing_id = session.query(Listing).one().id
+
+    improved = FakeVision(
+        verdict={"condition_score": 10, "defects": [], "recommended": True, "reason": "更好"}
+    )
+    crawl2, notifier2, _ = _service(
+        session_factory, base_settings, adapter=FakeAdapter([_item()]), vision=improved
+    )
+    stats = crawl2.reanalyze_listing(listing_id)
+    assert stats["updated"] == 1
+    assert len(notifier2.messages) == 0  # 手动重分析不通知
+    with session_factory() as session:
+        listing = session.get(Listing, listing_id)
+        assert listing.condition_score == 10
+        assert listing.condition_detail["reason"] == "更好"
+        assert listing.value_score == 8
 
 
 def test_seller_fetch_failure_does_not_block(session_factory, base_settings):
@@ -495,6 +546,33 @@ def test_price_filter(session_factory, base_settings):
     assert stats["notified"] == 0
     with session_factory() as session:
         assert session.query(Listing).count() == 0
+
+
+def test_min_price_filter(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k", "min_price": "50"})
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item(price=30.0)]))
+    stats = crawl.run_task(task.id)
+    assert stats["new"] == 0
+    assert stats["notified"] == 0
+    with session_factory() as session:
+        assert session.query(Listing).count() == 0
+
+
+def test_exclude_words_filter(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k", "exclude_words": "配件 遮光罩"})
+    adapter = FakeAdapter(
+        [
+            _item("1001", 100),  # 标题不含排除词
+            ListingData(external_id="1002", title="全新尼康遮光罩HB-39", price=200, url="https://x/1002", image_urls=["https://img.alicdn.com/bao/uploaded/2.jpg"]),
+        ]
+    )
+    crawl, notifier, _ = _service(session_factory, base_settings, adapter=adapter)
+    stats = crawl.run_task(task.id)
+    assert stats["new"] == 1
+    assert len(notifier.messages) == 1
+    with session_factory() as session:
+        listings = session.query(Listing).all()
+        assert [l.external_id for l in listings] == ["1001"]
 
 
 def test_requirement_mismatch_blocks_and_skips_vision(session_factory, base_settings):

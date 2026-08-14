@@ -57,7 +57,8 @@ def parse_search_html(html: str, card_selector: str = sel.RESULT_CARD) -> list[L
         except ValueError:
             continue
         img_el = card.select_one(sel.IMAGE)
-        image_urls = [img_el.get("src")] if img_el and img_el.get("src") else []
+        src = img_el.get("src") if img_el else ""
+        image_urls = [_absolute(src)] if src and is_product_image(src) else []
         seller_el = card.select_one(sel.SELLER)
         location_el = card.select_one(sel.LOCATION)
         items.append(
@@ -102,6 +103,7 @@ def parse_detail_html(html: str) -> ListingDetail:
             url = _absolute(src)
             if url not in images:
                 images.append(url)
+    images.sort(key=lambda u: 0 if "xy_item" in u else 1)  # 主图优先
     seller_link = soup.select_one(sel.DETAIL_SELLER_LINK)
     seller_uid = extract_user_id(seller_link.get("href")) if seller_link else None
     seller_name, positive_rate, sold_count, _ = _parse_seller_block(seller_link)

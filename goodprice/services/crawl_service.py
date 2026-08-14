@@ -9,7 +9,10 @@ from goodprice.crawler.base import ListingData
 from goodprice.crawler.parser import is_product_image
 from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
 from goodprice.notify.base import NotificationMessage
-from goodprice.services.satisfaction import compute_satisfaction
+from goodprice.services.satisfaction import (
+    compute_satisfaction,
+    drop_pct_from_snapshots,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,7 @@ class CrawlService:
 
     def run_task(self, task_id: int) -> dict[str, Any]:
         if not self.guard.try_start(task_id):
+            logger.info("任务 %s 已在运行，忽略重复触发", task_id)
             return {"found": 0, "new": 0, "notified": 0, "skipped": "already_running"}
         try:
             return self._run_impl(task_id)
@@ -95,6 +99,7 @@ class CrawlService:
             self._record_error(task_id, f"抓取失败: {exc}")
             raise
         stats["found"] = len(items)
+        logger.info("任务 %s 搜索命中 %s 条", task_id, len(items))
         batch_rows: list[dict] = []
         pending: list[tuple] = []  # (task, listing, old_price, is_renotify)
         seen_ids: set[int] = set()
@@ -103,6 +108,13 @@ class CrawlService:
             try:
                 for data in items:
                     if task.max_price and data.price > task.max_price:
+                        logger.info("任务 %s 跳过（超最高价 %s）: %s ¥%s", task_id, task.max_price, data.title[:30], data.price)
+                        continue
+                    if task.min_price and data.price < task.min_price:
+                        logger.info("任务 %s 跳过（低于价格下限 %s）: %s ¥%s", task_id, task.min_price, data.title[:30], data.price)
+                        continue
+                    if self._excluded(task, data.title):
+                        logger.info("任务 %s 跳过（命中排除词）: %s", task_id, data.title[:40])
                         continue
                     old_price: Optional[float] = None
                     existing = (
@@ -124,22 +136,28 @@ class CrawlService:
                     listing.missed_count = 0
                     if is_new:
                         stats["new"] += 1
+                        logger.info("任务 %s 新品 %s：%s ¥%s", task_id, data.external_id, data.title[:30], data.price)
                         if task.fetch_detail:
                             self._fetch_detail(session, listing)
                         if not self._requirement_pass(session, listing, task):
+                            logger.info("任务 %s 需求不匹配，不收录：%s", task_id, listing.title[:30])
                             session.commit()
                             continue
                         self._condition_analysis(session, listing, task)
                         if self._condition_gate_fails(task, listing):
+                            logger.info("任务 %s 品相分低于门槛，不收录：%s", task_id, listing.title[:30])
                             session.commit()
                             continue
                         self._seller_check(session, listing, task)
-                        batch_rows.append(self._batch_row(listing))
+                        batch_rows.append(
+                            self._batch_row(listing, task.condition_requirement or "")
+                        )
                         pending.append((task, listing, old_price, False))
                     else:
                         changed = old_price is not None or listing.status == "gone"
                         if changed:
                             stats["reevaluated"] += 1
+                            logger.info("任务 %s 重评 %s：%s（价格变化或重新上架）", task_id, data.external_id, data.title[:30])
                             if not self._requirement_pass(session, listing, task):
                                 session.commit()
                                 continue
@@ -148,7 +166,9 @@ class CrawlService:
                                 session.commit()
                                 continue
                             self._seller_check(session, listing, task)
-                            batch_rows.append(self._batch_row(listing))
+                            batch_rows.append(
+                                self._batch_row(listing, task.condition_requirement or "")
+                            )
                             pending.append((task, listing, old_price, True))
                         else:
                             if self._backfill(session, listing, task):
@@ -164,6 +184,7 @@ class CrawlService:
                     if other.missed_count >= GONE_THRESHOLD and other.status != "gone":
                         other.status = "gone"
                         stats["gone"] += 1
+                        logger.info("任务 %s 商品 %s 标记为已下架", task_id, other.title[:30])
                 session.commit()
                 # 批性价比：本批通过筛选的商品统一横向对比
                 if batch_rows and self._value_client() is not None:
@@ -171,9 +192,7 @@ class CrawlService:
                     session.commit()
                 # 通知：新品在批性价比后统一发出；重评仅满意度提高时发出
                 for task, listing, old_price, is_renotify in pending:
-                    satisfaction = compute_satisfaction(
-                        listing, vision_enabled=self.vision.enabled
-                    )
+                    satisfaction = self._satisfaction(listing)
                     listing.satisfaction = satisfaction
                     if (
                         is_renotify
@@ -244,8 +263,10 @@ class CrawlService:
             return True
         return False
 
-    def _fetch_detail(self, session, listing: Listing) -> None:
-        if not listing.url or listing.description:
+    def _fetch_detail(self, session, listing: Listing, force: bool = False) -> None:
+        if not listing.url:
+            return
+        if not force and listing.description:
             return
         try:
             detail = self.adapter.fetch_detail(listing.url)
@@ -269,6 +290,32 @@ class CrawlService:
                 "positive_rate": detail.positive_rate,
                 "sold_count": detail.sold_count,
             }
+
+    def reanalyze_listing(self, listing_id: int) -> dict[str, Any]:
+        """手动重新分析单个商品：重抓详情并重跑需求/品相/性价比/卖家，不发送通知。"""
+        stats = {"updated": 0}
+        with self._session_factory() as session:
+            listing = session.get(Listing, listing_id)
+            if listing is None:
+                raise RuntimeError(f"商品 {listing_id} 不存在")
+            task = (
+                session.get(WatchTask, listing.task_id)
+                if listing.task_id is not None
+                else WatchTask(keyword="", condition_requirement="", min_condition_score=0)
+            )
+            if listing.url:
+                self._fetch_detail(session, listing, force=True)
+            self._requirement_pass(session, listing, task)
+            self._condition_analysis(session, listing, task)
+            self._seller_check(session, listing, task)
+            if self._value_client() is not None:
+                self._batch_value(
+                    session, [self._batch_row(listing, task.condition_requirement or "")]
+                )
+            listing.satisfaction = self._satisfaction(listing)
+            session.commit()
+            stats["updated"] = 1
+        return stats
 
     def _seller_check(self, session, listing: Listing, task: WatchTask) -> None:
         if not listing.seller_uid or self.seller_service is None:
@@ -348,7 +395,17 @@ class CrawlService:
             and listing.condition_score < task.min_condition_score
         )
 
-    def _batch_row(self, listing: Listing) -> dict:
+    def _excluded(self, task: WatchTask, title: str) -> bool:
+        """排除词按空白/中英文逗号拆分，标题命中任一即跳过。"""
+        words = (
+            (task.exclude_words or "")
+            .replace("，", " ")
+            .replace(",", " ")
+            .split()
+        )
+        return any(word and word in (title or "") for word in words)
+
+    def _batch_row(self, listing: Listing, requirement: str = "") -> dict:
         defects = []
         if isinstance(listing.condition_detail, dict):
             defects = listing.condition_detail.get("defects") or []
@@ -363,6 +420,7 @@ class CrawlService:
             "condition_score": listing.condition_score,
             "defects": defects,
             "seller_risk": risk,
+            "requirement": requirement,
         }
 
     def _value_client(self):
@@ -371,6 +429,16 @@ class CrawlService:
             if getattr(client, "enabled", False):
                 return client
         return None
+
+    def _drop_pct(self, listing: Listing) -> float:
+        return drop_pct_from_snapshots(listing)
+
+    def _satisfaction(self, listing: Listing) -> float:
+        return compute_satisfaction(
+            listing,
+            vision_enabled=self.vision.enabled,
+            price_drop_pct=self._drop_pct(listing),
+        )
 
     def _batch_value(self, session, rows: list[dict]) -> None:
         client = self._value_client()
@@ -384,6 +452,7 @@ class CrawlService:
         now = datetime.now()
         scores = result.get("scores") or {}
         best = result.get("best")
+        logger.info("批量性价比完成：%s 个商品，本批最优 %s", len(rows), best)
         for row in rows:
             listing = session.get(Listing, row["listing_id"])
             if listing is None:
@@ -438,6 +507,9 @@ class CrawlService:
             return format(value, "g")
 
         lines = [f"价格：{_fmt(listing.price)} 元"]
+        drop_pct = self._drop_pct(listing)
+        if drop_pct >= 0.05:
+            lines.append(f"较首见降价 {drop_pct:.0%}")
         if is_renotify and old_price is not None:
             lines.append(f"价格更新重推：{_fmt(old_price)} → {_fmt(listing.price)} 元")
         if listing.requirement_match is not None:
@@ -487,6 +559,7 @@ class CrawlService:
         for channel, notifier in self.notifiers:
             try:
                 notifier.send(message)
+                logger.info("通知[%s] 已发送：%s", channel, listing.title[:30])
                 session.add(
                     Notification(
                         listing_id=listing.id,

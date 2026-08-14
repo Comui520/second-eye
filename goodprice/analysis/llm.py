@@ -165,6 +165,7 @@ class LLMClient:
             raise RuntimeError("LLM 未配置")
         if not items:
             return {"scores": {}, "best": None, "reasons": {}}
+        requirement = str(items[0].get("requirement") or "") if items else ""
         lines = []
         for i, it in enumerate(items, 1):
             defects = "、".join(str(d) for d in (it.get("defects") or [])[:5]) or "无"
@@ -173,7 +174,9 @@ class LLMClient:
                 f"价格={it.get('price')}元 品相分={it.get('condition_score') or '未评估'} "
                 f"瑕疵={defects} 卖家风险={it.get('seller_risk') or '未知'}"
             )
-        text = BATCH_VALUE_USER_TEMPLATE.format(items="\n".join(lines))
+        text = BATCH_VALUE_USER_TEMPLATE.format(
+            requirement=requirement or "无", items="\n".join(lines)
+        )
         return self._complete(
             self._payload(
                 [{"type": "text", "text": text}], system=BATCH_VALUE_SYSTEM_PROMPT

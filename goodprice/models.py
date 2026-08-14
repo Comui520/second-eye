@@ -28,6 +28,8 @@ class WatchTask(Base):
     name: Mapped[str] = mapped_column(String(200), default="")
     keyword: Mapped[str] = mapped_column(String(200))
     max_price: Mapped[float] = mapped_column(Float, default=0.0)
+    min_price: Mapped[float] = mapped_column(Float, default=0.0)
+    exclude_words: Mapped[str] = mapped_column(Text, default="")
     condition_requirement: Mapped[str] = mapped_column(Text, default="")
     min_condition_score: Mapped[int] = mapped_column(Integer, default=0)
     platform: Mapped[str] = mapped_column(String(50), default="xianyu")

@@ -75,3 +75,14 @@ def test_migrate_adds_round7_columns(tmp_db):
         "best_of_batch",
         "last_notified_satisfaction",
     } <= cols
+
+
+def test_migrate_adds_round8_task_columns(tmp_db):
+    engine = create_engine(tmp_db)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE watch_tasks (id INTEGER PRIMARY KEY, keyword TEXT)"))
+    factory = make_session_factory(tmp_db)
+    migrate_schema(factory)
+    with factory() as session:
+        cols = {r[1] for r in session.execute(text("PRAGMA table_info(watch_tasks)"))}
+    assert {"min_price", "exclude_words"} <= cols

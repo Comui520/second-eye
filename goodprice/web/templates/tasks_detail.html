@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}任务详情 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<div class="mb-4 flex items-center gap-3">
+  <a href="/tasks" class="text-gray-600">← 返回任务列表</a>
+  <h2 class="text-lg font-semibold">任务 #{{ task.id }}：{{ task.keyword }}</h2>
+  {% if task.id in running_ids %}<span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">运行中</span>{% endif %}
+  <span class="px-2 py-1 rounded text-xs {{ 'bg-green-100 text-green-700' if task.enabled else 'bg-gray-200 text-gray-600' }}">{{ '启用' if task.enabled else '停用' }}</span>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+  <div class="bg-white rounded shadow p-3"><div class="text-sm text-gray-500">命中商品</div><div class="text-xl font-bold">{{ stats.listings }}</div></div>
+  <div class="bg-white rounded shadow p-3"><div class="text-sm text-gray-500">通知记录</div><div class="text-xl font-bold">{{ stats.notifications }}</div></div>
+  <div class="bg-white rounded shadow p-3"><div class="text-sm text-gray-500">运行次数</div><div class="text-xl font-bold">{{ task.last_run_count }}</div></div>
+  <div class="bg-white rounded shadow p-3"><div class="text-sm text-gray-500">上次运行</div><div class="text-xl font-bold">{{ task.last_run_at.strftime('%m-%d %H:%M') if task.last_run_at else '—' }}</div></div>
+</div>
+
+{% if task.last_error %}
+<div class="bg-red-50 text-red-700 rounded shadow px-4 py-3 mb-6">最近错误：{{ task.last_error }}</div>
+{% endif %}
+
+<div class="bg-white rounded shadow p-4 mb-6">
+  <h3 class="font-semibold mb-3">任务参数</h3>
+  <form method="post" action="/tasks/{{ task.id }}/edit" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div class="md:col-span-3">
+      <label class="block text-sm text-gray-600 mb-1">关键词:</label>
+      <input name="keyword" required value="{{ task.keyword }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">最高价（留空不限）:</label>
+      <input name="max_price" type="number" step="0.01" min="0" value="{{ task.max_price or '' }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">价格下限（过滤超低价配件）:</label>
+      <input name="min_price" type="number" step="0.01" min="0" value="{{ task.min_price or '' }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">排除词（空格分隔）:</label>
+      <input name="exclude_words" value="{{ task.exclude_words }}" placeholder="如 配件 遮光罩 镜头盖" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">最低品相分（0-10）:</label>
+      <input name="min_condition_score" type="number" min="0" max="10" value="{{ task.min_condition_score }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">间隔分钟:</label>
+      <input name="interval_minutes" type="number" min="1" value="{{ task.interval_minutes }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">备注名（可选）:</label>
+      <input name="name" value="{{ task.name }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm text-gray-600 mb-1">品相要求:</label>
+      <input name="condition_requirement" value="{{ task.condition_requirement }}" placeholder="如 屏幕完好、电池健康" class="w-full border rounded px-3 py-2">
+    </div>
+    <div class="md:col-span-3 flex items-center gap-6">
+      <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" {{ 'checked' if task.enabled }}> 启用</label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="fetch_detail" value="1" {{ 'checked' if task.fetch_detail }}> 抓详情描述</label>
+      <button class="bg-blue-600 text-white rounded px-4 py-2">保存参数</button>
+    </div>
+  </form>
+</div>
+
+<div class="bg-white rounded shadow p-4">
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="font-semibold">最近命中</h3>
+    <a href="/listings?task_id={{ task.id }}" class="text-blue-600 text-sm">查看全部 →</a>
+  </div>
+  <ul class="divide-y">
+    {% for item in recent %}
+    <li class="py-2 flex items-center gap-3 text-sm">
+      <a href="/listings/{{ item.id }}" class="flex-1 truncate hover:text-blue-600">{{ item.title }}</a>
+      <span class="text-red-600 font-medium">¥{{ item.price }}</span>
+      {% if item.status == 'gone' %}<span class="px-1.5 py-0.5 rounded text-xs bg-gray-300 text-gray-700">已下架</span>{% endif %}
+      <span class="px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700">分 {{ item.satisfaction|round(1) }}</span>
+    </li>
+    {% else %}
+    <li class="py-2 text-gray-500">还没有命中商品。</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="mt-6 flex items-center gap-3">
+  <form method="post" action="/tasks/{{ task.id }}/run" class="inline">
+    {% if task.id in running_ids %}<button disabled class="border rounded px-3 py-1 bg-gray-200 text-gray-500">执行中...</button>
+    {% else %}<button class="border rounded px-3 py-1 bg-blue-50">立即执行</button>{% endif %}
+  </form>
+  <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="border rounded px-3 py-1">{{ '停用' if task.enabled else '启用' }}</button></form>
+  <form method="post" action="/tasks/{{ task.id }}/delete" class="inline" onsubmit="return confirm('确认删除该任务？')"><button class="border rounded px-3 py-1 text-red-600">删除任务</button></form>
+</div>
+{% endblock %}

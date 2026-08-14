@@ -9,6 +9,19 @@ from goodprice.analysis.llm import (
     parse_batch_value_json,
     parse_requirement_json,
 )
+from goodprice.analysis.prompts import (
+    BATCH_VALUE_USER_TEMPLATE,
+    CONDITION_SYSTEM_PROMPT,
+)
+
+
+def test_condition_prompt_is_pure_condition_judgment():
+    assert "值得" not in CONDITION_SYSTEM_PROMPT
+    assert "不要因为价格" in CONDITION_SYSTEM_PROMPT
+
+
+def test_batch_value_prompt_carries_requirement():
+    assert "{requirement}" in BATCH_VALUE_USER_TEMPLATE
 
 
 def _client(handler):

@@ -105,7 +105,10 @@ def test_edit_task_api_and_page(base_settings, session_factory):
     response = client.put(f"/api/tasks/{task['id']}", json={"keyword": "新词", "max_price": 300})
     assert response.status_code == 200
     assert response.json()["keyword"] == "新词"
-    page = client.get(f"/tasks/{task['id']}/edit")
+    resp = client.get(f"/tasks/{task['id']}/edit")
+    assert resp.status_code == 303
+    assert f"/tasks/{task['id']}" in resp.headers["location"]
+    page = client.get(f"/tasks/{task['id']}")
     assert page.status_code == 200
     assert "新词" in page.text
     calls = []
@@ -201,6 +204,7 @@ def test_listings_filter_by_task(base_settings, session_factory):
     data = client.get(f"/api/listings?task_id={task['id']}").json()
     assert [d["title"] for d in data] == ["甲"]
     page = client.get("/tasks")
+    assert f"/tasks/{task['id']}" in page.text
     assert f"/listings?task_id={task['id']}" in page.text
 
 
@@ -291,6 +295,129 @@ def test_listings_actions_redirect_with_toast(base_settings, session_factory):
     assert "toast" in client.get("/listings").text  # 基础模板含 toast JS
 
 
+def test_listing_detail_page_shows_analysis_blocks(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        from goodprice.models import Notification, PriceSnapshot
+
+        listing = Listing(
+            platform="xianyu",
+            external_id="1",
+            title="尼康16-85 镜头",
+            price=580.0,
+            url="https://www.goofish.com/item?id=1",
+            description="镜片无霉无划痕，功能正常",
+            requirement_match=True,
+            requirement_reason="符合买家要求",
+            condition_score=8,
+            condition_detail={"defects": ["轻微使用痕迹"], "reason": "成色不错"},
+            value_score=8,
+            best_of_batch=True,
+            seller_risk={"nickname": "兵哥哥", "risk_level": "低", "positive_rate": 0.99},
+            variants=[{"name": "最低价", "price": 580.0}, {"name": "最高价", "price": 1299.0}],
+        )
+        session.add(listing)
+        session.flush()
+        session.add_all(
+            [
+                PriceSnapshot(listing_id=listing.id, price=699.0),
+                PriceSnapshot(listing_id=listing.id, price=580.0),
+            ]
+        )
+        session.add(
+            Notification(listing_id=listing.id, channel="serverchan", status="sent", title="历史通知标题", content="内容")
+        )
+        session.commit()
+        listing_id = listing.id
+    page = client.get(f"/listings/{listing_id}")
+    assert page.status_code == 200
+    assert "尼康16-85 镜头" in page.text
+    assert "描述原文" in page.text and "镜片无霉无划痕" in page.text
+    assert "需求匹配" in page.text and "符合买家要求" in page.text
+    assert "品相" in page.text and "轻微使用痕迹" in page.text
+    assert "性价比" in page.text and "8/10" in page.text
+    assert "本批最优" in page.text
+    assert "兵哥哥" in page.text and "风险低" in page.text
+    assert "规格" in page.text and "最低价" in page.text and "580.0" in page.text
+    assert "首见价" in page.text and "降幅" in page.text
+    assert "跳转商品页" in page.text
+    assert "重新分析" in page.text and f"/listings/{listing_id}/reanalyze" in page.text
+    assert "历史通知标题" in page.text
+
+
+def test_listing_detail_shows_missing_analysis_reasons(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        listing = Listing(
+            platform="xianyu",
+            external_id="2",
+            title="缺分析商品",
+            price=100,
+            url="u",
+            requirement_match=None,
+            requirement_reason="需求分析失败，未过滤（网络错误）",
+            condition_detail={"error": "模型超时"},
+        )
+        session.add(listing)
+        session.commit()
+        listing_id = listing.id
+    page = client.get(f"/listings/{listing_id}")
+    assert "需求分析失败，未过滤（网络错误）" in page.text
+    assert "模型超时" in page.text
+
+
+def test_reanalyze_runs_in_background(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        listing = Listing(platform="xianyu", external_id="3", title="t", price=1, url="u")
+        session.add(listing)
+        session.commit()
+        listing_id = listing.id
+    calls = []
+    client.app.state.run_reanalyze = lambda lid: calls.append(lid)
+    resp = client.post(f"/listings/{listing_id}/reanalyze")
+    assert resp.status_code == 303
+    assert "toast" in resp.headers["location"]
+    deadline = time.time() + 3
+    while not calls and time.time() < deadline:
+        time.sleep(0.05)
+    assert calls == [listing_id]
+
+
+def test_listings_offset_pagination(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        for i in range(5):
+            session.add(
+                Listing(platform="xianyu", external_id=str(i), title=f"商品{i}", price=i, url=f"u{i}")
+            )
+        session.commit()
+    assert len(client.get("/api/listings?offset=0").json()) == 5
+    assert len(client.get("/api/listings?offset=3").json()) == 2
+    assert client.get("/api/listings?offset=10").json() == []
+    fragment = client.get("/listings/more?offset=0")
+    assert fragment.status_code == 200
+    assert "商品0" in fragment.text
+    assert 'id="listings-grid"' not in fragment.text
+
+
+def test_listing_actions_preserve_filters(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        listing = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u")
+        session.add(listing)
+        session.commit()
+        listing_id = listing.id
+    resp = client.post(
+        f"/listings/{listing_id}/block",
+        headers={"referer": "/listings?task_id=7&sort=price_asc&show=active"},
+    )
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+    assert "task_id=7" in location and "sort=price_asc" in location and "show=active" in location
+    assert "toast=" in location
+
+
 def test_settings_page_glm_hints(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     page = client.get("/settings")
@@ -361,6 +488,85 @@ def test_settings_save_toggles(base_settings, session_factory):
     assert settings.serverchan_enabled is False
     assert settings.vision_enabled is False
     assert settings.wecom_robot_enabled is True
+
+
+def test_settings_save_recomputes_satisfaction(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    with session_factory() as session:
+        session.add(
+            Listing(
+                platform="xianyu", external_id="1", title="t", price=1, url="u",
+                requirement_match=True, condition_score=8, value_score=8,
+                seller_risk={"risk_level": "低"}, satisfaction=99,
+            )
+        )
+        session.commit()
+    client.post("/settings", data={**_settings_form(), "xianyu_cookie": "a=1"})
+    with session_factory() as session:
+        assert session.query(Listing).one().satisfaction == 90.0
+
+
+def test_task_api_accepts_round8_fields(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post(
+        "/api/tasks",
+        json={"keyword": "闪光灯", "min_price": 100, "max_price": 1000, "exclude_words": "配件 电池"},
+    ).json()
+    assert task["min_price"] == 100
+    assert task["exclude_words"] == "配件 电池"
+    updated = client.put(
+        f"/api/tasks/{task['id']}",
+        json={"keyword": "闪光灯", "min_price": 150, "exclude_words": "配件"},
+    ).json()
+    assert updated["min_price"] == 150
+    assert updated["exclude_words"] == "配件"
+
+
+def test_task_detail_page_shows_params_stats_and_recent(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post(
+        "/api/tasks",
+        json={"keyword": "闪光灯", "min_price": 100, "max_price": 1000, "exclude_words": "配件"},
+    ).json()
+    with session_factory() as session:
+        listing = Listing(
+            platform="xianyu", external_id="9001", title="任务详情页商品", price=200, url="u", task_id=task["id"]
+        )
+        session.add(listing)
+        session.commit()
+    page = client.get(f"/tasks/{task['id']}")
+    assert page.status_code == 200
+    assert "价格下限" in page.text
+    assert "排除词" in page.text
+    assert "配件" in page.text
+    assert "任务详情页商品" in page.text
+    assert f"/listings/{listing.id}" in page.text
+
+
+def test_edit_page_redirects_to_detail(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    resp = client.get(f"/tasks/{task['id']}/edit")
+    assert resp.status_code == 303
+    assert f"/tasks/{task['id']}" in resp.headers["location"]
+
+
+def test_task_detail_form_saves_round8_fields(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    resp = client.post(
+        f"/tasks/{task['id']}/edit",
+        data={
+            "keyword": "闪光灯", "name": "", "max_price": "1000", "min_price": "100",
+            "exclude_words": "配件 遮光罩", "condition_requirement": "",
+            "min_condition_score": "0", "interval_minutes": "20",
+            "fetch_detail": "1", "enabled": "1",
+        },
+    )
+    assert resp.status_code == 303
+    saved = client.get("/api/tasks").json()[0]
+    assert saved["min_price"] == 100
+    assert saved["exclude_words"] == "配件 遮光罩"
 
 
 def _settings_form():

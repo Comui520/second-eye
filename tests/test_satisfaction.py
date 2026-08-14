@@ -21,7 +21,7 @@ def test_compute_satisfaction_four_dimensions():
         compute_satisfaction(
             _listing(requirement_match=None, condition_score=None, value_score=None, seller_risk=None)
         )
-        == 30.0  # 20 + 0 + 10 + 0
+        == 50.0  # 20 + 15 + 10 + 5（品相缺失半值、卖家未知半值）
     )
     assert (
         compute_satisfaction(
@@ -74,3 +74,39 @@ def test_backfill(session_factory):
     with session_factory() as session:
         listing = session.query(Listing).one()
         assert listing.satisfaction == 90.0
+
+
+def test_condition_missing_half_credit():
+    assert compute_satisfaction(_listing(condition_score=None)) == 81.0  # 40 + 15 + 16 + 10
+
+
+def test_seller_unknown_and_missing_half_credit():
+    assert (
+        compute_satisfaction(_listing(seller_risk={"risk_level": "未知"})) == 85.0  # 40 + 24 + 16 + 5
+    )
+    assert compute_satisfaction(_listing(seller_risk=None)) == 85.0
+
+
+def test_price_drop_bonus_tiers_and_cap():
+    assert compute_satisfaction(_listing(), price_drop_pct=0.25) == 94.0  # 性价比 8→10 档
+    assert compute_satisfaction(_listing(), price_drop_pct=0.10) == 92.0  # 8→9 档
+    assert compute_satisfaction(_listing(), price_drop_pct=0.05) == 90.0  # 不足 8% 不加
+
+
+def test_backfill_recomputes_all(session_factory):
+    with session_factory() as session:
+        session.add_all(
+            [
+                Listing(platform="xianyu", external_id="1", title="a", price=1, url="u",
+                        requirement_match=True, condition_score=8, value_score=8,
+                        seller_risk={"risk_level": "低"}, satisfaction=99),
+                Listing(platform="xianyu", external_id="2", title="b", price=1, url="v",
+                        requirement_match=True, condition_score=8, value_score=8,
+                        seller_risk={"risk_level": "低"}, satisfaction=0),
+            ]
+        )
+        session.commit()
+    assert backfill_satisfaction(session_factory) == 2
+    with session_factory() as session:
+        for listing in session.query(Listing).all():
+            assert listing.satisfaction == 90.0  # 不再只补 0 分

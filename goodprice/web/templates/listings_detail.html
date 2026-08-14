@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}商品详情 - 闲鱼盯价助手{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <a href="/listings" class="text-gray-600">← 返回命中列表</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <div class="lg:col-span-2 bg-white rounded shadow p-4">
+    <h2 class="text-lg font-semibold">{{ listing.title }}</h2>
+    <div class="mt-2 flex items-center gap-2 flex-wrap">
+      <span class="text-2xl font-bold text-red-600">¥{{ listing.price }}</span>
+      {% if listing.status == 'gone' %}<span class="px-2 py-0.5 rounded text-xs bg-gray-300 text-gray-700">已下架</span>{% endif %}
+      {% if listing.best_of_batch %}<span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">本批最优</span>{% endif %}
+      {% if notify_count > 1 %}<span class="px-2 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700">已重推</span>{% endif %}
+      {% if listing.blocked %}<span class="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-600">已拉黑</span>{% endif %}
+      <span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">满足分 {{ listing.satisfaction|round(1) }}</span>
+      {% if drop_pct >= 0.05 %}<span class="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">较首见降价 {{ '%.0f'|format(drop_pct * 100) }}%</span>{% endif %}
+    </div>
+    <div class="mt-3 flex items-center gap-2 flex-wrap">
+      <a href="{{ listing.url }}" target="_blank" class="bg-blue-600 text-white rounded px-3 py-1 text-sm">跳转商品页</a>
+      <form method="post" action="/listings/{{ listing.id }}/reanalyze" class="inline"><button class="border rounded px-3 py-1 text-sm">重新分析</button></form>
+      <form method="post" action="/listings/{{ listing.id }}/block" class="inline"><button class="border rounded px-3 py-1 text-sm text-red-600">拉黑商品</button></form>
+      {% if listing.seller_uid %}<form method="post" action="/listings/{{ listing.id }}/block-seller" class="inline"><button class="border rounded px-3 py-1 text-sm text-orange-600">拉黑卖家</button></form>{% endif %}
+      {% if listing.blocked %}<form method="post" action="/listings/{{ listing.id }}/unblock" class="inline"><button class="border rounded px-3 py-1 text-sm">恢复</button></form>{% endif %}
+      <form method="post" action="/listings/{{ listing.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="border rounded px-3 py-1 text-sm text-gray-600">删除</button></form>
+    </div>
+
+    {% if listing.image_urls %}
+    <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+      {% for u in listing.image_urls %}<img src="{{ u }}" class="w-full h-28 object-cover rounded">{% endfor %}
+    </div>
+    {% endif %}
+
+    <h3 class="font-semibold mt-5 mb-1">描述原文</h3>
+    <div class="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-3">{{ listing.description or '无描述' }}</div>
+
+    <h3 class="font-semibold mt-5 mb-1">价格走势</h3>
+    <div class="text-sm text-gray-600 mb-2">首见价 ¥{{ first_price }} · 当前价 ¥{{ listing.price }}{% if drop_pct > 0 %} · 降幅 {{ '%.1f'|format(drop_pct * 100) }}%{% endif %}</div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-gray-500"><th class="py-1">时间</th><th>价格</th></tr></thead>
+      <tbody>
+      {% for s in snapshots %}
+        <tr class="border-t"><td class="py-1">{{ s.seen_at.strftime('%m-%d %H:%M') }}</td><td>¥{{ s.price }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="space-y-4">
+    <div class="bg-white rounded shadow p-4">
+      <h3 class="font-semibold mb-2">需求匹配</h3>
+      {% if listing.requirement_match is not none %}
+      <div><span class="px-2 py-0.5 rounded text-xs {{ 'bg-green-100 text-green-700' if listing.requirement_match else 'bg-red-100 text-red-700' }}">{{ '匹配' if listing.requirement_match else '不匹配' }}</span></div>
+      {% endif %}
+      <div class="text-sm text-gray-600 mt-1">{{ listing.requirement_reason or '未分析（未配置需求或文本模型）' }}</div>
+    </div>
+
+    <div class="bg-white rounded shadow p-4">
+      <h3 class="font-semibold mb-2">品相分析</h3>
+      {% if listing.condition_score is not none %}
+      <div class="text-2xl font-bold {{ 'text-green-600' if listing.condition_score >= 7 else 'text-yellow-600' }}">{{ listing.condition_score }}/10</div>
+      {% if listing.condition_detail.defects %}<div class="text-sm text-gray-600 mt-1">瑕疵：{{ listing.condition_detail.defects|join('、') }}</div>{% endif %}
+      <div class="text-sm text-gray-600 mt-1">{{ listing.condition_detail.reason }}</div>
+      {% else %}
+      <div class="text-sm text-gray-600">{{ listing.condition_detail.error if listing.condition_detail and listing.condition_detail.error else '未评估（视觉未启用或未配置）' }}</div>
+      {% endif %}
+    </div>
+
+    <div class="bg-white rounded shadow p-4">
+      <h3 class="font-semibold mb-2">性价比</h3>
+      {% if listing.value_score is not none %}
+      <div class="text-2xl font-bold text-purple-600">{{ listing.value_score }}/10</div>
+      <div class="text-sm text-gray-600 mt-1">本批横向对比结果</div>
+      {% else %}
+      <div class="text-sm text-gray-600">未评估（批量对比未执行或失败）</div>
+      {% endif %}
+    </div>
+
+    <div class="bg-white rounded shadow p-4">
+      <h3 class="font-semibold mb-2">卖家</h3>
+      {% if listing.seller_risk %}
+      {% set s = listing.seller_risk %}
+      <div class="font-medium">{{ s.nickname or '未知昵称' }}</div>
+      <div class="text-sm text-gray-600 mt-1">
+        {% if s.risk_level %}风险{{ s.risk_level }}（{{ s.risk_reason or '' }}）{% endif %}
+        {% if s.positive_rate %} · 好评率 {{ '%.0f'|format(s.positive_rate * 100) }}%{% endif %}
+        {% if s.positive_count %} · 好评 {{ s.positive_count }}{% endif %}
+        {% if s.total_count %} / {{ s.total_count }}{% endif %}
+      </div>
+      {% if s.tags %}<div class="text-sm text-gray-500 mt-1">{{ s.tags|join(' · ') }}</div>{% endif %}
+      {% if listing.seller_uid %}<a href="https://www.goofish.com/personal?userId={{ listing.seller_uid }}" target="_blank" class="text-blue-600 text-sm">查看卖家主页</a>{% endif %}
+      {% else %}
+      <div class="text-sm text-gray-600">卖家信息获取失败</div>
+      {% endif %}
+    </div>
+
+    {% if listing.variants %}
+    <div class="bg-white rounded shadow p-4">
+      <h3 class="font-semibold mb-2">规格 / 价格区间</h3>
+      <div class="text-sm text-gray-600">{% for v in listing.variants %}{{ v.name }} ¥{{ v.price }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+    </div>
+    {% endif %}
+
+    <div class="bg-white rounded shadow p-4">
+      <h3 class="font-semibold mb-2">通知历史（{{ notifications|length }}）</h3>
+      <ul class="divide-y text-sm">
+        {% for n in notifications %}
+        <li class="py-1.5">
+          <div class="flex items-center gap-2"><span class="text-xs text-gray-500">{{ n.created_at.strftime('%m-%d %H:%M') }}</span><span class="px-1.5 py-0.5 rounded text-xs {{ 'bg-green-100 text-green-700' if n.status == 'sent' else 'bg-red-100 text-red-700' }}">{{ n.channel }} {{ n.status }}</span></div>
+          <div class="text-gray-700">{{ n.title }}</div>
+          <div class="text-xs text-gray-500 whitespace-pre-wrap">{{ n.content }}</div>
+        </li>
+        {% else %}
+        <li class="py-1.5 text-gray-500">暂无通知记录。</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

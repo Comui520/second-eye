@@ -30,4 +30,8 @@
   </div>
 {% include "listings_grid.html" %}
 </form>
+{% if more %}
+<button type="button" id="load-more" class="mt-4 w-full bg-white border rounded px-4 py-2 text-gray-600 hover:bg-gray-50"
+  hx-get="{{ load_more_url }}" hx-target="#listings-grid" hx-swap="beforeend">加载更多</button>
+{% endif %}
 {% endblock %}

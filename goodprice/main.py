@@ -1,5 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Optional
 
 import uvicorn
@@ -15,7 +17,30 @@ from goodprice.services.settings_service import SettingsService
 from goodprice.services.task_service import TaskService
 from goodprice.web.routes import router
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+LOG_DIR = Path(__file__).resolve().parent.parent / "data" / "logs"
+
+
+def _setup_logging() -> None:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    if root.handlers:
+        root.handlers.clear()
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    file_handler = RotatingFileHandler(
+        LOG_DIR / "app.log",
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(formatter)
+    root.addHandler(console)
+    root.addHandler(file_handler)
+
+
+_setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -97,6 +122,13 @@ def build_app(
         except Exception:
             logger.exception("任务 %s 执行失败", task_id)
 
+    def run_reanalyze(listing_id: int) -> None:
+        logger.info("重新分析商品 %s", listing_id)
+        try:
+            _make_crawl_service(session_factory, settings_service, guard).reanalyze_listing(listing_id)
+        except Exception:
+            logger.exception("重新分析商品 %s 失败", listing_id)
+
     scheduler = build_scheduler(session_factory, run_job, task_service) if with_scheduler else None
 
     def sync_scheduler() -> None:
@@ -117,6 +149,7 @@ def build_app(
     app.state.settings_service = settings_service
     app.state.task_service = task_service
     app.state.run_job = run_job
+    app.state.run_reanalyze = run_reanalyze
     app.state.guard = guard
     app.state.sync_scheduler = sync_scheduler
     app.include_router(router)

@@ -20,6 +20,8 @@ class TaskService:
             name=data.get("name", ""),
             keyword=data["keyword"],
             max_price=float(data.get("max_price") or 0),
+            min_price=float(data.get("min_price") or 0),
+            exclude_words=data.get("exclude_words", ""),
             condition_requirement=data.get("condition_requirement", ""),
             min_condition_score=int(data.get("min_condition_score") or 0),
             platform=data.get("platform", "xianyu"),
@@ -66,6 +68,10 @@ class TaskService:
                 task.name = data.get("name", "").strip()
             if "max_price" in data:
                 task.max_price = float(data.get("max_price") or 0)
+            if "min_price" in data:
+                task.min_price = float(data.get("min_price") or 0)
+            if "exclude_words" in data:
+                task.exclude_words = data.get("exclude_words", "")
             if "condition_requirement" in data:
                 task.condition_requirement = data.get("condition_requirement", "")
             if "min_condition_score" in data:

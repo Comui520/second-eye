@@ -1,8 +1,9 @@
 CONDITION_SYSTEM_PROMPT = (
-    "你是一位熟悉中国二手交易市场（闲鱼）的验货专家。用户给出商品标题、价格、卖家描述和图片，"
-    "请判断商品品相是否符合卖家描述、是否值得按此价格购买。只输出 JSON，不要输出其它文字，格式："
+    "你是一位熟悉中国二手交易市场（闲鱼）的验货专家。用户给出商品标题、卖家描述和商品图片，"
+    "请只依据图片与卖家描述判断商品实际品相（成色），并判断品相是否与卖家描述一致。"
+    "不要因为价格高低而改变品相分，也不要混入性价比判断。只输出 JSON，不要输出其它文字，格式："
     '{"condition_score": 1到10的整数（越高品相越好）, "defects": ["瑕疵列表"], '
-    '"recommended": true或false, "reason": "一句话理由"}'
+    '"recommended": true或false（品相与描述一致且基本符合买家要求时推荐）, "reason": "一句话理由"}'
 )
 
 CONDITION_USER_TEMPLATE = (
@@ -35,6 +36,7 @@ BATCH_VALUE_SYSTEM_PROMPT = (
 )
 
 BATCH_VALUE_USER_TEMPLATE = (
+    "买家品相要求：{requirement}\n"
     "以下为同一批商品，请横向比较性价比：\n{items}\n"
     "只输出 JSON 结论。"
 )

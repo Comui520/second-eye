@@ -19,6 +19,14 @@
       <input name="max_price" type="number" step="0.01" min="0" placeholder="如 800" class="w-full border rounded px-3 py-2">
     </div>
     <div>
+      <label class="block text-sm text-gray-600 mb-1">价格下限（过滤超低价配件）:</label>
+      <input name="min_price" type="number" step="0.01" min="0" placeholder="如 100" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">排除词（空格分隔）:</label>
+      <input name="exclude_words" placeholder="如 配件 遮光罩" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
       <label class="block text-sm text-gray-600 mb-1">最低品相分（0-10）:</label>
       <input name="min_condition_score" type="number" min="0" max="10" value="0" class="w-full border rounded px-3 py-2">
     </div>
@@ -45,9 +53,9 @@
   {% for task in tasks %}
   <div class="p-4 flex items-center gap-4">
     <div class="flex-1">
-      <div class="font-medium"><a href="/listings?task_id={{ task.id }}" class="hover:text-blue-600">{{ task.keyword }}</a> <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
+      <div class="font-medium"><a href="/tasks/{{ task.id }}" class="hover:text-blue-600">{{ task.keyword }}</a> <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
       <div class="text-sm text-gray-500">
-        需求：{{ task.condition_requirement or '无' }} · 最高价 {{ task.max_price }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟{% if task.fetch_detail %} · 抓详情{% endif %}
+        需求：{{ task.condition_requirement or '无' }} · 价格 {{ task.min_price or '不限' }}-{{ task.max_price or '不限' }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟{% if task.exclude_words %} · 排除 {{ task.exclude_words }}{% endif %}{% if task.fetch_detail %} · 抓详情{% endif %}
         {% if task.last_run_at %} · 上次运行 {{ task.last_run_at.strftime('%m-%d %H:%M') }}{% endif %}
       </div>
       {% if task.last_error %}<div class="text-sm text-red-600 mt-1">最近错误：{{ task.last_error }}</div>{% endif %}
@@ -57,6 +65,7 @@
       {{ '启用' if task.enabled else '停用' }}
     </span>
     <a href="/tasks/{{ task.id }}/edit" class="border rounded px-3 py-1">编辑</a>
+    <a href="/listings?task_id={{ task.id }}" class="border rounded px-3 py-1">命中</a>
     <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="border rounded px-3 py-1">{{ '停用' if task.enabled else '启用' }}</button></form>
     <form method="post" action="/tasks/{{ task.id }}/run" class="inline">
       {% if task.id in running_ids %}<button disabled class="border rounded px-3 py-1 bg-gray-200 text-gray-500">执行中...</button>

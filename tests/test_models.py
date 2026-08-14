@@ -102,3 +102,12 @@ def test_round7_listing_columns(session_factory):
         assert listing.value_batch_at is None
         assert listing.best_of_batch is False
         assert listing.last_notified_satisfaction is None
+
+
+def test_round8_task_columns(session_factory):
+    with session_factory() as session:
+        task = WatchTask(keyword="k")
+        session.add(task)
+        session.commit()
+        assert task.min_price == 0.0
+        assert task.exclude_words == ""

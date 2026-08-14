@@ -1,6 +1,7 @@
 import threading
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -16,6 +17,8 @@ class TaskCreate(BaseModel):
     name: str = ""
     keyword: str
     max_price: float = 0
+    min_price: float = 0
+    exclude_words: str = ""
     condition_requirement: str = ""
     min_condition_score: int = 0
     platform: str = "xianyu"
@@ -34,6 +37,8 @@ def _task_dict(task) -> dict:
         "name": task.name,
         "keyword": task.keyword,
         "max_price": task.max_price,
+        "min_price": task.min_price,
+        "exclude_words": task.exclude_words,
         "condition_requirement": task.condition_requirement,
         "min_condition_score": task.min_condition_score,
         "platform": task.platform,
@@ -181,6 +186,8 @@ def create_task_form(
     keyword: str = Form(...),
     name: str = Form(""),
     max_price: float = Form(0),
+    min_price: float = Form(0),
+    exclude_words: str = Form(""),
     condition_requirement: str = Form(""),
     min_condition_score: int = Form(0),
     interval_minutes: int = Form(20),
@@ -193,6 +200,8 @@ def create_task_form(
             "keyword": keyword.strip(),
             "name": name.strip(),
             "max_price": max_price,
+            "min_price": min_price,
+            "exclude_words": exclude_words.strip(),
             "condition_requirement": condition_requirement,
             "min_condition_score": min_condition_score,
             "interval_minutes": interval_minutes,
@@ -206,11 +215,43 @@ def create_task_form(
 
 @router.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
 def edit_task_page(request: Request, task_id: int):
+    return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+
+@router.get("/tasks/{task_id}", response_class=HTMLResponse)
+def task_detail_page(request: Request, task_id: int):
     task_service, _ = _services(request)
     task = task_service.get_task(task_id)
     if task is None:
         return RedirectResponse("/tasks", status_code=303)
-    return templates.TemplateResponse(request, "tasks_edit.html", {"task": task, "active": "tasks"})
+    running_ids = request.app.state.guard.running_ids()
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing, Notification
+
+        stats = {
+            "listings": session.query(Listing).filter(Listing.task_id == task_id).count(),
+            "notifications": (
+                session.query(Notification).filter(Notification.task_id == task_id).count()
+            ),
+        }
+        recent = (
+            session.query(Listing)
+            .filter(Listing.task_id == task_id)
+            .order_by(Listing.first_seen_at.desc())
+            .limit(10)
+            .all()
+        )
+    return templates.TemplateResponse(
+        request,
+        "tasks_detail.html",
+        {
+            "task": task,
+            "stats": stats,
+            "recent": recent,
+            "running_ids": running_ids,
+            "active": "tasks",
+        },
+    )
 
 
 @router.post("/tasks/{task_id}/edit")
@@ -220,6 +261,8 @@ def edit_task_form(
     keyword: str = Form(...),
     name: str = Form(""),
     max_price: float = Form(0),
+    min_price: float = Form(0),
+    exclude_words: str = Form(""),
     condition_requirement: str = Form(""),
     min_condition_score: int = Form(0),
     interval_minutes: int = Form(20),
@@ -233,6 +276,8 @@ def edit_task_form(
             "keyword": keyword.strip(),
             "name": name.strip(),
             "max_price": max_price,
+            "min_price": min_price,
+            "exclude_words": exclude_words.strip(),
             "condition_requirement": condition_requirement,
             "min_condition_score": min_condition_score,
             "interval_minutes": interval_minutes,
@@ -272,6 +317,7 @@ def delete_task(request: Request, task_id: int):
 def listings_page(
     request: Request,
     partial: int = 0,
+    offset: int = Query(0),
     task_id: str = Query(""),
     sort: str = Query("satisfaction"),
     show: str = Query("active"),
@@ -298,8 +344,10 @@ def listings_page(
             query = query.order_by(Listing.first_seen_at.desc())
         else:
             query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
+        query = query.offset(offset)
         listings = query.limit(100).all()
         notify_counts = _notify_counts(session, listings)
+        more = len(listings) >= 100
     partial_url = f"/listings?partial=1&task_id={task_id or ''}&sort={sort}&show={show}"
     if partial:
         return templates.TemplateResponse(
@@ -320,6 +368,11 @@ def listings_page(
             "show": show,
             "partial_url": partial_url,
             "notify_counts": notify_counts,
+            "more": more,
+            "load_more_url": (
+                f"/listings/more?offset={offset + len(listings)}"
+                f"&task_id={task_id or ''}&sort={sort}&show={show}"
+            ),
             "active": "listings",
         },
     )
@@ -342,6 +395,88 @@ def _notify_counts(session, listings) -> dict[int, int]:
     return {listing_id: count for listing_id, count in rows}
 
 
+@router.get("/listings/more", response_class=HTMLResponse)
+def listings_more(
+    request: Request,
+    offset: int = Query(0),
+    task_id: str = Query(""),
+    sort: str = Query("satisfaction"),
+    show: str = Query("active"),
+):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing
+
+        query = session.query(Listing)
+        task_id_int = int(task_id) if task_id else None
+        if task_id_int:
+            query = query.filter(Listing.task_id == task_id_int)
+        if show == "active":
+            query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
+        elif show == "gone":
+            query = query.filter(Listing.status == "gone")
+        elif show == "blocked":
+            query = query.filter(Listing.blocked.is_(True))
+        if sort == "price_asc":
+            query = query.order_by(Listing.price.asc())
+        elif sort == "price_desc":
+            query = query.order_by(Listing.price.desc())
+        elif sort == "newest":
+            query = query.order_by(Listing.first_seen_at.desc())
+        else:
+            query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
+        listings = query.offset(offset).limit(100).all()
+        notify_counts = _notify_counts(session, listings)
+    return templates.TemplateResponse(
+        request, "listings_cards.html", {"listings": listings, "notify_counts": notify_counts}
+    )
+
+
+@router.get("/listings/{listing_id}", response_class=HTMLResponse)
+def listing_detail_page(request: Request, listing_id: int):
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing, Notification, PriceSnapshot
+
+        listing = session.get(Listing, listing_id)
+        if listing is None:
+            return RedirectResponse("/listings", status_code=303)
+        snapshots = (
+            session.query(PriceSnapshot)
+            .filter(PriceSnapshot.listing_id == listing_id)
+            .order_by(PriceSnapshot.seen_at, PriceSnapshot.id)
+            .all()
+        )
+        notifications = (
+            session.query(Notification)
+            .filter(Notification.listing_id == listing_id)
+            .order_by(Notification.id.desc())
+            .all()
+        )
+        notify_count = sum(1 for n in notifications if n.status == "sent")
+        first_price = snapshots[0].price if snapshots else listing.price
+        drop_pct = (first_price - listing.price) / first_price if first_price else 0.0
+    return templates.TemplateResponse(
+        request,
+        "listings_detail.html",
+        {
+            "listing": listing,
+            "snapshots": snapshots,
+            "notifications": notifications,
+            "notify_count": notify_count,
+            "first_price": first_price,
+            "drop_pct": drop_pct,
+            "active": "listings",
+        },
+    )
+
+
+@router.post("/listings/{listing_id}/reanalyze")
+def reanalyze_listing(request: Request, listing_id: int):
+    threading.Thread(
+        target=request.app.state.run_reanalyze, args=(listing_id,), daemon=True
+    ).start()
+    return RedirectResponse(f"/listings/{listing_id}?toast=已提交重新分析", status_code=303)
+
+
 @router.post("/listings/delete-batch")
 def delete_listings_batch(request: Request, ids: list[int] = Form(...)):
     with request.app.state.session_factory() as session:
@@ -350,7 +485,7 @@ def delete_listings_batch(request: Request, ids: list[int] = Form(...)):
         for row in session.query(Listing).filter(Listing.id.in_(ids)).all():
             session.delete(row)
         session.commit()
-    return RedirectResponse("/listings?toast=已批量删除", status_code=303)
+    return RedirectResponse(_listings_back(request, "已批量删除"), status_code=303)
 
 
 @router.post("/listings/{listing_id}/delete")
@@ -362,31 +497,42 @@ def delete_listing(request: Request, listing_id: int):
         if row:
             session.delete(row)
             session.commit()
-    return RedirectResponse("/listings?toast=已删除", status_code=303)
+    return RedirectResponse(_listings_back(request, "已删除"), status_code=303)
 
 
 @router.post("/listings/{listing_id}/block")
 def block_listing(request: Request, listing_id: int):
     _set_blocked(request, listing_id, True, seller=False)
-    return RedirectResponse("/listings?toast=已拉黑商品", status_code=303)
+    return RedirectResponse(_listings_back(request, "已拉黑商品"), status_code=303)
 
 
 @router.post("/listings/{listing_id}/unblock")
 def unblock_listing(request: Request, listing_id: int):
     _set_blocked(request, listing_id, False, seller=False)
-    return RedirectResponse("/listings?toast=已恢复", status_code=303)
+    return RedirectResponse(_listings_back(request, "已恢复"), status_code=303)
 
 
 @router.post("/listings/{listing_id}/block-seller")
 def block_seller(request: Request, listing_id: int):
     _set_blocked(request, listing_id, True, seller=True)
-    return RedirectResponse("/listings?toast=已拉黑卖家", status_code=303)
+    return RedirectResponse(_listings_back(request, "已拉黑卖家"), status_code=303)
 
 
 @router.post("/listings/{listing_id}/unblock-seller")
 def unblock_seller(request: Request, listing_id: int):
     _set_blocked(request, listing_id, False, seller=True)
-    return RedirectResponse("/listings?toast=已恢复卖家", status_code=303)
+    return RedirectResponse(_listings_back(request, "已恢复卖家"), status_code=303)
+
+
+def _listings_back(request: Request, toast: str) -> str:
+    params = {}
+    ref = request.headers.get("referer", "")
+    if "?" in ref:
+        params = {
+            k: v for k, v in parse_qsl(ref.split("?", 1)[1]) if k in ("task_id", "sort", "show")
+        }
+    params["toast"] = toast
+    return "/listings?" + urlencode(params)
 
 
 def _set_blocked(request: Request, listing_id: int, blocked: bool, seller: bool) -> None:
@@ -466,7 +612,10 @@ def save_settings(
     for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_webhook"):
         if values.get(key) == "":
             values.pop(key)  # 留空 = 保持原值
-    settings_service.set_many(values)
+    runtime = settings_service.set_many(values)
+    from goodprice.services.satisfaction import backfill_satisfaction
+
+    backfill_satisfaction(request.app.state.session_factory, vision_enabled=runtime.vision_enabled)
     return RedirectResponse("/settings", status_code=303)
 
 
@@ -499,6 +648,7 @@ def api_update_task(request: Request, task_id: int, data: TaskCreate):
 @router.get("/api/listings")
 def api_list_listings(
     request: Request,
+    offset: int = Query(0),
     task_id: str = Query(""),
     sort: str = Query("satisfaction"),
     show: str = Query("active"),
@@ -524,7 +674,7 @@ def api_list_listings(
             query = query.order_by(Listing.first_seen_at.desc())
         else:
             query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
-        rows = query.limit(100).all()
+        rows = query.offset(offset).limit(100).all()
     return [
         {
             "id": row.id,

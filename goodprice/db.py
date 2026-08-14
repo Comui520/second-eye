@@ -34,7 +34,11 @@ def init_db(database_url: str) -> None:
 def migrate_schema(session_factory) -> None:
     """幂等迁移：为已有数据库补齐新列。"""
     columns = {
-        "watch_tasks": [("fetch_detail", "fetch_detail BOOLEAN DEFAULT 1")],
+        "watch_tasks": [
+            ("fetch_detail", "fetch_detail BOOLEAN DEFAULT 1"),
+            ("min_price", "min_price FLOAT DEFAULT 0"),
+            ("exclude_words", "exclude_words TEXT"),
+        ],
         "listings": [
             ("description", "description TEXT"),
             ("requirement_match", "requirement_match BOOLEAN"),

@@ -37,13 +37,42 @@ def test_parse_search_html():
     assert first.title == "iPhone 13 128G 蓝色"
     assert first.price == 2999.0
     assert first.url == "https://www.goofish.com/item?id=1001&categoryId=1"
-    assert first.image_urls == ["https://img.alicdn.com/1001.jpg"]
+    assert first.image_urls == ["https://img.alicdn.com/bao/uploaded/1001.jpg"]
     assert first.seller == "杭州"
     assert first.location == "杭州"
     second = items[1]
     assert second.external_id == "1002"
     assert second.price == 450.0
     assert second.seller is None
+
+
+def test_parse_search_html_drops_placeholder_images():
+    html = """
+    <div data-spm="searchFeedList">
+      <a href="/item?id=1"><span class="main-title--xx">真图商品</span><div class="price-wrap--xx">¥100</div><img class="feeds-image--xx" src="https://img.alicdn.com/bao/uploaded/x.jpg"></a>
+      <a href="/item?id=2"><span class="main-title--xx">占位图商品</span><div class="price-wrap--xx">¥200</div><img class="feeds-image--xx" src="https://img.alicdn.com/imgextra/i4/xx-2-tps-2-2.png"></a>
+    </div>
+    """
+    items = parse_search_html(html)
+    assert items[0].image_urls == ["https://img.alicdn.com/bao/uploaded/x.jpg"]
+    assert items[1].image_urls == []
+
+
+def test_parse_detail_html_main_image_first():
+    html = """
+    <html><body>
+      <img class="ant-image-img" src="https://img.alicdn.com/bao/uploaded/album1.jpg">
+      <img class="ant-image-img" src="https://img.alicdn.com/bao/uploaded/main1-xy_item.jpg">
+      <img class="ant-image-img" src="https://img.alicdn.com/imgextra/i4/tps-2-2.png">
+      <img class="ant-image-img" src="https://img.alicdn.com/bao/uploaded/main2-xy_item.jpg">
+    </body></html>
+    """
+    detail = parse_detail_html(html)
+    assert detail.image_urls == [
+        "https://img.alicdn.com/bao/uploaded/main1-xy_item.jpg",
+        "https://img.alicdn.com/bao/uploaded/main2-xy_item.jpg",
+        "https://img.alicdn.com/bao/uploaded/album1.jpg",
+    ]
 
 
 def test_parse_detail_html():
