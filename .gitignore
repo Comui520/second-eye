@@ -7,6 +7,6 @@ __pycache__/
 data/
 dist/
 build/
+video_script.md
 .DS_Store
 Thumbs.db
-
