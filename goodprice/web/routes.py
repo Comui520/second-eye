@@ -78,28 +78,48 @@ def tasks_page(request: Request):
     task_service, _ = _services(request)
     tasks = task_service.list_tasks()
     running_ids = request.app.state.guard.running_ids()
+    queued_ids = _queued_ids(request)
     just_ran = request.query_params.get("run")
-    running, items = _progress_context(request, just_ran)
+    running, status, items = _progress_context(request, just_ran)
     return templates.TemplateResponse(
         request,
         "tasks.html",
         {
             "tasks": tasks,
             "running_ids": running_ids,
+            "queued_ids": queued_ids,
             "just_ran": just_ran,
             "running": running,
+            "status": status,
             "items": items,
             "active": "tasks",
         },
     )
 
 
+def _queued_ids(request) -> set[int]:
+    queue = getattr(request.app.state, "task_queue", None)
+    if queue is None:
+        return set()
+    return set(queue.queued_ids())
+
+
 def _progress_context(request: Request, just_ran=None):
     guard = request.app.state.guard
     running_ids = guard.running_ids()
-    running = next(iter(running_ids), None) or just_ran
+    queued_ids = _queued_ids(request)
+    active = running_ids | queued_ids
+    status = None
+    if active:
+        running = min(active)
+        status = "running" if running in running_ids else "queued"
+    elif just_ran:
+        running = int(just_ran) if str(just_ran).isdigit() else None
+        status = "queued"
+    else:
+        running = None
     items = []
-    if running:
+    if running and status == "running":
         with request.app.state.session_factory() as session:
             from goodprice.models import Listing, WatchTask
 
@@ -111,13 +131,15 @@ def _progress_context(request: Request, just_ran=None):
                     .order_by(Listing.id)
                     .all()
                 )
-    return running, items
+    return running, status, items
 
 
 @router.get("/tasks/progress")
 def tasks_progress(request: Request):
-    running, items = _progress_context(request)
-    return templates.TemplateResponse(request, "progress.html", {"running": running, "items": items})
+    running, status, items = _progress_context(request)
+    return templates.TemplateResponse(
+        request, "progress.html", {"running": running, "status": status, "items": items}
+    )
 
 
 @router.get("/notifications", response_class=HTMLResponse)
@@ -225,6 +247,7 @@ def task_detail_page(request: Request, task_id: int):
     if task is None:
         return RedirectResponse("/tasks", status_code=303)
     running_ids = request.app.state.guard.running_ids()
+    queued_ids = _queued_ids(request)
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing, Notification
 
@@ -249,6 +272,7 @@ def task_detail_page(request: Request, task_id: int):
             "stats": stats,
             "recent": recent,
             "running_ids": running_ids,
+            "queued_ids": queued_ids,
             "active": "tasks",
         },
     )

@@ -462,6 +462,25 @@ def test_pages_have_no_nested_forms(base_settings, session_factory):
         assert depth == 0, f"{path} 表单标签未闭合"
 
 
+def test_tasks_page_shows_queued_status(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    client.app.state.task_queue.submit(task["id"])
+    assert "排队中" in client.get("/tasks").text
+    assert "排队中" in client.get("/tasks/progress").text
+
+
+def test_tasks_page_running_then_hides(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    task = client.post("/api/tasks", json={"keyword": "k"}).json()
+    client.app.state.guard.try_start(task["id"])
+    assert "运行中" in client.get("/tasks").text
+    client.app.state.guard.finish(task["id"])
+    page = client.get("/tasks")
+    assert "运行中" not in page.text
+    assert "排队中" not in page.text
+
+
 def test_listings_delete_single_and_batch(base_settings, session_factory):
     from goodprice.models import Listing, Notification
 

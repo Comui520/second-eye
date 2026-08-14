@@ -412,6 +412,16 @@ def test_two_tasks_same_keyword_keep_separate_listings(session_factory, base_set
         assert {l.task_id for l in listings} == {t1.id, t2.id}
 
 
+def test_last_run_count_increments(session_factory, base_settings):
+    task = TaskService(session_factory).create_task({"keyword": "k"})
+    crawl, _, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item()]))
+    crawl.run_task(task.id)
+    crawl.run_task(task.id)
+    with session_factory() as session:
+        loaded = session.get(type(task), task.id)
+        assert loaded.last_run_count == 2
+
+
 def test_seller_fetch_failure_does_not_block(session_factory, base_settings):
     task = TaskService(session_factory).create_task({"keyword": "k"})
     adapter = SellerFakeAdapter([_item()], seller_error=RuntimeError("主页超时"))

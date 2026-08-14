@@ -92,6 +92,7 @@ class CrawlService:
                 raise RuntimeError(f"任务 {task_id} 不存在")
             task.last_run_at = datetime.now()
             task.last_error = None
+            task.last_run_count = (task.last_run_count or 0) + 1
             session.commit()
         try:
             items = self.adapter.search(task.keyword)

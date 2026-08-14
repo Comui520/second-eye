@@ -1,7 +1,7 @@
 {% if running %}
 <div id="progress-card" class="bg-white rounded shadow p-4 mb-6" hx-get="/tasks/progress" hx-trigger="every 2s" hx-target="#progress-card" hx-swap="outerHTML">
   <div class="flex items-center justify-between mb-2">
-    <h3 class="font-semibold">任务 #{{ running }} 执行中… 已处理 {{ items|length }} 个</h3>
+    <h3 class="font-semibold">任务 #{{ running }} {{ '排队中…' if status == 'queued' else '执行中…' }}{% if status != 'queued' %} 已处理 {{ items|length }} 个{% endif %}</h3>
     <span class="text-xs text-gray-400">每 2 秒自动刷新</span>
   </div>
   <ul class="divide-y">
