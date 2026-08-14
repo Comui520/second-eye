@@ -1,3 +1,4 @@
+import re
 import time
 
 from datetime import datetime
@@ -448,6 +449,17 @@ def test_settings_login_route_and_status(base_settings, session_factory):
     frag = client.get("/settings/login-status")
     assert frag.status_code == 200
     assert "正在打开浏览器窗口" in frag.text
+
+
+def test_pages_have_no_nested_forms(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    for path in ["/settings", "/listings", "/notifications", "/tasks"]:
+        html = client.get(path).text
+        depth = 0
+        for token in re.findall(r"<form[\s>]|</form>", html, re.I):
+            depth += 1 if token.lower().startswith("<form") else -1
+            assert depth <= 1, f"{path} 存在嵌套表单"
+        assert depth == 0, f"{path} 表单标签未闭合"
 
 
 def test_listings_delete_single_and_batch(base_settings, session_factory):

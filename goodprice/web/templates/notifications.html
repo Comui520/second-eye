@@ -2,12 +2,11 @@
 {% block title %}消息通知 - 闲鱼盯价助手{% endblock %}
 {% block content %}
 <div class="bg-white rounded shadow">
-  <form method="post" action="/notifications/delete-batch" onsubmit="return confirm('确认删除选中的消息？')">
-    <div class="p-3 flex items-center gap-4">
-      <label class="flex items-center gap-2"><input type="checkbox" id="select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
-      <button class="bg-red-600 text-white rounded px-4 py-1">批量删除</button>
-    </div>
-    <table class="w-full text-sm">
+  <div class="p-3 flex items-center gap-4">
+    <label class="flex items-center gap-2"><input type="checkbox" id="select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
+    <button type="button" class="bg-red-600 text-white rounded px-4 py-1" onclick="batchDeleteNotifications()">批量删除</button>
+  </div>
+  <table class="w-full text-sm">
       <thead><tr class="text-left text-gray-500 border-b">
         <th class="p-2"></th><th class="p-2">通道</th><th class="p-2">状态</th><th class="p-2">内容</th><th class="p-2">时间</th><th class="p-2">操作</th>
       </tr></thead>
@@ -33,7 +32,17 @@
         <tr><td class="p-4 text-gray-500" colspan="6">暂无消息。</td></tr>
         {% endfor %}
       </tbody>
-    </table>
-  </form>
+  </table>
 </div>
+<script>
+function batchDeleteNotifications() {
+  var ids = [];
+  document.querySelectorAll('.row-check:checked').forEach(function (c) { ids.push(c.value); });
+  if (!ids.length) { alert('请先勾选要删除的消息'); return; }
+  if (!confirm('确认删除选中的消息？')) return;
+  var fd = new FormData();
+  ids.forEach(function (id) { fd.append('ids', id); });
+  fetch('/notifications/delete-batch', { method: 'POST', body: fd }).then(function () { location.reload(); });
+}
+</script>
 {% endblock %}
