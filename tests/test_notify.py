@@ -7,6 +7,7 @@ from goodprice.notify.base import NotificationMessage
 from goodprice.notify.log import LogNotifier
 from goodprice.notify.serverchan import ServerChanNotifier
 from goodprice.notify.wecom_robot import WeComRobotNotifier
+from goodprice.notify.feishu import FeishuNotifier
 
 
 def test_log_notifier_logs(caplog):
@@ -82,3 +83,26 @@ def test_wecom_robot_93004_raises():
 
 def test_wecom_robot_disabled_without_webhook():
     assert WeComRobotNotifier(webhook="").enabled is False
+
+
+def test_feishu_sends_signed_text():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"code": 0, "msg": "success"})
+
+    notifier = FeishuNotifier(
+        webhook="https://open.feishu.cn/open-apis/bot/v2/hook/test",
+        secret="secret",
+        transport=httpx.MockTransport(handler),
+    )
+    notifier.send(NotificationMessage(title="标题", content="内容", url="https://x"))
+    assert captured["body"]["msg_type"] == "text"
+    assert "标题" in captured["body"]["content"]["text"]
+    assert captured["body"]["timestamp"].isdigit()
+    assert captured["body"]["sign"]
+
+
+def test_feishu_disabled_without_webhook():
+    assert FeishuNotifier(webhook="").enabled is False

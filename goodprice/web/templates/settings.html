@@ -39,8 +39,10 @@
   <div class="border-t pt-4">
     <h3 class="text-md font-semibold mb-3">消息通知</h3>
     <div class="grid grid-cols-2 gap-3">
-      <label class="flex items-center gap-2"><input type="checkbox" name="serverchan_enabled" value="1" {{ 'checked' if settings.serverchan_enabled }}> Server酱（微信推送）</label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="wecom_robot_enabled" value="1" {{ 'checked' if settings.wecom_robot_enabled }}> 企业微信群机器人</label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="serverchan_enabled" value="1" {{ 'checked' if settings.serverchan_enabled }}> Server酱（微信推送） <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/serverchan" formmethod="post">测试发送</button></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="wecom_robot_enabled" value="1" {{ 'checked' if settings.wecom_robot_enabled }}> 企业微信群机器人 <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/wecom_robot" formmethod="post">测试发送</button></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="feishu_enabled" value="1" {{ 'checked' if settings.feishu_enabled }}> 飞书机器人 <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/feishu" formmethod="post">测试发送</button></label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="gotify_enabled" value="1" {{ 'checked' if settings.gotify_enabled }}> Gotify <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/gotify" formmethod="post">测试发送</button></label>
     </div>
     <div class="mt-3">
       <label class="block text-sm font-medium mb-1">Server酱 SendKey</label>
@@ -51,6 +53,26 @@
       <label class="block text-sm font-medium mb-1">群机器人 Webhook</label>
       <input name="wecom_webhook" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
       <p class="text-xs text-gray-500 mt-1">企业微信群设置 → 群机器人 → 添加，复制 Webhook 地址；无需域名/IP。</p>
+    </div>
+    <div class="mt-3">
+      <label class="block text-sm font-medium mb-1">飞书机器人 Webhook</label>
+      <input name="feishu_webhook" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
+    </div>
+    <div class="mt-3">
+      <label class="block text-sm font-medium mb-1">飞书机器人签名密钥（可选）</label>
+      <input name="feishu_secret" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="启用签名校验时填写">
+    </div>
+    <div class="mt-3 border-t pt-3">
+      <label class="block text-sm font-medium mb-1">Gotify 地址</label>
+      <input name="gotify_url" class="w-full border rounded px-3 py-2" value="{{ settings.gotify_url }}" placeholder="http://gotify">
+    </div>
+    <div class="mt-3">
+      <label class="block text-sm font-medium mb-1">Gotify 应用 Token</label>
+      <input name="gotify_token" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
+    </div>
+    <div class="mt-3">
+      <label class="block text-sm font-medium mb-1">Gotify 优先级（0-10）</label>
+      <input name="gotify_priority" type="number" min="0" max="10" class="w-full border rounded px-3 py-2" value="{{ settings.gotify_priority }}">
     </div>
   </div>
   <div class="grid grid-cols-2 gap-3">

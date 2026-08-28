@@ -4,7 +4,12 @@ __pycache__/
 .pytest_cache/
 .venv/
 .env
+*.db
+*.sqlite
+*.sqlite3
+*.log
 data/
+browser_profile/
 dist/
 build/
 video_script.md

@@ -7,13 +7,24 @@ from goodprice.models import AppSetting
 
 @dataclass
 class RuntimeSettings:
-    _INT_FIELDS = {"default_crawl_interval_minutes", "default_crawl_jitter_minutes"}
-    _BOOL_FIELDS = {"serverchan_enabled", "wecom_robot_enabled", "vision_enabled"}
+    _INT_FIELDS = {
+        "default_crawl_interval_minutes",
+        "default_crawl_jitter_minutes",
+        "gotify_priority",
+    }
+    _BOOL_FIELDS = {
+        "serverchan_enabled",
+        "wecom_robot_enabled",
+        "feishu_enabled",
+        "gotify_enabled",
+        "vision_enabled",
+    }
 
     xianyu_cookie: str = ""
     llm_base_url: str = ""
     llm_api_key: str = ""
     llm_model: str = ""
+    llm_api_format: str = "chat_completions"
     serverchan_sendkey: str = ""
     proxy: str = ""
     default_crawl_interval_minutes: int = 20
@@ -22,6 +33,13 @@ class RuntimeSettings:
     vision_api_key: str = ""
     vision_model: str = ""
     wecom_webhook: str = ""
+    feishu_webhook: str = ""
+    feishu_secret: str = ""
+    feishu_enabled: bool = True
+    gotify_url: str = ""
+    gotify_token: str = ""
+    gotify_priority: int = 5
+    gotify_enabled: bool = True
     serverchan_enabled: bool = True
     wecom_robot_enabled: bool = True
     vision_enabled: bool = True

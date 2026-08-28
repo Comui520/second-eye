@@ -91,6 +91,7 @@ class LLMClient:
         transport: Optional[httpx.BaseTransport] = None,
         allow_image_fallback: bool = True,
         retry_delay: float = 5.0,
+        api_format: str = "chat_completions",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -99,6 +100,7 @@ class LLMClient:
         self._transport = transport
         self.allow_image_fallback = allow_image_fallback
         self.retry_delay = retry_delay
+        self.api_format = api_format.strip().lower()
 
     @property
     def enabled(self) -> bool:
@@ -199,23 +201,92 @@ class LLMClient:
     def _complete(
         self, payload: dict[str, Any], parser=parse_analysis_json
     ) -> dict[str, Any]:
+        if self.api_format == "responses":
+            return self._complete_responses(payload, parser)
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        client = httpx.Client(transport=self._transport, timeout=self.timeout)
-        for attempt in range(3):
-            response = client.post(
-                f"{self.base_url}/chat/completions", json=payload, headers=headers
-            )
-            if response.status_code == 429 and attempt < 2:
-                if self.retry_delay:
-                    time.sleep(self.retry_delay)
-                continue
-            if response.status_code >= 400:
-                detail = response.text[:300]
-                raise httpx.HTTPStatusError(
-                    f"LLM 请求失败 {response.status_code}: {detail}",
-                    request=response.request,
-                    response=response,
+        with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
+            for attempt in range(3):
+                response = client.post(
+                    f"{self.base_url}/chat/completions", json=payload, headers=headers
                 )
-            raw = response.json()["choices"][0]["message"]["content"]
-            return parser(raw)
+                if response.status_code == 429 and attempt < 2:
+                    if self.retry_delay:
+                        time.sleep(self.retry_delay)
+                    continue
+                if response.status_code >= 400:
+                    detail = response.text[:300]
+                    raise httpx.HTTPStatusError(
+                        f"LLM 请求失败 {response.status_code}: {detail}",
+                        request=response.request,
+                        response=response,
+                    )
+                raw = response.json()["choices"][0]["message"]["content"]
+                return parser(raw)
+        raise RuntimeError("LLM 请求重试耗尽")  # pragma: no cover
+
+    def _complete_responses(
+        self, payload: dict[str, Any], parser=parse_analysis_json
+    ) -> dict[str, Any]:
+        """调用 OpenAI Responses API，并收集 bridge 返回的 SSE 文本增量。"""
+        messages = payload.get("messages") or []
+        instructions = ""
+        input_messages = []
+        for message in messages:
+            role = message.get("role", "user")
+            content = message.get("content", "")
+            if role == "system":
+                instructions = content if isinstance(content, str) else str(content)
+                continue
+            if isinstance(content, str):
+                content = [{"type": "input_text", "text": content}]
+            else:
+                converted = []
+                for part in content or []:
+                    if part.get("type") == "text":
+                        converted.append({"type": "input_text", "text": part.get("text", "")})
+                    elif part.get("type") == "image_url":
+                        image = part.get("image_url") or {}
+                        converted.append({"type": "input_image", "image_url": image.get("url")})
+                content = converted
+            input_messages.append({"role": role, "content": content})
+        response_payload = {
+            "model": payload["model"],
+            "instructions": instructions,
+            "input": input_messages,
+            "stream": True,
+            "store": False,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
+            for attempt in range(3):
+                with client.stream(
+                    "POST", f"{self.base_url}/responses", json=response_payload, headers=headers
+                ) as response:
+                    if response.status_code == 429 and attempt < 2:
+                        if self.retry_delay:
+                            time.sleep(self.retry_delay)
+                        continue
+                    if response.status_code >= 400:
+                        detail = response.read().decode("utf-8", errors="replace")[:300]
+                        raise httpx.HTTPStatusError(
+                            f"LLM 请求失败 {response.status_code}: {detail}",
+                            request=response.request,
+                            response=response,
+                        )
+                    text_parts = []
+                    for line in response.iter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        raw_event = line[5:].strip()
+                        if not raw_event or raw_event == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(raw_event)
+                        except json.JSONDecodeError:
+                            continue
+                        if event.get("type") == "response.output_text.delta":
+                            text_parts.append(event.get("delta", ""))
+                        elif event.get("type") == "response.output_text.done" and not text_parts:
+                            text_parts.append(event.get("text", ""))
+                    return parser("".join(text_parts))
         raise RuntimeError("LLM 请求重试耗尽")  # pragma: no cover

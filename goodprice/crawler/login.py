@@ -87,6 +87,7 @@ class LoginSession:
 
     def _run(self) -> None:
         try:
+            self._clear_profile_locks()
             with self._playwright_factory() as p:
                 context = p.chromium.launch_persistent_context(
                     str(self._profile_dir),
@@ -129,6 +130,16 @@ class LoginSession:
         except Exception as exc:
             logger.exception("闲鱼一键登录失败")
             self._set_status("error", f"登录失败：{exc}"[:200])
+
+    def _clear_profile_locks(self) -> None:
+        """清理容器重启后残留的 Chromium Profile 锁。"""
+        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket"):
+            lock = self._profile_dir / name
+            try:
+                if lock.is_symlink() or lock.exists():
+                    lock.unlink()
+            except OSError as exc:
+                logger.warning("清理浏览器 Profile 锁失败 %s: %s", lock, exc)
 
     @staticmethod
     def _has_login_cookie(cookies) -> bool:
