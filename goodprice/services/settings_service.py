@@ -32,6 +32,7 @@ class RuntimeSettings:
     vision_base_url: str = ""
     vision_api_key: str = ""
     vision_model: str = ""
+    vision_api_format: str = "chat_completions"
     wecom_webhook: str = ""
     feishu_webhook: str = ""
     feishu_secret: str = ""

@@ -70,6 +70,7 @@ def _make_crawl_service(session_factory, settings_service, guard):
             base_url=runtime.vision_base_url,
             api_key=runtime.vision_api_key,
             model=runtime.vision_model,
+            api_format=runtime.vision_api_format,
             allow_image_fallback=False,
         )
         if runtime.vision_enabled

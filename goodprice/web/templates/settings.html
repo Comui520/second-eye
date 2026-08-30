@@ -20,8 +20,14 @@
       <input name="llm_base_url" class="w-full border rounded px-3 py-2" value="{{ settings.llm_base_url }}" placeholder="如 https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
     <div><label class="block text-sm font-medium mb-1">LLM API Key</label>
       <input name="llm_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
-    <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
-      <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
+      <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
+        <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
+      <div><label class="block text-sm font-medium mb-1">LLM API 格式</label>
+        <select name="llm_api_format" class="w-full border rounded px-3 py-2">
+          <option value="chat_completions" {{ 'selected' if settings.llm_api_format == 'chat_completions' }}>chat_completions</option>
+          <option value="responses" {{ 'selected' if settings.llm_api_format == 'responses' }}>responses</option>
+        </select>
+      </div>
   </div>
   <p class="text-xs text-gray-500 -mt-3">免费推荐（智谱 GLM，模型名必须小写）：Base URL <code>https://open.bigmodel.cn/api/paas/v4</code>，文本模型 <code>glm-4.7-flash</code>。</p>
   <div class="border-t pt-4">
@@ -34,6 +40,12 @@
         <input name="vision_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
       <div><label class="block text-sm font-medium mb-1">Vision 模型</label>
         <input name="vision_model" class="w-full border rounded px-3 py-2" value="{{ settings.vision_model }}" placeholder="推荐 glm-4.6v-flash / glm-4.1v-thinking-flash（智谱免费，小写）"></div>
+      <div><label class="block text-sm font-medium mb-1">Vision API 格式</label>
+        <select name="vision_api_format" class="w-full border rounded px-3 py-2">
+          <option value="chat_completions" {{ 'selected' if settings.vision_api_format == 'chat_completions' }}>chat_completions</option>
+          <option value="responses" {{ 'selected' if settings.vision_api_format == 'responses' }}>responses</option>
+        </select>
+      </div>
     </div>
   </div>
   <div class="border-t pt-4">
