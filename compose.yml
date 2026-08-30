@@ -16,6 +16,7 @@ services:
     environment:
       DATABASE_URL: sqlite:////app/data/goodprice.db
       PROXY: ${PROXY:-}
+      TZ: Asia/Shanghai
     volumes:
       - ./data:/app/data
     shm_size: "512mb"
