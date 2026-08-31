@@ -54,6 +54,8 @@ def _make_crawl_service(session_factory, settings_service, guard):
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.serverchan import ServerChanNotifier
     from goodprice.notify.wecom_robot import WeComRobotNotifier
+    from goodprice.notify.feishu import FeishuNotifier
+    from goodprice.notify.gotify import GotifyNotifier
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     seller_service = SellerService(session_factory, adapter=adapter)
@@ -61,12 +63,14 @@ def _make_crawl_service(session_factory, settings_service, guard):
         base_url=runtime.llm_base_url,
         api_key=runtime.llm_api_key,
         model=runtime.llm_model,
+        api_format=runtime.llm_api_format,
     )
     vision = (
         LLMClient(
             base_url=runtime.vision_base_url,
             api_key=runtime.vision_api_key,
             model=runtime.vision_model,
+            api_format=runtime.vision_api_format,
             allow_image_fallback=False,
         )
         if runtime.vision_enabled
@@ -81,6 +85,21 @@ def _make_crawl_service(session_factory, settings_service, guard):
         robot = WeComRobotNotifier(webhook=runtime.wecom_webhook)
         if robot.enabled:
             notifiers.append(("wecom_robot", robot))
+    if runtime.feishu_enabled:
+        feishu = FeishuNotifier(
+            webhook=runtime.feishu_webhook,
+            secret=runtime.feishu_secret,
+        )
+        if feishu.enabled:
+            notifiers.append(("feishu", feishu))
+    if runtime.gotify_enabled:
+        gotify = GotifyNotifier(
+            url=runtime.gotify_url,
+            token=runtime.gotify_token,
+            priority=runtime.gotify_priority,
+        )
+        if gotify.enabled:
+            notifiers.append(("gotify", gotify))
     return CrawlService(
         session_factory=session_factory,
         adapter=adapter,
@@ -179,4 +198,4 @@ app = build_app()
 
 
 def main() -> None:
-    uvicorn.run("goodprice.main:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("goodprice.main:app", host="0.0.0.0", port=8000, reload=False)

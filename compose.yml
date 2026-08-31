@@ -1,0 +1,44 @@
+services:
+  second-eye:
+    build:
+      context: .
+      args:
+        HTTP_PROXY: ${PROXY:-}
+        HTTPS_PROXY: ${PROXY:-}
+    image: second-eye:local
+    container_name: second-eye
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "18000:8000"
+      - "16080:6080"
+    environment:
+      DATABASE_URL: sqlite:////app/data/goodprice.db
+      PROXY: ${PROXY:-}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/app/data
+    shm_size: "512mb"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/stats', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  gotify:
+    image: gotify/server:latest
+    container_name: second-eye-gotify
+    restart: unless-stopped
+    ports:
+      - "18080:80"
+    volumes:
+      - gotify-data:/app/data
+
+volumes:
+  gotify-data:

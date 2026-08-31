@@ -74,6 +74,15 @@ def _wait_status(login, expected, timeout=4.0):
     return False
 
 
+def _wait_until(predicate, timeout=4.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return False
+
+
 def _login(settings_service, sequences, tmp_path, **kwargs):
     browser = FakeBrowser(sequences)
     kwargs.setdefault("timeout_seconds", 5)
@@ -129,6 +138,7 @@ def test_manual_confirm_saves_cookie(session_factory, base_settings, tmp_path):
     login, browser = _login(settings_service, sequences, tmp_path, timeout_seconds=5)
     login.start()
     assert _wait_status(login, "running")
+    assert _wait_until(lambda: hasattr(browser, "last_context"))
     browser.last_context.page.confirmed = True  # 用户点击了窗口里的"登录完成"按钮
     assert _wait_status(login, "success")
     assert settings_service.get().xianyu_cookie == "t=auth"
@@ -163,7 +173,7 @@ def test_login_ignores_duplicate_start(session_factory, base_settings, tmp_path)
     login, browser = _login(settings_service, [[]], tmp_path, timeout_seconds=5)
     login.start()
     login.start()
-    assert browser.launch_count == 1
+    assert _wait_until(lambda: browser.launch_count == 1)
     login.stop()
 
 

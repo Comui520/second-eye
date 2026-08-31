@@ -633,6 +633,7 @@ def save_settings(
     llm_base_url: str = Form(""),
     llm_api_key: str = Form(""),
     llm_model: str = Form(""),
+    llm_api_format: str = Form("chat_completions"),
     serverchan_sendkey: str = Form(""),
     proxy: str = Form(""),
     default_crawl_interval_minutes: int = Form(20),
@@ -640,9 +641,17 @@ def save_settings(
     vision_base_url: str = Form(""),
     vision_api_key: str = Form(""),
     vision_model: str = Form(""),
+    vision_api_format: str = Form("chat_completions"),
     wecom_webhook: str = Form(""),
+    feishu_webhook: str = Form(""),
+    feishu_secret: str = Form(""),
     serverchan_enabled: Optional[int] = Form(None),
     wecom_robot_enabled: Optional[int] = Form(None),
+    feishu_enabled: Optional[int] = Form(None),
+    gotify_url: str = Form(""),
+    gotify_token: str = Form(""),
+    gotify_priority: int = Form(5),
+    gotify_enabled: Optional[int] = Form(None),
     vision_enabled: Optional[int] = Form(None),
 ):
     _, settings_service = _services(request)
@@ -651,6 +660,7 @@ def save_settings(
         "llm_base_url": llm_base_url,
         "llm_api_key": llm_api_key,
         "llm_model": llm_model,
+        "llm_api_format": llm_api_format,
         "serverchan_sendkey": serverchan_sendkey,
         "proxy": proxy,
         "default_crawl_interval_minutes": str(default_crawl_interval_minutes),
@@ -658,12 +668,28 @@ def save_settings(
         "vision_base_url": vision_base_url,
         "vision_api_key": vision_api_key,
         "vision_model": vision_model,
+        "vision_api_format": vision_api_format,
         "wecom_webhook": wecom_webhook,
+        "feishu_webhook": feishu_webhook,
+        "feishu_secret": feishu_secret,
         "serverchan_enabled": "1" if serverchan_enabled else "0",
         "wecom_robot_enabled": "1" if wecom_robot_enabled else "0",
+        "feishu_enabled": "1" if feishu_enabled else "0",
+        "gotify_url": gotify_url,
+        "gotify_token": gotify_token,
+        "gotify_priority": str(gotify_priority),
+        "gotify_enabled": "1" if gotify_enabled else "0",
         "vision_enabled": "1" if vision_enabled else "0",
     }
-    for key in ("llm_api_key", "serverchan_sendkey", "vision_api_key", "wecom_webhook"):
+    for key in (
+        "llm_api_key",
+        "serverchan_sendkey",
+        "vision_api_key",
+        "wecom_webhook",
+        "feishu_webhook",
+        "feishu_secret",
+        "gotify_token",
+    ):
         if values.get(key) == "":
             values.pop(key)  # 留空 = 保持原值
     runtime = settings_service.set_many(values)
@@ -671,6 +697,47 @@ def save_settings(
 
     backfill_satisfaction(request.app.state.session_factory, vision_enabled=runtime.vision_enabled)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/test-notification/{channel}")
+def test_notification(request: Request, channel: str):
+    from fastapi import HTTPException
+    from goodprice.notify.base import NotificationMessage
+    from goodprice.notify.feishu import FeishuNotifier
+    from goodprice.notify.gotify import GotifyNotifier
+    from goodprice.notify.serverchan import ServerChanNotifier
+    from goodprice.notify.wecom_robot import WeComRobotNotifier
+
+    settings = request.app.state.settings_service.get()
+    notifiers = {
+        "serverchan": ServerChanNotifier(settings.serverchan_sendkey),
+        "wecom_robot": WeComRobotNotifier(settings.wecom_webhook),
+        "feishu": FeishuNotifier(settings.feishu_webhook, settings.feishu_secret),
+        "gotify": GotifyNotifier(
+            settings.gotify_url, settings.gotify_token, settings.gotify_priority
+        ),
+    }
+    notifier = notifiers.get(channel)
+    if notifier is None:
+        raise HTTPException(status_code=404, detail="未知通知渠道")
+    if not notifier.enabled:
+        return RedirectResponse(
+            "/settings?" + urlencode({"toast": "该通知渠道尚未配置"}), status_code=303
+        )
+    try:
+        notifier.send(
+            NotificationMessage(
+                title="second-eye 测试通知",
+                content=f"{channel} 通知链路测试成功。",
+            )
+        )
+    except Exception:
+        return RedirectResponse(
+            "/settings?" + urlencode({"toast": "发送失败，请查看容器日志"}), status_code=303
+        )
+    return RedirectResponse(
+        "/settings?" + urlencode({"toast": f"{channel} 测试发送成功"}), status_code=303
+    )
 
 
 @router.get("/api/tasks")

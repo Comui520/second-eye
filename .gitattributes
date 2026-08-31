@@ -1,0 +1,2 @@
+# Shell entrypoints must keep Unix line endings for Docker images.
+*.sh text eol=lf

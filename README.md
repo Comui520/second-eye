@@ -16,7 +16,7 @@ AI 品相筛选、卖家信用、降价重推、本地开源——一个面向�
 - **三阶段 AI 筛选**：需求匹配（文本）→ 品相分析（看图，1-10 分）→ 本批横向性价比对比，标出「本批最优」
 - **降价重推**：价格变化触发重评，满意度提高才再次推送并标明「价格更新重推」，无变化不打扰
 - **卖家信用**：好评率、卖出件数、信用等级与评价标签（7 天缓存），风险分级随通知提示，只提示不拦截
-- **消息通知**：Server酱（微信）与企业微信群机器人双通道，可独立开关；站内可查全部推送记录
+- **消息通知**：Server酱、企业微信群机器人、飞书机器人与 Gotify，可独立开关；站内可查全部推送记录
 - **本地安全**：一键登录抓 Cookie（免 F12，不保存密码），数据与 Cookie 只存本地 SQLite
 
 **细节能力**
@@ -47,6 +47,21 @@ conda run -n good-price python -m goodprice
 2. **设置 → 大模型**：填入智谱免费模型（见下）或其它 OpenAI 兼容服务
 3. **监控任务 → 新建任务**：填关键词、价格区间、排除词与品相要求；任务会立即执行第一次
 
+### Docker / NAS 部署
+
+项目提供单容器 Docker 部署方式，浏览器依赖只在镜像构建时安装，运行数据通过 `data/` 持久化。
+
+```bash
+cp .env.example .env
+# 编辑 .env 后构建并启动
+docker compose build
+docker compose up -d
+```
+
+默认访问地址：<http://127.0.0.1:18000>。NAS 上建议只在局域网访问，或通过带认证的反向代理发布。
+
+构建需要访问 PyPI 和 Playwright 下载地址；网络受限时可在 `.env` 设置 `PROXY`。浏览器层会被 Docker 缓存，后续只修改源码不会重复下载浏览器。
+
 ## 大模型配置
 
 阶段一「需求匹配」使用现有 LLM 配置；阶段二「品相分析」需要视觉模型。推荐全部使用智谱免费模型：
@@ -62,8 +77,9 @@ conda run -n good-price python -m goodprice
 **推荐方式：一键登录（免 F12）**
 
 1. 打开本工具的「设置」页，点击「一键登录」
-2. 程序会弹出一个浏览器窗口，像正常上网一样扫码或用账号密码登录闲鱼（密码只输入在淘宝/闲鱼官方登录页，程序不保存密码）
-3. 登录成功后程序自动抓取 Cookie 并保存；登录态保存在本地，下次可能免登录
+2. 本地运行时会弹出浏览器窗口；Docker/NAS 运行时打开 `http://NAS_IP:16080/vnc.html` 查看虚拟浏览器
+3. 像正常上网一样扫码或用账号密码登录闲鱼（密码只输入在淘宝/闲鱼官方登录页，程序不保存密码）
+4. 登录成功后程序自动抓取 Cookie 并保存；登录态保存在本地，下次可能免登录
 
 **手动方式**
 
@@ -74,6 +90,8 @@ conda run -n good-price python -m goodprice
 
 > Cookie 会过期，过期后工具会记录错误提示，重新登录即可。
 
+> Docker 部署的 noVNC 端口默认未设置密码，仅建议在可信局域网使用，不要暴露到公网。
+
 ## 企业微信群机器人（推荐，免费）
 
 应用消息需要可信域名/回调 URL，家庭用户配置困难；群机器人只需一个 Webhook，无需域名和 IP 白名单：
@@ -81,6 +99,33 @@ conda run -n good-price python -m goodprice
 1. 在企业微信里建一个群（自己拉自己即可），群设置 → 群机器人 → 添加机器人
 2. 复制机器人 Webhook 地址，填入本工具「设置」页 →「消息通知」→「群机器人 Webhook」，并确认开关已勾选
 3. 限制：每个机器人 20 条/分钟；消息发到企业微信群，手机装企业微信 App 即可收到通知
+
+## Gotify（推荐自托管）
+
+Docker Compose 会同时启动 Gotify 服务，默认地址为 <http://127.0.0.1:18080>。首次登录使用 `admin` / `admin`，登录后请立即修改密码。
+
+1. 打开 Gotify Web 页面，进入 `Applications`
+2. 创建一个应用并复制 Application Token
+3. 在 second-eye「设置 → 消息通知」中填入 Gotify 地址、Token，并打开 Gotify 开关
+
+容器内部地址填写 `http://gotify`；手机或局域网浏览器访问 NAS 时使用 `http://NAS_IP:18080`。Gotify 数据保存在独立的 Docker Volume 中。
+
+## 飞书机器人
+
+飞书自定义机器人使用 Webhook，支持文本消息和签名校验。将机器人 Webhook 与可选签名密钥填入「设置 → 消息通知」即可。Webhook 属于敏感凭据，请勿提交到 Git 或公开分享。
+
+## Codex 中转
+
+如果使用 OpenAI Responses API 兼容的 Codex 中转，可配置：
+
+```env
+LLM_BASE_URL=http://192.168.x.x:15722/v1
+LLM_API_KEY=PROXY_MANAGED
+LLM_MODEL=gpt-5.6-luna
+LLM_API_FORMAT=responses
+```
+
+视觉模型仍需单独配置；Codex 文本模型不作为视觉模型使用。
 
 ## 卖家信用/评价
 
@@ -99,10 +144,13 @@ conda run -n good-price python -m goodprice
 | `LLM_BASE_URL` | OpenAI 兼容服务地址，如 `https://open.bigmodel.cn/api/paas/v4`（智谱） |
 | `LLM_API_KEY` | 大模型 API Key |
 | `LLM_MODEL` | 模型名，阶段一需求匹配使用（推荐智谱 `glm-4.7-flash`，免费，小写） |
+| `LLM_API_FORMAT` | `chat_completions` 或 `responses`；Codex bridge 使用 `responses` |
 | `VISION_BASE_URL` / `VISION_API_KEY` / `VISION_MODEL` | 阶段二视觉模型（推荐智谱 `glm-4.6v-flash` / `glm-4.1v-thinking-flash`，免费，小写）；不填则跳过品相分析 |
 | `SERVERCHAN_SENDKEY` | Server酱 SendKey（<https://sct.ftqq.com>），留空则只写日志 |
 | `WECOM_WEBHOOK` | 企业微信群机器人 Webhook（推荐，无需域名/IP） |
-| `SERVERCHAN_ENABLED` / `WECOM_ROBOT_ENABLED` / `VISION_ENABLED` | 三个独立开关，默认开启 |
+| `FEISHU_WEBHOOK` / `FEISHU_SECRET` | 飞书自定义机器人 Webhook 与可选签名密钥 |
+| `GOTIFY_URL` / `GOTIFY_TOKEN` / `GOTIFY_PRIORITY` | Gotify 服务地址、Application Token 和消息优先级 |
+| `SERVERCHAN_ENABLED` / `WECOM_ROBOT_ENABLED` / `FEISHU_ENABLED` / `GOTIFY_ENABLED` / `VISION_ENABLED` | 通知和视觉分析独立开关 |
 | `PROXY` | 可选 HTTP 代理，如 `http://127.0.0.1:7890` |
 | `DEFAULT_CRAWL_INTERVAL_MINUTES` | 默认抓取间隔（分钟） |
 | `DEFAULT_CRAWL_JITTER_MINUTES` | 请求随机抖动（分钟），降低风控概率 |
@@ -127,7 +175,7 @@ conda run -n good-price pytest -v
 
 - `goodprice/crawler/`：平台适配器协议 + 闲鱼 Playwright 适配器 + HTML 解析 + 一键登录（选择器集中维护，平台改版只改适配器）
 - `goodprice/analysis/`：OpenAI 兼容 LLM 客户端与品相/性价比提示词
-- `goodprice/notify/`：通知通道协议（日志、Server酱、企业微信群机器人；可扩展邮件/钉钉）
+- `goodprice/notify/`：通知通道协议（日志、Server酱、企业微信群机器人、飞书、Gotify）
 - `goodprice/services/`：设置服务（env 默认值 + 数据库覆盖）、任务服务、核心爬取流水线、串行任务队列
 - `goodprice/web/`：Jinja2 + HTMX + Tailwind（CDN）页面与路由
 
@@ -142,7 +190,7 @@ conda run -n good-price pytest -v
 
 - [ ] 转转等平台适配器
 - [ ] 单品盯价（收藏链接盯降价/下架）
-- [ ] 邮件、钉钉/飞书通知通道
+- [ ] 企业微信智能机器人 WebSocket 通知
 - [ ] 价格走势图表
-- [ ] Docker 一键部署
+- [ ] 通知图片上传与图文消息
 - [ ] 商品视频解析（`glm-4.6v-flash` 支持视频输入，可作为后续增强）

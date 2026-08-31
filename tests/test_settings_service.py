@@ -28,10 +28,11 @@ def test_empty_value_clears_override(session_factory, base_settings):
 
 def test_round2_settings_persist(session_factory, base_settings):
     service = SettingsService(session_factory, base=base_settings)
-    service.set_many({"wecom_webhook": "https://x/send?key=abc", "vision_model": "glm-4v-flash"})
+    service.set_many({"wecom_webhook": "https://x/send?key=abc", "vision_model": "glm-4v-flash", "vision_api_format": "responses"})
     settings = service.get()
     assert settings.wecom_webhook == "https://x/send?key=abc"
     assert settings.vision_model == "glm-4v-flash"
+    assert settings.vision_api_format == "responses"
     assert settings.serverchan_enabled is True
 
 

@@ -20,6 +20,7 @@ def test_settings_defaults():
 def test_round2_settings_defaults():
     settings = Settings(_env_file=None)
     assert settings.vision_model == "qwen-vl-max"
+    assert settings.vision_api_format == "chat_completions"
     assert settings.vision_base_url == ""
     assert settings.serverchan_enabled is True
     assert settings.wecom_robot_enabled is True
@@ -32,6 +33,11 @@ def test_round2_settings_env_overrides(monkeypatch):
     settings = Settings(_env_file=None)
     assert settings.vision_enabled is False
     assert settings.vision_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
+def test_vision_api_format_env_override(monkeypatch):
+    monkeypatch.setenv("VISION_API_FORMAT", "responses")
+    assert Settings(_env_file=None).vision_api_format == "responses"
 
 
 def test_wecom_webhook_setting(monkeypatch):
