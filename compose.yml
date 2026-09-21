@@ -5,14 +5,14 @@ services:
       args:
         HTTP_PROXY: ${PROXY:-}
         HTTPS_PROXY: ${PROXY:-}
-    image: second-eye:local
-    container_name: second-eye
+    image: second-eye-jev:local
+    container_name: second-eye-jev
     restart: unless-stopped
     env_file:
       - .env
     ports:
-      - "18000:8000"
-      - "16080:6080"
+      - "18001:8000"
+      - "16081:6080"
     environment:
       DATABASE_URL: sqlite:////app/data/goodprice.db
       PROXY: ${PROXY:-}
@@ -33,12 +33,12 @@ services:
 
   gotify:
     image: gotify/server:latest
-    container_name: second-eye-gotify
+    container_name: second-eye-jev-gotify
     restart: unless-stopped
     ports:
-      - "18080:80"
+      - "18081:80"
     volumes:
-      - gotify-data:/app/data
+      - gotify-jev-data:/app/data
 
 volumes:
-  gotify-data:
+  gotify-jev-data:
