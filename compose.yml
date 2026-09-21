@@ -17,6 +17,9 @@ services:
       DATABASE_URL: sqlite:////app/data/goodprice.db
       PROXY: ${PROXY:-}
       TZ: Asia/Shanghai
+    dns:
+      - 223.5.5.5
+      - 1.1.1.1
     volumes:
       - ./data:/app/data
     shm_size: "512mb"
