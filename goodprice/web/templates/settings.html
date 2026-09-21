@@ -49,6 +49,16 @@
     </div>
   </div>
   <div class="border-t pt-4">
+    <h3 class="text-md font-semibold mb-3">Jev 判断层（实验性）</h3>
+    <label class="flex items-center gap-2 mb-3"><input type="checkbox" name="jev_enabled" value="1" {{ 'checked' if settings.jev_enabled }}> 启用 Jev 类型化判断（需求匹配与性价比逐件独立评估，低置信自动回落原模型）</label>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-sm font-medium mb-1">置信度阈值</label>
+        <input name="jev_auto_threshold" type="number" step="0.05" min="0.5" max="1" class="w-full border rounded px-3 py-2" value="{{ settings.jev_auto_threshold }}">
+        <p class="text-xs text-gray-500 mt-1">判断置信度低于该值时回落到原模型路径，默认 0.85；关闭开关则完全走原模型。</p>
+      </div>
+    </div>
+  </div>
+  <div class="border-t pt-4">
     <h3 class="text-md font-semibold mb-3">消息通知</h3>
     <div class="grid grid-cols-2 gap-3">
       <label class="flex items-center gap-2"><input type="checkbox" name="serverchan_enabled" value="1" {{ 'checked' if settings.serverchan_enabled }}> Server酱（微信推送） <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/serverchan" formmethod="post">测试发送</button></label>

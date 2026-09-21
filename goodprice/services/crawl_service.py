@@ -63,6 +63,7 @@ class CrawlService:
         self.settings_service = settings_service
         self.guard = guard or TaskRunGuard()
         self.seller_service = seller_service
+        self._judger = None
 
     def run_task(self, task_id: int) -> dict[str, Any]:
         if not self.guard.try_start(task_id):
@@ -83,6 +84,7 @@ class CrawlService:
             "gone": 0,
         }
         settings = self.settings_service.get()
+        self._judger = self._build_judger(settings)
         jitter = int(settings.default_crawl_jitter_minutes)
         if jitter:
             time.sleep(random.uniform(0, jitter * 60))
@@ -300,6 +302,7 @@ class CrawlService:
     def reanalyze_listing(self, listing_id: int) -> dict[str, Any]:
         """手动重新分析单个商品：重抓详情并重跑需求/品相/性价比/卖家，不发送通知。"""
         stats = {"updated": 0}
+        self._judger = self._build_judger(self.settings_service.get())
         with self._session_factory() as session:
             listing = session.get(Listing, listing_id)
             if listing is None:
@@ -354,8 +357,14 @@ class CrawlService:
         requirement = (task.condition_requirement or "").strip()
         if not requirement or not self.llm.enabled:
             return True
+        verdict = self._requirement_verdict(listing, requirement)
+        if verdict is not None:
+            matched, reason = verdict
+            listing.requirement_match = matched
+            listing.requirement_reason = reason
+            return bool(matched)
         try:
-            verdict = self.llm.analyze_requirement(
+            result = self.llm.analyze_requirement(
                 title=listing.title,
                 description=listing.description or "",
                 requirement=requirement,
@@ -365,9 +374,41 @@ class CrawlService:
             listing.requirement_match = None
             listing.requirement_reason = f"需求分析失败，未过滤（{exc}）"[:500]
             return True
-        listing.requirement_match = verdict["matched"]
-        listing.requirement_reason = verdict["reason"]
-        return bool(verdict["matched"])
+        listing.requirement_match = result["matched"]
+        listing.requirement_reason = result["reason"]
+        return bool(result["matched"])
+
+    def _requirement_verdict(self, listing: Listing, requirement: str):
+        """Jev 判断层的需求匹配结论；返回 (matched, reason) 或 None（回落原路径）。"""
+        judger = self._judger
+        if judger is None or not judger.enabled:
+            return None
+        try:
+            verdict = judger.analyze_requirement(
+                title=listing.title,
+                description=listing.description or "",
+                requirement=requirement,
+            )
+        except Exception as exc:
+            logger.warning("Jev 需求判断失败，回落原模型: %s", exc)
+            return None
+        if verdict.confidence < judger.auto_threshold:
+            logger.info(
+                "Jev 需求判断置信度 %.2f 低于阈值 %.2f，回落原模型",
+                verdict.confidence,
+                judger.auto_threshold,
+            )
+            return None
+        return verdict.matched, f"{verdict.reason}（置信度 {verdict.confidence:.2f}）"[:500]
+
+    def _build_judger(self, settings):
+        from goodprice.analysis.judge import build_judger
+
+        return build_judger(
+            llm=self.llm,
+            jev_enabled=bool(getattr(settings, "jev_enabled", False)),
+            auto_threshold=getattr(settings, "jev_auto_threshold", 0.85),
+        )
 
     def _condition_analysis(self, session, listing: Listing, task: WatchTask) -> None:
         if not self.vision.enabled:
@@ -447,6 +488,30 @@ class CrawlService:
         )
 
     def _batch_value(self, session, rows: list[dict]) -> None:
+        now = datetime.now()
+        judger = self._judger
+        if judger is not None and judger.enabled:
+            try:
+                result = judger.analyze_batch_value(rows[:MAX_BATCH_VALUE_ITEMS])
+            except Exception as exc:
+                logger.warning("Jev 批量性价比失败，回落原路径: %s", exc)
+                result = None
+            if result is not None:
+                scores = result.get("scores") or {}
+                best = result.get("best")
+                logger.info(
+                    "Jev 批量性价比完成：%s 个商品，本批最优 %s", len(rows), best
+                )
+                for row in rows:
+                    listing = session.get(Listing, row["listing_id"])
+                    if listing is None:
+                        continue
+                    score = scores.get(row["external_id"])
+                    if score is not None:
+                        listing.value_score = score
+                        listing.value_batch_at = now
+                        listing.best_of_batch = best == row["external_id"]
+                return
         client = self._value_client()
         if client is None:
             return
@@ -455,7 +520,6 @@ class CrawlService:
         except Exception as exc:
             logger.warning("批量性价比分析失败，跳过: %s", exc)
             return
-        now = datetime.now()
         scores = result.get("scores") or {}
         best = result.get("best")
         logger.info("批量性价比完成：%s 个商品，本批最优 %s", len(rows), best)
@@ -473,17 +537,22 @@ class CrawlService:
         changed = False
         requirement = (task.condition_requirement or "").strip()
         if requirement and self.llm.enabled and listing.requirement_match is None:
-            try:
-                verdict = self.llm.analyze_requirement(
-                    title=listing.title,
-                    description=listing.description or "",
-                    requirement=requirement,
-                )
-                listing.requirement_match = verdict["matched"]
-                listing.requirement_reason = verdict["reason"]
+            verdict = self._requirement_verdict(listing, requirement)
+            if verdict is not None:
+                listing.requirement_match, listing.requirement_reason = verdict
                 changed = True
-            except Exception as exc:
-                logger.warning("回填需求分析失败: %s", exc)
+            else:
+                try:
+                    result = self.llm.analyze_requirement(
+                        title=listing.title,
+                        description=listing.description or "",
+                        requirement=requirement,
+                    )
+                    listing.requirement_match = result["matched"]
+                    listing.requirement_reason = result["reason"]
+                    changed = True
+                except Exception as exc:
+                    logger.warning("回填需求分析失败: %s", exc)
         if self.vision.enabled and listing.condition_score is None:
             try:
                 verdict = self.vision.analyze_condition(

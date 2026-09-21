@@ -653,6 +653,8 @@ def save_settings(
     gotify_priority: int = Form(5),
     gotify_enabled: Optional[int] = Form(None),
     vision_enabled: Optional[int] = Form(None),
+    jev_enabled: Optional[int] = Form(None),
+    jev_auto_threshold: float = Form(0.85),
 ):
     _, settings_service = _services(request)
     values = {
@@ -680,6 +682,8 @@ def save_settings(
         "gotify_priority": str(gotify_priority),
         "gotify_enabled": "1" if gotify_enabled else "0",
         "vision_enabled": "1" if vision_enabled else "0",
+        "jev_enabled": "1" if jev_enabled else "0",
+        "jev_auto_threshold": str(jev_auto_threshold),
     }
     for key in (
         "llm_api_key",
