@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from goodprice.analysis.llm import LLMClient
 
@@ -168,12 +168,24 @@ class JevJudger:
 
 
 def build_judger(
-    llm: LLMClient, jev_enabled: bool = False, auto_threshold: float = 0.85
-) -> Optional[JevJudger]:
+    llm: LLMClient,
+    jev_enabled: bool = False,
+    auto_threshold: float = 0.85,
+    backend: str = "adapter",
+    api_key: str = "",
+    client_factory: Optional[Callable[[str], Any]] = None,
+):
     if not jev_enabled:
         return None
     try:
         threshold = float(auto_threshold)
     except (TypeError, ValueError):
         threshold = 0.85
-    return JevJudger(llm=llm, auto_threshold=min(1.0, max(0.5, threshold)))
+    threshold = min(1.0, max(0.5, threshold))
+    if backend == "typesafe":
+        from goodprice.analysis.jev_typesafe import TypeSafeJudger
+
+        return TypeSafeJudger(
+            api_key=api_key or "", auto_threshold=threshold, client_factory=client_factory
+        )
+    return JevJudger(llm=llm, auto_threshold=threshold)

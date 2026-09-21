@@ -9,6 +9,7 @@ from goodprice.analysis.judge import (
     parse_requirement_typed,
     parse_value_typed,
 )
+from goodprice.analysis.jev_typesafe import TypeSafeJudger
 from goodprice.analysis.llm import LLMClient
 from goodprice.config import Settings
 from goodprice.crawler.base import ListingData
@@ -123,6 +124,129 @@ def test_build_judger_disabled_and_threshold_clamped():
     judger = build_judger(llm, jev_enabled=True, auto_threshold=0.1)
     assert judger.auto_threshold == 0.5
     assert judger.enabled is False
+
+
+def test_build_judger_typesafe_backend():
+    judger = build_judger(
+        LLMClient(base_url="", api_key="", model=""),
+        jev_enabled=True,
+        backend="typesafe",
+        api_key="ts-key",
+    )
+    from goodprice.analysis.jev_typesafe import TypeSafeJudger
+
+    assert isinstance(judger, TypeSafeJudger)
+    assert judger.enabled is True
+    assert build_judger(
+        LLMClient(base_url="", api_key="", model=""),
+        jev_enabled=True,
+        backend="typesafe",
+        api_key="",
+    ).enabled is False
+
+
+class _FakeNoulAnswer:
+    def __init__(self, noul):
+        self.noul = noul
+
+
+class _FakeScoreAnswer:
+    def __init__(self, score, confidence):
+        self.score = score
+        self.confidence = confidence
+
+
+class _FakeSDKClient:
+    def __init__(self, api_key, behaviors):
+        self.api_key = api_key
+        self.behaviors = behaviors  # callable(state, questions) -> dict
+        self.states = []
+
+    def system_one(self, state, questions):
+        self.states.append(state)
+        return type("R", (), {"answers": self.behaviors(state, questions)})()
+
+
+def _typesafe_judger(behaviors):
+    calls = []
+
+    def factory(api_key):
+        calls.append(api_key)
+        return _FakeSDKClient(api_key, behaviors)
+
+    judger = TypeSafeJudger(api_key="ts-key", client_factory=factory)
+    return judger, calls
+
+
+def test_typesafe_requirement_noul_semantics():
+    def behaviors(state, questions):
+        assert "商品标题" in state
+        assert "verdict" in questions
+        return {"verdict": _FakeNoulAnswer(0.93)}
+
+    verdict = _typesafe_judger(behaviors)[0].analyze_requirement("t", "d", "屏幕完好")
+    assert verdict.matched is True
+    assert verdict.confidence == 0.93
+    assert "Jev" in verdict.reason
+
+    low = TypeSafeJudger(
+        api_key="ts-key",
+        client_factory=lambda key: _FakeSDKClient(
+            key, lambda state, questions: {"verdict": _FakeNoulAnswer(0.07)}
+        ),
+    )
+    verdict = low.analyze_requirement("t", "d", "屏幕完好")
+    assert verdict.matched is False
+    assert verdict.confidence == pytest.approx(0.93)  # 反向置信度
+
+
+def test_typesafe_batch_value_score_index_offset():
+    def behaviors(state, questions):
+        if "1001" in state:
+            return {"value": _FakeScoreAnswer(7.6, 0.9)}  # 索引空间 7.6 → 9 分
+        return {"value": _FakeScoreAnswer(3.4, 0.8)}  # 索引空间 3.4 → 4 分
+
+    result = _typesafe_judger(behaviors)[0].analyze_batch_value(
+        [
+            {"external_id": "1001", "title": "A", "price": 100, "condition_score": 8, "defects": [], "seller_risk": "低"},
+            {"external_id": "1002", "title": "B", "price": 80, "condition_score": 8, "defects": [], "seller_risk": "低"},
+        ]
+    )
+    assert result["scores"] == {"1001": 9, "1002": 4}
+    assert result["best"] == "1001"
+    assert result["confidences"] == {"1001": 0.9, "1002": 0.8}
+
+
+def test_typesafe_batch_value_single_failure_isolated():
+    def behaviors(state, questions):
+        if "1001" in state:
+            raise RuntimeError("429")
+        return {"value": _FakeScoreAnswer(2.0, 0.8)}
+
+    result = _typesafe_judger(behaviors)[0].analyze_batch_value(
+        [
+            {"external_id": "1001", "title": "A", "price": 100, "condition_score": 8, "defects": [], "seller_risk": "低"},
+            {"external_id": "1002", "title": "B", "price": 80, "condition_score": 8, "defects": [], "seller_risk": "低"},
+        ]
+    )
+    assert result["scores"] == {"1002": 3}
+    assert result["best"] == "1002"
+
+
+def test_typesafe_batch_best_tie_breaks_by_confidence():
+    def behaviors(state, questions):
+        if "1001" in state:
+            return {"value": _FakeScoreAnswer(6.2, 0.5)}  # 索引 6 → 7 分
+        return {"value": _FakeScoreAnswer(6.4, 0.95)}  # 索引 6 → 7 分，置信度更高
+
+    result = _typesafe_judger(behaviors)[0].analyze_batch_value(
+        [
+            {"external_id": "1001", "title": "A", "price": 100, "condition_score": 8, "defects": [], "seller_risk": "低"},
+            {"external_id": "1002", "title": "B", "price": 100, "condition_score": 8, "defects": [], "seller_risk": "低"},
+        ]
+    )
+    assert result["scores"] == {"1001": 7, "1002": 7}
+    assert result["best"] == "1002"
 
 
 class FakeAdapter:

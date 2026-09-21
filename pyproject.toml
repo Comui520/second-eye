@@ -26,6 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=4.1"]
+jev = ["typesafe-sdk>=0.7"]
 
 [project.scripts]
 good-price = "goodprice.main:main"

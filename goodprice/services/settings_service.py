@@ -48,6 +48,8 @@ class RuntimeSettings:
     vision_enabled: bool = True
     jev_enabled: bool = False
     jev_auto_threshold: float = 0.85
+    jev_backend: str = "adapter"
+    jev_api_key: str = ""
 
     @classmethod
     def from_sources(cls, base: Settings, overrides: dict[str, str]) -> "RuntimeSettings":

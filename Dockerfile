@@ -22,7 +22,7 @@ RUN apt-get update \
 COPY pyproject.toml README.md ./
 COPY goodprice ./goodprice
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[jev]"
 
 RUN mkdir -p /app/data
 

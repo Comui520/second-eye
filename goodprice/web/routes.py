@@ -655,6 +655,8 @@ def save_settings(
     vision_enabled: Optional[int] = Form(None),
     jev_enabled: Optional[int] = Form(None),
     jev_auto_threshold: float = Form(0.85),
+    jev_backend: str = Form("adapter"),
+    jev_api_key: str = Form(""),
 ):
     _, settings_service = _services(request)
     values = {
@@ -684,6 +686,8 @@ def save_settings(
         "vision_enabled": "1" if vision_enabled else "0",
         "jev_enabled": "1" if jev_enabled else "0",
         "jev_auto_threshold": str(jev_auto_threshold),
+        "jev_backend": jev_backend if jev_backend in ("adapter", "typesafe") else "adapter",
+        "jev_api_key": jev_api_key,
     }
     for key in (
         "llm_api_key",
@@ -693,6 +697,7 @@ def save_settings(
         "feishu_webhook",
         "feishu_secret",
         "gotify_token",
+        "jev_api_key",
     ):
         if values.get(key) == "":
             values.pop(key)  # 留空 = 保持原值

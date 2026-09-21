@@ -404,11 +404,20 @@ class CrawlService:
     def _build_judger(self, settings):
         from goodprice.analysis.judge import build_judger
 
-        return build_judger(
+        judger = build_judger(
             llm=self.llm,
             jev_enabled=bool(getattr(settings, "jev_enabled", False)),
             auto_threshold=getattr(settings, "jev_auto_threshold", 0.85),
+            backend=getattr(settings, "jev_backend", "adapter") or "adapter",
+            api_key=getattr(settings, "jev_api_key", "") or "",
         )
+        if judger is not None and not judger.enabled:
+            logger.warning(
+                "Jev 判断层已开启但后端不可用（backend=%s：%s），将完全走原模型路径",
+                getattr(settings, "jev_backend", "adapter"),
+                "缺少 TypeSafe API Key" if judger is not None and hasattr(judger, "api_key") else "LLM 未配置",
+            )
+        return judger
 
     def _condition_analysis(self, session, listing: Listing, task: WatchTask) -> None:
         if not self.vision.enabled:
