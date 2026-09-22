@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     serverchan_enabled: bool = True
     wecom_robot_enabled: bool = True
     vision_enabled: bool = True
+    jev_enabled: bool = False
+    jev_auto_threshold: float = 0.85
+    jev_backend: str = "adapter"
+    jev_api_key: str = ""
 
 
 @lru_cache

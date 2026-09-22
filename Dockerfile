@@ -13,16 +13,18 @@ RUN env HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" \
     http_proxy="${HTTP_PROXY}" https_proxy="${HTTPS_PROXY}" \
     sh -c 'pip install --no-cache-dir "playwright==1.62.0" && playwright install --with-deps chromium'
 
-RUN apt-get update \
+RUN env HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" \
+    http_proxy="${HTTP_PROXY}" https_proxy="${HTTPS_PROXY}" \
+    apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends x11vnc novnc websockify \
     && rm -rf /var/lib/apt/lists/*
 
-# Keep the browser layer above the source layer so application edits do not
-# invalidate the large Chromium download.
 COPY pyproject.toml README.md ./
 COPY goodprice ./goodprice
 
-RUN pip install --no-cache-dir .
+RUN env HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" \
+    http_proxy="${HTTP_PROXY}" https_proxy="${HTTPS_PROXY}" \
+    pip install --no-cache-dir ".[jev]"
 
 RUN mkdir -p /app/data
 

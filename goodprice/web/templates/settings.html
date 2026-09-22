@@ -1,100 +1,508 @@
 {% extends "base.html" %}
 {% block title %}设置 - 闲鱼盯价助手{% endblock %}
 {% block content %}
-<div class="bg-white rounded shadow p-4 max-w-2xl mx-auto mb-4">
-  <h3 class="text-md font-semibold mb-2">闲鱼登录</h3>
-  <div class="flex items-center gap-3">
-    <form method="post" action="/settings/login"><button class="btn btn-green">一键登录（免 F12）</button></form>
-    <span class="text-xs text-gray-500">点击后弹出浏览器窗口，扫码或用账号密码登录，登录后自动保存；若未自动识别，点窗口右上角绿色「登录完成」按钮。</span>
+<div class="max-w-4xl mx-auto space-y-6">
+
+  <!-- 顶部：闲鱼免 F12 一键扫码登录独立卡片 -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+    <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+      <div>
+        <h2 class="text-base font-semibold text-gray-800">闲鱼账号快捷登录</h2>
+        <p class="text-xs text-gray-500 mt-0.5">免打开 F12 开发者工具，通过远程浏览器窗口登录并捕获 Cookie</p>
+      </div>
+      <div>
+        {% if settings.xianyu_cookie %}
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+            ● Cookie 已就绪 ({{ settings.xianyu_cookie|length }} 字符)
+          </span>
+        {% else %}
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+            ○ 未配置 Cookie
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="bg-gray-50 rounded-lg p-4 border border-gray-100 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div class="text-sm font-medium text-gray-800">一键扫码登录</div>
+        <div class="text-xs text-gray-500 mt-0.5">点击后将启动远程浏览器窗口，完成登录后自动保存凭证并生效。</div>
+      </div>
+      <form method="post" action="/settings/login" class="inline">
+        <button class="btn btn-green shadow-sm text-sm px-4 py-2">打开浏览器窗口一键登录</button>
+      </form>
+    </div>
+    {% include "login_status.html" %}
   </div>
-  {% include "login_status.html" %}
+
+  <!-- 主表单：包裹以下全部配置项 -->
+  <form id="settings-form" method="post" action="/settings" class="space-y-6">
+
+    <!-- 卡片 1：抓取调度与基础设置 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+      <h2 class="text-base font-semibold text-gray-800 pb-3 border-b border-gray-100 mb-4">1. 抓取调度与网络代理</h2>
+      <div class="space-y-4">
+        <!-- 手动编辑 Cookie -->
+        <details class="group border border-gray-200 rounded-md">
+          <summary class="flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 cursor-pointer rounded-md select-none text-sm font-medium text-gray-700">
+            <div class="flex items-center gap-2">
+              <span>手动编辑 / 查看闲鱼 Cookie 字符串</span>
+              {% if settings.xianyu_cookie %}
+                <span class="text-xs text-gray-400 font-mono">({{ settings.xianyu_cookie[:30] }}...)</span>
+              {% endif %}
+            </div>
+            <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+          </summary>
+          <div class="p-4 bg-white border-t border-gray-200">
+            <textarea name="xianyu_cookie" rows="3" class="w-full border rounded p-2 font-mono text-xs focus:ring-1 focus:ring-blue-500" placeholder="粘贴复制的完整 Cookie 字符串...">{{ settings.xianyu_cookie }}</textarea>
+            <p class="text-xs text-gray-400 mt-1">亦可在 PC 浏览器登录 https://www.goofish.com 后抓包获取整段 Cookie 粘贴于此。</p>
+          </div>
+        </details>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">HTTP / SOCKS5 代理</label>
+            <input name="proxy" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.proxy }}" placeholder="如 http://127.0.0.1:7890">
+            <p class="text-xs text-gray-400 mt-1">留空直连</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">默认抓取间隔 (分钟)</label>
+            <input name="default_crawl_interval_minutes" type="number" min="1" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.default_crawl_interval_minutes }}">
+            <p class="text-xs text-gray-400 mt-1">建议 15~30 分钟</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">随机抖动浮动 (分钟)</label>
+            <input name="default_crawl_jitter_minutes" type="number" min="0" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.default_crawl_jitter_minutes }}">
+            <p class="text-xs text-gray-400 mt-1">避免周期性规律请求</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 卡片 2：核心大模型与视觉品相模型 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+        <div>
+          <h2 class="text-base font-semibold text-gray-800">2. 核心大语言模型与视觉分析</h2>
+          <p class="text-xs text-gray-500 mt-0.5">负责需求匹配、性价比综合评估及实物图片瑕疵识别</p>
+        </div>
+        <!-- 快捷填入预设 -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-400">快速填入推荐:</span>
+          <button type="button" onclick="applyPreset('zhipu')" class="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded px-2.5 py-1 transition-colors">智谱免费模型</button>
+          <button type="button" onclick="applyPreset('local')" class="text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200 rounded px-2.5 py-1 transition-colors">本地中转/Codex</button>
+        </div>
+      </div>
+
+      <!-- 文本模型配置 -->
+      <div class="space-y-3 mb-5">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-medium text-gray-800">主文本模型 (LLM)</span>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="testConnection('llm')" id="btn-test-llm" class="text-xs btn btn-outline px-2.5 py-1">测试连接</button>
+            <span id="res-test-llm" class="text-xs font-medium"></span>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-lg border border-gray-100">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Base URL</label>
+            <input id="llm_base_url" name="llm_base_url" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.llm_base_url }}" placeholder="https://open.bigmodel.cn/api/paas/v4">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-medium text-gray-600">API Key</label>
+              {% if settings.llm_api_key %}
+                <span class="text-xs text-green-600 font-medium">● 已配置（留空保持不变）</span>
+              {% else %}
+                <span class="text-xs text-gray-400">○ 未配置</span>
+              {% endif %}
+            </div>
+            <input id="llm_api_key" name="llm_api_key" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">模型名称</label>
+            <input id="llm_model" name="llm_model" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.llm_model }}" placeholder="glm-4.7-flash">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">API 协议格式</label>
+            <select id="llm_api_format" name="llm_api_format" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+              <option value="chat_completions" {{ 'selected' if settings.llm_api_format == 'chat_completions' }}>chat_completions (OpenAI标准/智谱)</option>
+              <option value="responses" {{ 'selected' if settings.llm_api_format == 'responses' }}>responses (Codex bridge)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 视觉模型配置 -->
+      <div class="border-t border-gray-100 pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="vision_enabled" name="vision_enabled" value="1" {{ 'checked' if settings.vision_enabled }} onchange="toggleVisionSection()" class="rounded text-blue-600">
+            <span class="text-sm font-medium text-gray-800">启用视觉多模态品相分析（阶段二看图）</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="testConnection('vision')" id="btn-test-vision" class="text-xs btn btn-outline px-2.5 py-1">测试连接</button>
+            <span id="res-test-vision" class="text-xs font-medium"></span>
+          </div>
+        </div>
+
+        <div id="vision-panel" class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-lg border border-gray-100 transition-all {% if not settings.vision_enabled %}hidden{% endif %}">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Vision Base URL</label>
+            <input id="vision_base_url" name="vision_base_url" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.vision_base_url }}" placeholder="https://open.bigmodel.cn/api/paas/v4">
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-medium text-gray-600">Vision API Key</label>
+              {% if settings.vision_api_key %}
+                <span class="text-xs text-green-600 font-medium">● 已配置（留空保持不变）</span>
+              {% else %}
+                <span class="text-xs text-gray-400">○ 未配置</span>
+              {% endif %}
+            </div>
+            <input id="vision_api_key" name="vision_api_key" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Vision 模型名称</label>
+            <input id="vision_model" name="vision_model" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.vision_model }}" placeholder="glm-4.6v-flash">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Vision API 格式</label>
+            <select id="vision_api_format" name="vision_api_format" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+              <option value="chat_completions" {{ 'selected' if settings.vision_api_format == 'chat_completions' }}>chat_completions</option>
+              <option value="responses" {{ 'selected' if settings.vision_api_format == 'responses' }}>responses</option>
+            </select>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">关闭视觉分析后，仅依据文字描述进行品相与需求评估。</p>
+      </div>
+    </div>
+
+    <!-- 卡片 3：Jev 独立判断层（实验性） -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-semibold text-gray-800">3. Jev 判断层</h2>
+            <span class="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded font-mono font-semibold">实验性</span>
+          </div>
+          <p class="text-xs text-gray-500 mt-0.5">需求匹配与性价比逐件独立评估，带置信度，低置信自动回落原模型</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="testConnection('jev')" id="btn-test-jev" class="text-xs btn btn-outline px-2.5 py-1">测试连接</button>
+          <span id="res-test-jev" class="text-xs font-medium"></span>
+        </div>
+      </div>
+
+      <!-- Jev 主开关 -->
+      <label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
+        <input type="checkbox" id="jev_enabled" name="jev_enabled" value="1" {{ 'checked' if settings.jev_enabled }} onchange="toggleJevSection()" class="rounded text-purple-600">
+        <span class="text-sm font-medium text-gray-800">启用 Jev 类型化独立判断</span>
+      </label>
+
+      <!-- Jev 参数折叠区 -->
+      <div id="jev-panel" class="space-y-4 bg-purple-50/40 p-4 rounded-lg border border-purple-100 transition-all {% if not settings.jev_enabled %}hidden{% endif %}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">判断后端架构</label>
+            <select id="jev_backend" name="jev_backend" onchange="toggleJevBackend()" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+              <option value="adapter" {{ 'selected' if settings.jev_backend == 'adapter' }}>adapter 后端（复用主文本 LLM，免费调用）</option>
+              <option value="typesafe" {{ 'selected' if settings.jev_backend == 'typesafe' }}>typesafe 后端（官方 TypeSafe Jev 云服务直连）</option>
+            </select>
+          </div>
+
+          <!-- TypeSafe API Key 区域 -->
+          <div id="jev-key-container">
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-medium text-gray-700">TypeSafe API Key</label>
+              <div id="jev-key-status">
+                {% if settings.jev_api_key %}
+                  <span class="text-xs text-green-600 font-medium">● 已配置（留空保持不变）</span>
+                {% else %}
+                  <span class="text-xs text-gray-400">○ 未配置</span>
+                {% endif %}
+              </div>
+            </div>
+            <input id="jev_api_key" name="jev_api_key" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+            <p class="text-xs text-gray-500 mt-1">在 <a href="https://console.typesafe.ai/keys" target="_blank" class="text-blue-600 underline">console.typesafe.ai/keys</a> 获取。</p>
+          </div>
+          <div id="jev-adapter-tip" class="hidden flex items-center p-3 rounded bg-green-50 border border-green-200 text-xs text-green-800">
+            ✓ 当前选择 Adapter 后端：自动使用上方主文本 LLM 进行评估，无需填写额外的 TypeSafe Key。
+          </div>
+        </div>
+
+        <!-- 置信度滑块与数字输入框联动 -->
+        <div class="border-t border-purple-100 pt-3">
+          <div class="flex justify-between items-center mb-1.5">
+            <label class="text-xs font-medium text-gray-700">置信度回落阈值 (Confidence Threshold)</label>
+            <span class="text-xs font-mono font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded" id="threshold-val">{{ settings.jev_auto_threshold }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-400">宽松 0.5</span>
+            <input id="jev_threshold_range" type="range" min="0.5" max="1.0" step="0.05" value="{{ settings.jev_auto_threshold }}" oninput="syncThreshold(this.value)" class="flex-1 accent-purple-600">
+            <span class="text-xs text-gray-400">严格 1.0</span>
+            <input id="jev_auto_threshold" name="jev_auto_threshold" type="number" min="0.5" max="1.0" step="0.05" value="{{ settings.jev_auto_threshold }}" oninput="syncThreshold(this.value)" class="w-20 border rounded px-2 py-1 text-xs text-center">
+          </div>
+          <p class="text-xs text-gray-500 mt-1.5">
+            独立评估置信度低于此阈值时，自动退回原版模型评估（默认 0.85；设为 1.0 时所有判断强制回落）。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 卡片 4：消息推送渠道 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+        <div>
+          <h2 class="text-base font-semibold text-gray-800">4. 消息推送渠道</h2>
+          <p class="text-xs text-gray-500 mt-0.5">多渠道独立折叠卡片，已配置状态直接外显，无需展开即可查阅与测试</p>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+
+        <!-- 渠道 1: Server酱 -->
+        <details class="group border border-gray-200 rounded-lg overflow-hidden transition-all">
+          <summary class="flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 cursor-pointer select-none">
+            <div class="flex items-center gap-3">
+              <input type="checkbox" name="serverchan_enabled" value="1" {{ 'checked' if settings.serverchan_enabled }} onclick="event.stopPropagation()" class="rounded text-blue-600">
+              <span class="font-medium text-sm text-gray-800">Server酱 (微信推送)</span>
+              {% if settings.serverchan_sendkey %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-200">● 已配置（留空保持不变）</span>
+              {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">○ 未配置</span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="btn btn-sm btn-outline text-xs" formaction="/settings/test-notification/serverchan" formmethod="post" onclick="event.stopPropagation()">测试发送</button>
+              <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </div>
+          </summary>
+          <div class="p-4 bg-white border-t border-gray-200 space-y-2">
+            <label class="block text-xs font-medium text-gray-600">Server酱 SendKey</label>
+            <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+            <p class="text-xs text-gray-400">可在 <a href="https://sct.ftqq.com" target="_blank" class="text-blue-600 underline">sct.ftqq.com</a> 获取 key。</p>
+          </div>
+        </details>
+
+        <!-- 渠道 2: 企业微信群机器人 -->
+        <details class="group border border-gray-200 rounded-lg overflow-hidden transition-all">
+          <summary class="flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 cursor-pointer select-none">
+            <div class="flex items-center gap-3">
+              <input type="checkbox" name="wecom_robot_enabled" value="1" {{ 'checked' if settings.wecom_robot_enabled }} onclick="event.stopPropagation()" class="rounded text-blue-600">
+              <span class="font-medium text-sm text-gray-800">企业微信群机器人</span>
+              {% if settings.wecom_webhook %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-200">● 已配置（留空保持不变）</span>
+              {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">○ 未配置</span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="btn btn-sm btn-outline text-xs" formaction="/settings/test-notification/wecom_robot" formmethod="post" onclick="event.stopPropagation()">测试发送</button>
+              <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </div>
+          </summary>
+          <div class="p-4 bg-white border-t border-gray-200 space-y-2">
+            <label class="block text-xs font-medium text-gray-600">群机器人 Webhook 地址</label>
+            <input name="wecom_webhook" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+            <p class="text-xs text-gray-400">群设置 → 添加群机器人 → 复制 Webhook 地址即可。</p>
+          </div>
+        </details>
+
+        <!-- 渠道 3: 飞书自定义机器人 -->
+        <details class="group border border-gray-200 rounded-lg overflow-hidden transition-all">
+          <summary class="flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 cursor-pointer select-none">
+            <div class="flex items-center gap-3">
+              <input type="checkbox" name="feishu_enabled" value="1" {{ 'checked' if settings.feishu_enabled }} onclick="event.stopPropagation()" class="rounded text-blue-600">
+              <span class="font-medium text-sm text-gray-800">飞书自定义机器人</span>
+              {% if settings.feishu_webhook %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-200">● 已配置（留空保持不变）</span>
+              {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">○ 未配置</span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="btn btn-sm btn-outline text-xs" formaction="/settings/test-notification/feishu" formmethod="post" onclick="event.stopPropagation()">测试发送</button>
+              <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </div>
+          </summary>
+          <div class="p-4 bg-white border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">飞书 Webhook 地址</label>
+              <input name="feishu_webhook" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">签名密钥 (Secret，可选)</label>
+              <input name="feishu_secret" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+            </div>
+          </div>
+        </details>
+
+        <!-- 渠道 4: Gotify 自建推送 -->
+        <details class="group border border-gray-200 rounded-lg overflow-hidden transition-all">
+          <summary class="flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 cursor-pointer select-none">
+            <div class="flex items-center gap-3">
+              <input type="checkbox" name="gotify_enabled" value="1" {{ 'checked' if settings.gotify_enabled }} onclick="event.stopPropagation()" class="rounded text-blue-600">
+              <span class="font-medium text-sm text-gray-800">Gotify 推送服务</span>
+              {% if settings.gotify_token %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-200">● 已配置（留空保持不变）</span>
+              {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">○ 未配置</span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="btn btn-sm btn-outline text-xs" formaction="/settings/test-notification/gotify" formmethod="post" onclick="event.stopPropagation()">测试发送</button>
+              <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+            </div>
+          </summary>
+          <div class="p-4 bg-white border-t border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Gotify 地址</label>
+              <input name="gotify_url" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.gotify_url }}" placeholder="http://gotify">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">应用 Token</label>
+              <input name="gotify_token" type="password" class="w-full border rounded px-3 py-1.5 text-sm" value="" placeholder="已配置（留空保持不变）">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">通知优先级 (0-10)</label>
+              <input name="gotify_priority" type="number" min="0" max="10" class="w-full border rounded px-3 py-1.5 text-sm" value="{{ settings.gotify_priority }}">
+            </div>
+          </div>
+        </details>
+
+      </div>
+    </div>
+
+    <!-- 底部常驻保存条 -->
+    <div class="sticky bottom-4 z-10 flex items-center justify-between bg-white/95 backdrop-blur border border-gray-200 rounded-lg p-4 shadow-md">
+      <div class="text-xs text-gray-500">
+        所有变更点击保存即时生效（优先写入数据库）。密码及 Key 项留空即保持原值。
+      </div>
+      <button type="submit" class="btn btn-primary px-6 py-2 text-sm font-medium shadow-sm">
+        保存全部设置
+      </button>
+    </div>
+
+  </form>
+
 </div>
-<form method="post" action="/settings" class="bg-white rounded shadow p-4 max-w-2xl mx-auto space-y-4">
-  <div>
-    <label class="block text-sm font-medium mb-1">闲鱼 Cookie</label>
-    <textarea name="xianyu_cookie" rows="4" class="w-full border rounded px-3 py-2 font-mono text-xs">{{ settings.xianyu_cookie }}</textarea>
-    <p class="text-xs text-gray-500 mt-1">也可以手动登录 https://www.goofish.com 后，从浏览器开发者工具复制 Cookie 粘贴到这里。</p>
-  </div>
-  <div class="grid grid-cols-2 gap-3">
-    <div><label class="block text-sm font-medium mb-1">LLM Base URL</label>
-      <input name="llm_base_url" class="w-full border rounded px-3 py-2" value="{{ settings.llm_base_url }}" placeholder="如 https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
-    <div><label class="block text-sm font-medium mb-1">LLM API Key</label>
-      <input name="llm_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
-      <div><label class="block text-sm font-medium mb-1">LLM 模型</label>
-        <input name="llm_model" class="w-full border rounded px-3 py-2" value="{{ settings.llm_model }}"></div>
-      <div><label class="block text-sm font-medium mb-1">LLM API 格式</label>
-        <select name="llm_api_format" class="w-full border rounded px-3 py-2">
-          <option value="chat_completions" {{ 'selected' if settings.llm_api_format == 'chat_completions' }}>chat_completions</option>
-          <option value="responses" {{ 'selected' if settings.llm_api_format == 'responses' }}>responses</option>
-        </select>
-      </div>
-  </div>
-  <p class="text-xs text-gray-500 -mt-3">免费推荐（智谱 GLM，模型名必须小写）：Base URL <code>https://open.bigmodel.cn/api/paas/v4</code>，文本模型 <code>glm-4.7-flash</code>。</p>
-  <div class="border-t pt-4">
-    <h3 class="text-md font-semibold mb-3">视觉模型（阶段二看图，必填才做品相分析）</h3>
-    <label class="flex items-center gap-2 mb-3"><input type="checkbox" name="vision_enabled" value="1" {{ 'checked' if settings.vision_enabled }}> 启用视觉品相分析（关闭后满足评分按需求+卖家计算）</label>
-    <div class="grid grid-cols-2 gap-3">
-      <div><label class="block text-sm font-medium mb-1">Vision Base URL</label>
-        <input name="vision_base_url" class="w-full border rounded px-3 py-2" value="{{ settings.vision_base_url }}" placeholder="如 https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
-      <div><label class="block text-sm font-medium mb-1">Vision API Key</label>
-        <input name="vision_api_key" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）"></div>
-      <div><label class="block text-sm font-medium mb-1">Vision 模型</label>
-        <input name="vision_model" class="w-full border rounded px-3 py-2" value="{{ settings.vision_model }}" placeholder="推荐 glm-4.6v-flash / glm-4.1v-thinking-flash（智谱免费，小写）"></div>
-      <div><label class="block text-sm font-medium mb-1">Vision API 格式</label>
-        <select name="vision_api_format" class="w-full border rounded px-3 py-2">
-          <option value="chat_completions" {{ 'selected' if settings.vision_api_format == 'chat_completions' }}>chat_completions</option>
-          <option value="responses" {{ 'selected' if settings.vision_api_format == 'responses' }}>responses</option>
-        </select>
-      </div>
-    </div>
-  </div>
-  <div class="border-t pt-4">
-    <h3 class="text-md font-semibold mb-3">消息通知</h3>
-    <div class="grid grid-cols-2 gap-3">
-      <label class="flex items-center gap-2"><input type="checkbox" name="serverchan_enabled" value="1" {{ 'checked' if settings.serverchan_enabled }}> Server酱（微信推送） <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/serverchan" formmethod="post">测试发送</button></label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="wecom_robot_enabled" value="1" {{ 'checked' if settings.wecom_robot_enabled }}> 企业微信群机器人 <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/wecom_robot" formmethod="post">测试发送</button></label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="feishu_enabled" value="1" {{ 'checked' if settings.feishu_enabled }}> 飞书机器人 <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/feishu" formmethod="post">测试发送</button></label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="gotify_enabled" value="1" {{ 'checked' if settings.gotify_enabled }}> Gotify <button class="btn btn-sm btn-outline" formaction="/settings/test-notification/gotify" formmethod="post">测试发送</button></label>
-    </div>
-    <div class="mt-3">
-      <label class="block text-sm font-medium mb-1">Server酱 SendKey</label>
-      <input name="serverchan_sendkey" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
-      <p class="text-xs text-gray-500 mt-1">https://sct.ftqq.com 获取；关闭开关则不发。</p>
-    </div>
-    <div class="mt-3">
-      <label class="block text-sm font-medium mb-1">群机器人 Webhook</label>
-      <input name="wecom_webhook" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
-      <p class="text-xs text-gray-500 mt-1">企业微信群设置 → 群机器人 → 添加，复制 Webhook 地址；无需域名/IP。</p>
-    </div>
-    <div class="mt-3">
-      <label class="block text-sm font-medium mb-1">飞书机器人 Webhook</label>
-      <input name="feishu_webhook" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
-    </div>
-    <div class="mt-3">
-      <label class="block text-sm font-medium mb-1">飞书机器人签名密钥（可选）</label>
-      <input name="feishu_secret" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="启用签名校验时填写">
-    </div>
-    <div class="mt-3 border-t pt-3">
-      <label class="block text-sm font-medium mb-1">Gotify 地址</label>
-      <input name="gotify_url" class="w-full border rounded px-3 py-2" value="{{ settings.gotify_url }}" placeholder="http://gotify">
-    </div>
-    <div class="mt-3">
-      <label class="block text-sm font-medium mb-1">Gotify 应用 Token</label>
-      <input name="gotify_token" type="password" class="w-full border rounded px-3 py-2" value="" placeholder="已配置（留空保持不变）">
-    </div>
-    <div class="mt-3">
-      <label class="block text-sm font-medium mb-1">Gotify 优先级（0-10）</label>
-      <input name="gotify_priority" type="number" min="0" max="10" class="w-full border rounded px-3 py-2" value="{{ settings.gotify_priority }}">
-    </div>
-  </div>
-  <div class="grid grid-cols-2 gap-3">
-    <div><label class="block text-sm font-medium mb-1">代理（可选）</label>
-      <input name="proxy" class="w-full border rounded px-3 py-2" value="{{ settings.proxy }}" placeholder="http://127.0.0.1:7890"></div>
-    <div><label class="block text-sm font-medium mb-1">默认间隔（分钟）</label>
-      <input name="default_crawl_interval_minutes" type="number" min="1" class="w-full border rounded px-3 py-2" value="{{ settings.default_crawl_interval_minutes }}"></div>
-    <div><label class="block text-sm font-medium mb-1">随机抖动（分钟）</label>
-      <input name="default_crawl_jitter_minutes" type="number" min="0" class="w-full border rounded px-3 py-2" value="{{ settings.default_crawl_jitter_minutes }}"></div>
-  </div>
-  <button class="btn btn-primary">保存设置</button>
-</form>
+
+<script>
+  // 1. 快捷填入模型预设
+  function applyPreset(type) {
+    if (type === 'zhipu') {
+      document.getElementById('llm_base_url').value = 'https://open.bigmodel.cn/api/paas/v4';
+      document.getElementById('llm_model').value = 'glm-4.7-flash';
+      document.getElementById('llm_api_format').value = 'chat_completions';
+      document.getElementById('vision_base_url').value = 'https://open.bigmodel.cn/api/paas/v4';
+      document.getElementById('vision_model').value = 'glm-4.6v-flash';
+      document.getElementById('vision_api_format').value = 'chat_completions';
+    } else if (type === 'local') {
+      document.getElementById('llm_base_url').value = 'http://192.168.5.21:15722/v1';
+      document.getElementById('llm_model').value = 'gpt-5.6-luna';
+      document.getElementById('llm_api_format').value = 'responses';
+      document.getElementById('vision_base_url').value = 'http://192.168.5.21:15722/v1';
+      document.getElementById('vision_model').value = 'gpt-5.6-luna';
+      document.getElementById('vision_api_format').value = 'responses';
+    }
+  }
+
+  // 2. 视觉多模态面板展开/收起
+  function toggleVisionSection() {
+    const enabled = document.getElementById('vision_enabled').checked;
+    const panel = document.getElementById('vision-panel');
+    if (enabled) panel.classList.remove('hidden');
+    else panel.classList.add('hidden');
+  }
+
+  // 3. Jev 主面板展开/收起
+  function toggleJevSection() {
+    const enabled = document.getElementById('jev_enabled').checked;
+    const panel = document.getElementById('jev-panel');
+    if (enabled) panel.classList.remove('hidden');
+    else panel.classList.add('hidden');
+  }
+
+  // 4. Jev 后端切换（Adapter vs TypeSafe）
+  function toggleJevBackend() {
+    const backend = document.getElementById('jev_backend').value;
+    const keyBox = document.getElementById('jev-key-container');
+    const tip = document.getElementById('jev-adapter-tip');
+    if (backend === 'adapter') {
+      keyBox.classList.add('hidden');
+      tip.classList.remove('hidden');
+    } else {
+      keyBox.classList.remove('hidden');
+      tip.classList.add('hidden');
+    }
+  }
+
+  // 5. 阈值滑块与数字输入框双向同步
+  function syncThreshold(val) {
+    const num = parseFloat(val).toFixed(2);
+    document.getElementById('jev_threshold_range').value = num;
+    document.getElementById('jev_auto_threshold').value = num;
+    document.getElementById('threshold-val').textContent = num;
+  }
+
+  // 6. 测试连接请求（异步探测）
+  async function testConnection(target) {
+    const btn = document.getElementById('btn-test-' + target);
+    const res = document.getElementById('res-test-' + target);
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+    res.textContent = '测试中...';
+    res.className = 'text-xs text-blue-600 font-medium';
+
+    let url = '/settings/test-' + target;
+    let payload = {};
+    if (target === 'llm') {
+      payload = {
+        base_url: document.getElementById('llm_base_url').value,
+        api_key: document.getElementById('llm_api_key').value,
+        model: document.getElementById('llm_model').value,
+        api_format: document.getElementById('llm_api_format').value,
+      };
+    } else if (target === 'vision') {
+      payload = {
+        base_url: document.getElementById('vision_base_url').value,
+        api_key: document.getElementById('vision_api_key').value,
+        model: document.getElementById('vision_model').value,
+        api_format: document.getElementById('vision_api_format').value,
+      };
+    } else if (target === 'jev') {
+      payload = {
+        backend: document.getElementById('jev_backend').value,
+        api_key: document.getElementById('jev_api_key').value,
+      };
+    }
+
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        res.textContent = '✓ ' + data.msg;
+        res.className = 'text-xs text-green-600 font-medium';
+      } else {
+        res.textContent = '✕ ' + data.msg;
+        res.className = 'text-xs text-red-600 font-medium';
+      }
+    } catch (err) {
+      res.textContent = '✕ 请求出错: ' + err.message;
+      res.className = 'text-xs text-red-600 font-medium';
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('opacity-50');
+    }
+  }
+
+  // 页面加载初始态检查
+  document.addEventListener('DOMContentLoaded', function () {
+    toggleJevBackend();
+  });
+</script>
 {% endblock %}

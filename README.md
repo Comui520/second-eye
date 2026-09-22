@@ -72,6 +72,30 @@ docker compose up -d
 
 未配置视觉模型或关闭「视觉品相分析」开关时，品相分析会被跳过并在通知中注明，评分自动切换为「需求 50 + 性价比 30 + 卖家 20」。
 
+## Jev 判断层（实验性）
+
+设置页可开启「Jev 类型化判断」：需求匹配与批量性价比从「整批一次 JSON 调用」改为**逐件独立评估**——
+
+- 每件商品独立判断并附带置信度，单件解析失败只损失该件，不再拖垮整批
+- 「本批最优」按评分与置信度共同选出
+- 置信度低于阈值（默认 0.85，`JEV_AUTO_THRESHOLD` 可调）的判断自动回落到原模型路径，宁多勿漏
+- 关闭开关即完全回到原模型路径，无残留
+
+两种后端可选（设置页切换）：
+
+| 后端 | 依赖 | 成本 | 说明 |
+| --- | --- | --- | --- |
+| `adapter`（默认） | 无 | 0，复用现有 `LLM_*` 配置（推荐智谱免费模型） | 内置类型化判断：约束模型输出带概率的结构化 JSON |
+| `typesafe` | `pip install ".[jev]"`（官方 typesafe-sdk） | 官方云服务计费 | 直连 `api.typesafe.ai` 官方 Jev 模型，需在 [console.typesafe.ai/keys](https://console.typesafe.ai/keys) 获取 API Key |
+
+```env
+JEV_ENABLED=true
+JEV_BACKEND=typesafe
+JEV_API_KEY=tsk_live_xxx
+```
+
+两种后端行为一致（逐件评估 + 置信度裁决 + 自动回落），切换后端无需改业务代码。
+
 ## 获取闲鱼 Cookie
 
 **推荐方式：一键登录（免 F12）**
@@ -151,6 +175,8 @@ LLM_API_FORMAT=responses
 | `FEISHU_WEBHOOK` / `FEISHU_SECRET` | 飞书自定义机器人 Webhook 与可选签名密钥 |
 | `GOTIFY_URL` / `GOTIFY_TOKEN` / `GOTIFY_PRIORITY` | Gotify 服务地址、Application Token 和消息优先级 |
 | `SERVERCHAN_ENABLED` / `WECOM_ROBOT_ENABLED` / `FEISHU_ENABLED` / `GOTIFY_ENABLED` / `VISION_ENABLED` | 通知和视觉分析独立开关 |
+| `JEV_ENABLED` / `JEV_AUTO_THRESHOLD` | Jev 判断层（实验性）开关与置信度阈值（默认 0.85）；开启后需求匹配与性价比逐件独立评估，低置信回落原模型 |
+| `JEV_BACKEND` / `JEV_API_KEY` | Jev 后端：`adapter`（默认，复用 LLM 配置）或 `typesafe`（官方 Jev 云服务，需 API Key） |
 | `PROXY` | 可选 HTTP 代理，如 `http://127.0.0.1:7890` |
 | `DEFAULT_CRAWL_INTERVAL_MINUTES` | 默认抓取间隔（分钟） |
 | `DEFAULT_CRAWL_JITTER_MINUTES` | 请求随机抖动（分钟），降低风控概率 |
