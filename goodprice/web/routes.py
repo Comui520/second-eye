@@ -6,25 +6,47 @@ from urllib.parse import parse_qsl, urlencode
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from sqlalchemy import func
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import func, text
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+@router.get("/healthz", include_in_schema=False)
+def healthz(request: Request):
+    """Lightweight liveness/readiness endpoint for Docker and reverse proxies."""
+    with request.app.state.session_factory() as session:
+        session.execute(text("SELECT 1"))
+    return {"status": "ok"}
+
+
 class TaskCreate(BaseModel):
     name: str = ""
-    keyword: str
-    max_price: float = 0
-    min_price: float = 0
+    keyword: str = Field(min_length=1)
+    max_price: float = Field(default=0, ge=0, allow_inf_nan=False)
+    min_price: float = Field(default=0, ge=0, allow_inf_nan=False)
     exclude_words: str = ""
     condition_requirement: str = ""
-    min_condition_score: int = 0
+    min_condition_score: int = Field(default=0, ge=0, le=10)
     platform: str = "xianyu"
-    interval_minutes: int = 20
+    interval_minutes: int = Field(default=20, ge=1)
     fetch_detail: bool = True
     enabled: bool = True
+
+    @field_validator("keyword")
+    @classmethod
+    def validate_keyword(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("关键词不能为空")
+        return value
+
+    @model_validator(mode="after")
+    def validate_price_range(self):
+        if self.max_price and self.min_price > self.max_price:
+            raise ValueError("最低价不能高于最高价")
+        return self
 
 
 def _services(request: Request):
@@ -217,20 +239,25 @@ def create_task_form(
     enabled: Optional[int] = Form(None),
 ):
     task_service, _ = _services(request)
-    task_service.create_task(
-        {
-            "keyword": keyword.strip(),
-            "name": name.strip(),
-            "max_price": max_price,
-            "min_price": min_price,
-            "exclude_words": exclude_words.strip(),
-            "condition_requirement": condition_requirement,
-            "min_condition_score": min_condition_score,
-            "interval_minutes": interval_minutes,
-            "fetch_detail": bool(fetch_detail),
-            "enabled": bool(enabled),
-        }
-    )
+    try:
+        task_service.create_task(
+            {
+                "keyword": keyword,
+                "name": name,
+                "max_price": max_price,
+                "min_price": min_price,
+                "exclude_words": exclude_words,
+                "condition_requirement": condition_requirement,
+                "min_condition_score": min_condition_score,
+                "interval_minutes": interval_minutes,
+                "fetch_detail": bool(fetch_detail),
+                "enabled": bool(enabled),
+            }
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            "/tasks?" + urlencode({"toast": str(exc)}), status_code=303
+        )
     request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 
@@ -294,21 +321,26 @@ def edit_task_form(
     enabled: Optional[int] = Form(None),
 ):
     task_service, _ = _services(request)
-    task_service.update_task(
-        task_id,
-        {
-            "keyword": keyword.strip(),
-            "name": name.strip(),
-            "max_price": max_price,
-            "min_price": min_price,
-            "exclude_words": exclude_words.strip(),
-            "condition_requirement": condition_requirement,
-            "min_condition_score": min_condition_score,
-            "interval_minutes": interval_minutes,
-            "fetch_detail": bool(fetch_detail),
-            "enabled": bool(enabled),
-        },
-    )
+    try:
+        task_service.update_task(
+            task_id,
+            {
+                "keyword": keyword,
+                "name": name,
+                "max_price": max_price,
+                "min_price": min_price,
+                "exclude_words": exclude_words,
+                "condition_requirement": condition_requirement,
+                "min_condition_score": min_condition_score,
+                "interval_minutes": interval_minutes,
+                "fetch_detail": bool(fetch_detail),
+                "enabled": bool(enabled),
+            },
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/tasks/{task_id}?" + urlencode({"toast": str(exc)}), status_code=303
+        )
     request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 

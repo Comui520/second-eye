@@ -31,14 +31,56 @@ AI 品相筛选、卖家信用、降价重推、本地开源——一个面向�
 
 ## 快速开始
 
+项目是 Python/FastAPI 应用，不需要 Node.js/npm。按使用场景选择一种启动方式；**不要同时启动本地进程和 Docker 容器**，两者默认共享 `data/goodprice.db`，否则可能重复抓取和发送通知。
+
+### 方式一：Docker（普通用户/NAS 推荐）
+
+Windows PowerShell：
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+# 编辑 .env 后填写模型 Key、Cookie 等配置
+docker compose up -d --build
+```
+
+也可以使用仓库脚本：
+
+```powershell
+.\scripts\start-docker.ps1 -Logs
+```
+
+默认访问 <http://127.0.0.1:18000>。Docker 端口默认只绑定本机回环地址；如部署到 NAS，建议通过带认证的 HTTPS 反向代理发布。noVNC 默认关闭。需要登录时，在 `data/.novnc-password` 写入独立密码，将 `.env` 中 `ENABLE_NOVNC=1` 后执行 `docker compose up -d`，再访问 <http://127.0.0.1:16080/vnc.html>；登录完成后恢复为 `0` 并重启。不要把 noVNC 直接暴露到公网。
+
+### 方式二：uv（开发推荐）
+
+`uv` 类似 Python 世界里的 npm：根据 `pyproject.toml` 和 `uv.lock` 创建项目虚拟环境并安装依赖。仓库中的 `requirements.lock` 供 Docker 构建使用。
+
+```powershell
+uv sync --python 3.11 --extra dev
+uv run python -m playwright install chromium
+uv run python -m goodprice
+```
+
+或直接运行：
+
+```powershell
+.\scripts\start-local.ps1 -InstallBrowser
+```
+
+### 方式三：Conda（兼容原有流程）
+
 要求：已安装 [conda](https://docs.conda.io/) 与 Git。
 
-```bash
-git clone https://github.com/Comui520/second-eye.git
-cd second-eye
+```powershell
 conda env create -f environment.yml
 conda run -n good-price python -m playwright install chromium
 conda run -n good-price python -m goodprice
+```
+
+也可以运行：
+
+```powershell
+.\scripts\start-local.ps1 -Conda -InstallBrowser
 ```
 
 浏览器打开 <http://127.0.0.1:8000>，三步上手：
@@ -51,11 +93,10 @@ conda run -n good-price python -m goodprice
 
 项目提供单容器 Docker 部署方式，浏览器依赖只在镜像构建时安装，运行数据通过 `data/` 持久化。
 
-```bash
-cp .env.example .env
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 # 编辑 .env 后构建并启动
-docker compose build
-docker compose up -d
+docker compose up -d --build
 ```
 
 默认访问地址：<http://127.0.0.1:18000>。NAS 上建议只在局域网访问，或通过带认证的反向代理发布。
@@ -77,7 +118,7 @@ docker compose up -d
 **推荐方式：一键登录（免 F12）**
 
 1. 打开本工具的「设置」页，点击「一键登录」
-2. 本地运行时会弹出浏览器窗口；Docker/NAS 运行时打开 `http://NAS_IP:16080/vnc.html` 查看虚拟浏览器
+2. 本地运行时会弹出浏览器窗口；Docker/NAS 运行时需临时启用带密码的 noVNC，再打开 `http://NAS_IP:16080/vnc.html` 查看虚拟浏览器
 3. 像正常上网一样扫码或用账号密码登录闲鱼（密码只输入在淘宝/闲鱼官方登录页，程序不保存密码）
 4. 登录成功后程序自动抓取 Cookie 并保存；登录态保存在本地，下次可能免登录
 
@@ -90,7 +131,7 @@ docker compose up -d
 
 > Cookie 会过期，过期后工具会记录错误提示，重新登录即可。
 
-> Docker 部署的 noVNC 端口默认未设置密码，仅建议在可信局域网使用，不要暴露到公网。
+> Docker 部署的 noVNC 默认关闭；启用时必须配置 `data/.novnc-password`，且端口默认只绑定本机。登录完成后应关闭 noVNC。
 
 ## 企业微信群机器人（推荐，免费）
 
@@ -108,7 +149,7 @@ Docker Compose 会同时启动 Gotify 服务，默认地址为 <http://127.0.0.1
 2. 创建一个应用并复制 Application Token
 3. 在 second-eye「设置 → 消息通知」中填入 Gotify 地址、Token，并打开 Gotify 开关
 
-容器内部地址填写 `http://gotify`；手机或局域网浏览器访问 NAS 时使用 `http://NAS_IP:18080`。Gotify 数据保存在独立的 Docker Volume 中。
+容器内部地址填写 `http://gotify`；Gotify 管理页面默认只绑定宿主机 `127.0.0.1:18080`。如需从其它设备访问，应通过带认证的反向代理发布，或在确认网络边界后自行修改 Compose 端口绑定。Gotify 数据保存在独立的 Docker Volume 中。
 
 ## 飞书机器人
 

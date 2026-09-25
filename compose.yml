@@ -11,12 +11,15 @@ services:
     env_file:
       - .env
     ports:
-      - "18000:8000"
-      - "16080:6080"
+      # Bind to localhost by default: the app has no built-in authentication.
+      - "127.0.0.1:18000:8000"
+      - "127.0.0.1:16080:6080"
     environment:
       DATABASE_URL: sqlite:////app/data/goodprice.db
       PROXY: ${PROXY:-}
       TZ: Asia/Shanghai
+      ENABLE_NOVNC: ${ENABLE_NOVNC:-0}
+      NOVNC_PASSWORD_FILE: ${NOVNC_PASSWORD_FILE:-/app/data/.novnc-password}
     volumes:
       - ./data:/app/data
     shm_size: "512mb"
@@ -25,7 +28,7 @@ services:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/stats', timeout=5)"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"
       interval: 30s
       timeout: 10s
       retries: 3
@@ -36,7 +39,7 @@ services:
     container_name: second-eye-gotify
     restart: unless-stopped
     ports:
-      - "18080:80"
+      - "127.0.0.1:18080:80"
     volumes:
       - gotify-data:/app/data
 

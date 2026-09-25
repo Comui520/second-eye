@@ -10,7 +10,6 @@ from fastapi import FastAPI
 
 from goodprice.config import Settings, get_settings
 from goodprice.db import init_db, migrate_schema
-from goodprice.scheduler import build_scheduler
 from goodprice.scheduler import _sync_tasks, build_scheduler
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
 from goodprice.services.seller_service import SellerService

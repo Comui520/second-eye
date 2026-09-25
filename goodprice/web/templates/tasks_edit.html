@@ -9,6 +9,10 @@
       <input name="keyword" required value="{{ task.keyword }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
+      <label class="block text-sm text-gray-600 mb-1">最低价（过滤超低价配件）:</label>
+      <input name="min_price" type="number" step="0.01" min="0" value="{{ task.min_price or '' }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
       <label class="block text-sm text-gray-600 mb-1">最高价（留空不限）:</label>
       <input name="max_price" type="number" step="0.01" min="0" value="{{ task.max_price or '' }}" class="w-full border rounded px-3 py-2">
     </div>
@@ -23,6 +27,10 @@
     <div>
       <label class="block text-sm text-gray-600 mb-1">备注名（可选）:</label>
       <input name="name" value="{{ task.name }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">排除词（空格分隔）:</label>
+      <input name="exclude_words" value="{{ task.exclude_words }}" placeholder="如 配件 遮光罩" class="w-full border rounded px-3 py-2">
     </div>
     <div class="md:col-span-2">
       <label class="block text-sm text-gray-600 mb-1">品相要求:</label>

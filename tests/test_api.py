@@ -650,3 +650,17 @@ def _settings_form():
         "wecom_robot_enabled": "1",
         "vision_enabled": "1",
     }
+
+
+def test_api_rejects_invalid_task_input(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    for payload in (
+        {"keyword": ""},
+        {"keyword": "   "},
+        {"keyword": "x", "min_price": 100, "max_price": 50},
+        {"keyword": "x", "interval_minutes": 0},
+        {"keyword": "x", "min_condition_score": 11},
+    ):
+        response = client.post("/api/tasks", json=payload)
+        assert response.status_code == 422, payload
+    assert client.get("/api/tasks").json() == []
