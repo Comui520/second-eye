@@ -2,7 +2,9 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
 
 WORKDIR /app
 
@@ -15,7 +17,7 @@ COPY requirements.lock ./
 
 RUN env HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" \
     http_proxy="${HTTP_PROXY}" https_proxy="${HTTPS_PROXY}" \
-    sh -c 'pip install --no-cache-dir -r requirements.lock && playwright install --with-deps chromium'
+    sh -c 'pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.lock && playwright install --with-deps chromium'
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends x11vnc novnc websockify \
