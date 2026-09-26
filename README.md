@@ -31,45 +31,120 @@ AI 品相筛选、卖家信用、降价重推、本地开源——一个面向�
 
 ## 快速开始
 
-项目是 Python/FastAPI 应用，不需要 Node.js/npm。按使用场景选择一种启动方式；**不要同时启动本地进程和 Docker 容器**，两者默认共享 `data/goodprice.db`，否则可能重复抓取和发送通知。
+项目是 Python/FastAPI 应用，不需要 Node.js/npm。仓库提供三个可直接点击的 Windows 启动脚本：
 
-### 方式一：Docker（不需要 Conda/uv）
+```text
+start-conda.cmd   # Conda 环境
+start-uv.cmd      # uv 环境
+start-docker.cmd  # Docker 环境
+```
 
-Docker 运行分为两种使用场景，但使用的是同一份代码和同一个 `compose.yml`，不需要为 NAS 单独维护分支。
+它们会自动检查、创建或补齐项目环境，环境已经存在时会尽量复用。第一次运行需要下载依赖、Python 或 Chromium，耗时取决于网络；以后启动会快很多。
 
-#### A. 本机临时使用：只安装 Docker，快速登录
+> 现实限制：脚本可以自动配置 Python 依赖，但不能可靠地替你安装操作系统级运行时。Conda 脚本要求电脑已经安装 Miniconda/Anaconda；Docker 脚本要求已经安装并启动 Docker Desktop。若电脑什么都没有，推荐先双击 `start-uv.cmd`，它会尝试自动安装 uv 和 Python 3.11。
 
-Windows PowerShell 推荐直接运行：
+### 三种启动方式怎么选
 
-```powershell
-.\scripts\start-docker.ps1 -Login
+| 启动脚本 | 适合谁 | 是否需要手动安装 | 登录浏览器 | 典型用途 |
+| --- | --- | --- | --- | --- |
+| `start-uv.cmd` | 大多数 Windows 用户 | 脚本尝试自动安装 uv；需要网络 | Windows 原生浏览器窗口 | 最推荐的本机方式 |
+| `start-conda.cmd` | 已经使用 Conda 的用户 | 需要先有 Miniconda/Anaconda | Windows 原生浏览器窗口 | 兼容原有 Conda 流程 |
+| `start-docker.cmd` | 不想配置 Python 的用户 | 需要 Docker Desktop | noVNC 网页中的容器浏览器 | 本机快速体验 |
+
+三种方式不要同时运行：它们默认共享 `data/goodprice.db`，同时启动可能导致任务重复执行或通知重复发送。
+
+### 方式一：uv（本机推荐）
+
+直接双击：
+
+```text
+start-uv.cmd
 ```
 
 脚本会自动：
 
-- 创建 `.env` 和 `data/`（如果还不存在）
-- 生成一个本地 noVNC 密码
-- 启动 Docker 容器并临时开启 noVNC
-- 自动打开设置页和 noVNC 页面
+1. 检查 uv；找不到时尝试从官方安装脚本安装；
+2. 使用 `pyproject.toml` 和 `uv.lock` 创建 `.venv`；
+3. 安装 Python 依赖和 Playwright Chromium；
+4. 启动应用。
 
-在 noVNC 页面中完成闲鱼登录后，Cookie 会保存到 `data/goodprice.db`。登录完成后执行普通启动，关闭 noVNC：
+也可以在 PowerShell 中运行：
+
+```powershell
+.\scripts\start-uv.ps1
+```
+
+启动后打开 <http://127.0.0.1:8000>。在「设置 → 一键登录」时会打开 Windows 本机浏览器窗口。
+
+如果自动安装 uv 被网络或安全软件拦截，可以手动安装 uv 后再次双击脚本；脚本会复用已经存在的环境。
+
+### 方式二：Conda（兼容原有流程）
+
+确认已经安装 Miniconda 或 Anaconda 后，直接双击：
+
+```text
+start-conda.cmd
+```
+
+脚本会自动：
+
+1. 查找 Conda（包括常见的用户目录安装位置）；
+2. 如果没有 `good-price` 环境，按 `environment.yml` 创建；
+3. 如果环境已存在，补齐当前项目依赖；
+4. 安装或检查 Playwright Chromium；
+5. 启动应用。
+
+也可以运行：
+
+```powershell
+.\scripts\start-conda.ps1
+```
+
+Conda 没有安装时，脚本会明确提示原因；此时可以改用 `start-uv.cmd`，不需要为了本项目额外安装 Conda。
+
+### 方式三：Docker（不需要配置 Python）
+
+#### Windows 本机快速使用
+
+直接双击：
+
+```text
+start-docker.cmd
+```
+
+这个 Windows 快捷脚本默认使用“登录模式”，会自动：
+
+- 检查 Docker Desktop 和 Docker Compose；
+- 创建 `.env`、`data/`；
+- 构建并启动镜像；
+- 自动生成 noVNC 密码；
+- 打开设置页和 noVNC 页面。
+
+在 noVNC 页面中完成闲鱼登录。登录地址是：
+
+```text
+http://127.0.0.1:16080/vnc.html
+```
+
+Docker 里的 Chromium **不会变成 Windows 桌面上的原生弹窗**；它显示在 noVNC 网页里的虚拟桌面中。登录完成后，执行普通启动关闭 noVNC：
 
 ```powershell
 .\scripts\start-docker.ps1
 ```
 
-普通访问地址是 <http://127.0.0.1:18000>，登录时的 noVNC 地址是 <http://127.0.0.1:16080/vnc.html>。这种模式不需要 NAS，也不需要 Conda、uv 或 Node.js。
+普通访问地址为 <http://127.0.0.1:18000>。
 
-Linux/macOS 或 NAS 也可以使用对应脚本：
+如果希望手动控制：
 
-```bash
-./scripts/start-docker.sh --login   # 临时开启 noVNC 登录
-./scripts/start-docker.sh            # 普通长期运行，关闭 noVNC
+```powershell
+.\scripts\start-docker.ps1 -Login    # 临时开启 noVNC 并打开登录页面
+.\scripts\start-docker.ps1           # 普通运行，关闭 noVNC
+.\scripts\start-docker.ps1 -NoBuild # 不重新构建镜像，直接启动
 ```
 
-#### B. NAS 长期运行：默认关闭 noVNC
+#### NAS 或 Linux 长期运行
 
-NAS 上长期运行时，先在 `.env` 设置端口绑定地址。例如只允许局域网访问，可以填 NAS 的局域网 IP：
+Docker 长期运行时默认关闭 noVNC。先在 `.env` 设置端口绑定地址，例如 NAS 局域网 IP：
 
 ```env
 BIND_ADDRESS=192.168.1.20
@@ -79,70 +154,115 @@ BIND_ADDRESS=192.168.1.20
 
 ```bash
 ./scripts/start-docker.sh
-# 或：docker compose up -d --build
 ```
 
-访问 `http://192.168.1.20:18000`。此模式默认关闭 noVNC；需要重新登录时临时执行：
+访问：
+
+```text
+http://192.168.1.20:18000
+```
+
+需要重新登录时临时执行：
 
 ```bash
 ./scripts/start-docker.sh --login
 ```
 
-然后在同一局域网电脑打开 `http://192.168.1.20:16080/vnc.html`。登录完成后再次执行不带 `--login` 的普通启动命令，关闭 noVNC。不要把 noVNC 端口直接暴露到公网；如果使用反向代理，请给 Web 页面和 noVNC 都配置认证。
+然后在局域网电脑打开：
 
-> Windows 本机和 NAS 的区别不在代码分支，而在启动参数：本机用 `start-docker.ps1 -Login` 快速登录；NAS 默认长期关闭 noVNC，需要时临时 `--login`。两种方式共享同一个 `data/` 数据目录和 Compose 配置。
-
-### 方式二：uv（开发推荐）
-
-`uv` 类似 Python 世界里的 npm：根据 `pyproject.toml` 和 `uv.lock` 创建项目虚拟环境并安装依赖。仓库中的 `requirements.lock` 供 Docker 构建使用。
-
-```powershell
-uv sync --python 3.11 --extra dev
-uv run python -m playwright install chromium
-uv run python -m goodprice
+```text
+http://192.168.1.20:16080/vnc.html
 ```
 
-或直接运行：
+登录完成后再次执行不带 `--login` 的命令，关闭 noVNC。不要把 noVNC 直接暴露到公网；如果通过反向代理发布，Web 页面和 noVNC 都应配置认证。
+
+> 本机 Docker 和 NAS Docker 使用同一份代码、同一个 `compose.yml`，区别只在启动脚本、`BIND_ADDRESS` 和 noVNC 是否临时开启，不需要维护不同 Git 分支。
+
+### 首次启动后的三步
+
+1. 浏览器打开本工具：uv/Conda 是 <http://127.0.0.1:8000>，Docker 是 <http://127.0.0.1:18000>；
+2. 进入「设置 → 一键登录」，按当前启动方式完成登录；
+3. 在「设置 → 大模型」填写 OpenAI 兼容模型地址和 API Key，再到「监控任务」新建任务。
+
+### 常见意外情况
+
+#### 1. 双击后窗口一闪而过
+
+优先从项目目录打开 PowerShell 执行对应脚本，这样可以看到完整错误：
 
 ```powershell
-.\scripts\start-local.ps1 -InstallBrowser
+.\scripts\start-uv.ps1
+.\scripts\start-conda.ps1
+.\scripts\start-docker.ps1 -Login
 ```
 
-### 方式三：Conda（兼容原有流程）
+仓库根目录的 `.cmd` 启动器已经使用 `ExecutionPolicy Bypass`，通常不需要修改 PowerShell 全局执行策略。
 
-要求：已安装 [conda](https://docs.conda.io/) 与 Git。
+#### 2. uv、Conda 或 Docker 找不到
+
+- `start-uv.cmd` 会尝试自动安装 uv；如果下载被代理或安全软件拦截，请手动安装 uv 后重试。
+- `start-conda.cmd` 不会静默下载并安装 Conda；请安装 Miniconda/Anaconda，或者直接改用 `start-uv.cmd`。
+- `start-docker.cmd` 不能替你安装 Docker Desktop；请先安装 Docker Desktop 并等待 Docker Engine 显示为 Running。
+
+#### 3. 第一次启动很慢
+
+这是正常的：需要下载 Python 依赖、Playwright Chromium，Docker 还需要构建镜像。后续启动会复用 `.venv`、Conda 环境、Docker 层和浏览器缓存。
+
+#### 4. 端口被占用
+
+默认端口如下：
+
+| 用途 | 本地 uv/Conda | Docker |
+| --- | ---: | ---: |
+| Web | `8000` | `18000` |
+| noVNC | 不使用 | `16080` |
+| Gotify | 不使用 | `18080` |
+
+如果端口被占用，可以先停止旧进程/容器；Docker 端口也可以在 `compose.yml` 中修改。不要让本地进程和 Docker 同时使用同一份 `data/`。
+
+#### 5. Docker 登录页没有原生弹窗
+
+这是预期行为，不是故障。Docker 中的 Chromium 不能弹到 Windows 桌面。请双击 `start-docker.cmd`，在自动打开的 noVNC 页面中操作容器浏览器；如果必须使用原生浏览器窗口，请使用 `start-uv.cmd` 或 `start-conda.cmd`。
+
+#### 6. noVNC 打不开或密码不对
+
+确认使用的是登录模式：
 
 ```powershell
-conda env create -f environment.yml
-conda run -n good-price python -m playwright install chromium
-conda run -n good-price python -m goodprice
+.\scripts\start-docker.ps1 -Login
 ```
 
-也可以运行：
+脚本会显示 noVNC 密码并写入 `data/.novnc-password`。如果容器启动失败，查看日志：
 
 ```powershell
-.\scripts\start-local.ps1 -Conda -InstallBrowser
+docker compose logs --tail=100 second-eye
 ```
 
-浏览器打开 <http://127.0.0.1:8000>，三步上手：
+登录完成后执行不带 `-Login` 的普通启动，关闭 noVNC。不要把 noVNC 端口直接暴露到公网。
 
-1. **设置 → 一键登录**：弹出浏览器窗口登录闲鱼，自动抓取 Cookie（也可手动粘贴）
-2. **设置 → 大模型**：填入智谱免费模型（见下）或其它 OpenAI 兼容服务
-3. **监控任务 → 新建任务**：填关键词、价格区间、排除词与品相要求；任务会立即执行第一次
+#### 7. Docker 构建出现 502、超时或 Chromium 下载失败
 
-### Docker / NAS 部署
+通常是 Docker、Debian 软件源、PyPI 或 Playwright CDN 的临时网络问题。重新运行启动器即可；网络受限时在 `.env` 配置：
 
-项目提供单容器 Docker 部署方式，浏览器依赖只在镜像构建时安装，运行数据通过 `data/` 持久化。
+```env
+PROXY=http://127.0.0.1:7890
+```
 
-```powershell
-if (!(Test-Path .env)) { Copy-Item .env.example .env }
-# 编辑 .env 后构建并启动
+#### 8. 页面能打开，但任务没有通知
+
+启动脚本只负责运行环境，不会自动配置模型和通知服务。请在「设置」页面填写 LLM、视觉模型和通知渠道；没有有效 Cookie 时也无法正常抓取闲鱼。
+
+### Docker / NAS 构建说明
+
+项目提供单容器 Docker 部署方式，浏览器依赖只在镜像构建时安装，运行数据通过 `data/` 持久化。构建需要访问 PyPI、Debian 软件源和 Playwright 下载地址；网络受限时可在 `.env` 设置 `PROXY`。依赖和浏览器层会被 Docker 缓存，后续只修改源码通常不会重复下载浏览器。
+
+手动构建命令：
+
+```bash
 docker compose up -d --build
 ```
 
-默认访问地址：<http://127.0.0.1:18000>。NAS 上建议只在局域网访问，或通过带认证的反向代理发布。
-
-构建需要访问 PyPI 和 Playwright 下载地址；网络受限时可在 `.env` 设置 `PROXY`。浏览器层会被 Docker 缓存，后续只修改源码不会重复下载浏览器。
+如果构建过程中出现 Debian 软件源 `502 Bad Gateway`、Playwright CDN 超时等错误，通常是临时网络问题，重新执行构建即可；必要时配置代理。
 
 ## 大模型配置
 
@@ -235,6 +355,7 @@ LLM_API_FORMAT=responses
 | `GOTIFY_URL` / `GOTIFY_TOKEN` / `GOTIFY_PRIORITY` | Gotify 服务地址、Application Token 和消息优先级 |
 | `SERVERCHAN_ENABLED` / `WECOM_ROBOT_ENABLED` / `FEISHU_ENABLED` / `GOTIFY_ENABLED` / `VISION_ENABLED` | 通知和视觉分析独立开关 |
 | `PROXY` | 可选 HTTP 代理，如 `http://127.0.0.1:7890` |
+| `BIND_ADDRESS` | Docker 端口绑定地址；本机默认 `127.0.0.1`，NAS 局域网访问可填写 NAS 局域网 IP |
 | `DEFAULT_CRAWL_INTERVAL_MINUTES` | 默认抓取间隔（分钟） |
 | `DEFAULT_CRAWL_JITTER_MINUTES` | 请求随机抖动（分钟），降低风控概率 |
 
