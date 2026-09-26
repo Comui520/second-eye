@@ -18,7 +18,7 @@ services:
       DATABASE_URL: sqlite:////app/data/goodprice.db
       PROXY: ${PROXY:-}
       TZ: Asia/Shanghai
-      APP_RUNTIME: docker
+      RUNTIME_MODE: docker
       ENABLE_NOVNC: ${ENABLE_NOVNC:-0}
       NOVNC_PASSWORD_FILE: ${NOVNC_PASSWORD_FILE:-/app/data/.novnc-password}
     volumes:
