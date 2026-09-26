@@ -111,10 +111,14 @@ def _make_crawl_service(session_factory, settings_service, guard):
     )
 
 
-def _make_login_session(settings_service):
+def _make_login_session(settings_service, settings: Settings):
     from goodprice.crawler.login import LoginSession
 
-    return LoginSession(settings_service)
+    return LoginSession(
+        settings_service,
+        runtime_mode=settings.runtime_mode,
+        novnc_enabled=settings.enable_novnc,
+    )
 
 
 def build_app(
@@ -135,7 +139,7 @@ def build_app(
     migrate_schema(session_factory)
 
     settings_service = SettingsService(session_factory, base=settings)
-    login_session = _make_login_session(settings_service)
+    login_session = _make_login_session(settings_service, settings)
     task_service = TaskService(session_factory)
     from goodprice.services.satisfaction import backfill_satisfaction
 

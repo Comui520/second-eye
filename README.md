@@ -49,7 +49,7 @@ docker compose up -d --build
 .\scripts\start-docker.ps1 -Logs
 ```
 
-默认访问 <http://127.0.0.1:18000>。Docker 端口默认只绑定本机回环地址；如部署到 NAS，建议通过带认证的 HTTPS 反向代理发布。noVNC 默认关闭。需要登录时，在 `data/.novnc-password` 写入独立密码，将 `.env` 中 `ENABLE_NOVNC=1` 后执行 `docker compose up -d`，再访问 <http://127.0.0.1:16080/vnc.html>；登录完成后恢复为 `0` 并重启。不要把 noVNC 直接暴露到公网。
+默认访问 <http://127.0.0.1:18000>。即使 Docker 运行在你自己的 Windows 电脑上，容器里的 Chromium 也不会自动弹到 Windows 桌面；一键登录需要通过 noVNC 查看容器浏览器。Docker 端口默认只绑定本机回环地址；如部署到 NAS，建议通过带认证的 HTTPS 反向代理发布。noVNC 默认关闭。需要登录时，在 `data/.novnc-password` 写入独立密码，将 `.env` 中 `ENABLE_NOVNC=1` 后执行 `docker compose up -d`，再访问 <http://127.0.0.1:16080/vnc.html>；登录完成后恢复为 `0` 并重启。不要把 noVNC 直接暴露到公网。
 
 ### 方式二：uv（开发推荐）
 

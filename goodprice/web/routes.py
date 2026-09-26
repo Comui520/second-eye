@@ -53,6 +53,25 @@ def _services(request: Request):
     return request.app.state.task_service, request.app.state.settings_service
 
 
+def _login_context(login_session) -> dict:
+    if login_session is None:
+        return {
+            "login_remote": False,
+            "login_browser_accessible": False,
+            "login_unavailable_reason": "登录功能不可用",
+        }
+    reason = getattr(login_session, "unavailable_reason", lambda: "")
+    return {
+        "login_remote": bool(getattr(login_session, "is_remote_browser", False)),
+        # Keep compatibility with lightweight test doubles and extensions that
+        # implement the original LoginSession API.
+        "login_browser_accessible": bool(
+            getattr(login_session, "browser_accessible", True)
+        ),
+        "login_unavailable_reason": reason(),
+    }
+
+
 def _task_dict(task) -> dict:
     return {
         "id": task.id,
@@ -632,6 +651,7 @@ def settings_page(request: Request):
             "settings": settings,
             "login_status": login_status,
             "login_message": login_message,
+            **_login_context(login_session),
             "active": "settings",
         },
     )
@@ -640,9 +660,18 @@ def settings_page(request: Request):
 @router.post("/settings/login")
 def settings_login(request: Request):
     login_session = getattr(request.app.state, "login_session", None)
-    if login_session:
-        login_session.start()
-    return RedirectResponse("/settings?toast=已打开浏览器窗口，请完成登录", status_code=303)
+    if not login_session:
+        return RedirectResponse(
+            "/settings?" + urlencode({"toast": "登录功能不可用"}), status_code=303
+        )
+    login_context = _login_context(login_session)
+    if not login_context["login_browser_accessible"]:
+        return RedirectResponse(
+            "/settings?" + urlencode({"toast": login_context["login_unavailable_reason"]}),
+            status_code=303,
+        )
+    login_session.start()
+    return RedirectResponse("/settings?toast=已启动登录浏览器，请完成登录", status_code=303)
 
 
 @router.get("/settings/login-status")
@@ -654,7 +683,11 @@ def settings_login_status(request: Request):
     return templates.TemplateResponse(
         request,
         "login_status.html",
-        {"login_status": login_status, "login_message": login_message},
+        {
+            "login_status": login_status,
+            "login_message": login_message,
+            **_login_context(login_session),
+        },
     )
 
 

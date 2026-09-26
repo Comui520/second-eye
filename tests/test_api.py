@@ -664,3 +664,22 @@ def test_api_rejects_invalid_task_input(base_settings, session_factory):
         response = client.post("/api/tasks", json=payload)
         assert response.status_code == 422, payload
     assert client.get("/api/tasks").json() == []
+
+
+def test_docker_login_page_explains_novnc_requirement(base_settings, session_factory):
+    from goodprice.config import Settings
+
+    docker_settings = Settings(
+        database_url=base_settings.database_url,
+        _env_file=None,
+        runtime_mode="docker",
+        enable_novnc=False,
+    )
+    app = build_app(settings=docker_settings, session_factory=session_factory, with_scheduler=False)
+    client = TestClient(app, follow_redirects=False)
+    page = client.get("/settings")
+    assert page.status_code == 200
+    assert "容器浏览器无法直接弹到 Windows 桌面" in page.text
+    response = client.post("/settings/login")
+    assert response.status_code == 303
+    assert "ENABLE_NOVNC%3D1" in response.headers["location"]
