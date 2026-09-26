@@ -33,23 +33,64 @@ AI 品相筛选、卖家信用、降价重推、本地开源——一个面向�
 
 项目是 Python/FastAPI 应用，不需要 Node.js/npm。按使用场景选择一种启动方式；**不要同时启动本地进程和 Docker 容器**，两者默认共享 `data/goodprice.db`，否则可能重复抓取和发送通知。
 
-### 方式一：Docker（普通用户/NAS 推荐）
+### 方式一：Docker（不需要 Conda/uv）
 
-Windows PowerShell：
+Docker 运行分为两种使用场景，但使用的是同一份代码和同一个 `compose.yml`，不需要为 NAS 单独维护分支。
 
-```powershell
-if (!(Test-Path .env)) { Copy-Item .env.example .env }
-# 编辑 .env 后填写模型 Key、Cookie 等配置
-docker compose up -d --build
-```
+#### A. 本机临时使用：只安装 Docker，快速登录
 
-也可以使用仓库脚本：
+Windows PowerShell 推荐直接运行：
 
 ```powershell
-.\scripts\start-docker.ps1 -Logs
+.\scripts\start-docker.ps1 -Login
 ```
 
-默认访问 <http://127.0.0.1:18000>。即使 Docker 运行在你自己的 Windows 电脑上，容器里的 Chromium 也不会自动弹到 Windows 桌面；一键登录需要通过 noVNC 查看容器浏览器。Docker 端口默认只绑定本机回环地址；如部署到 NAS，建议通过带认证的 HTTPS 反向代理发布。noVNC 默认关闭。需要登录时，在 `data/.novnc-password` 写入独立密码，将 `.env` 中 `ENABLE_NOVNC=1` 后执行 `docker compose up -d`，再访问 <http://127.0.0.1:16080/vnc.html>；登录完成后恢复为 `0` 并重启。不要把 noVNC 直接暴露到公网。
+脚本会自动：
+
+- 创建 `.env` 和 `data/`（如果还不存在）
+- 生成一个本地 noVNC 密码
+- 启动 Docker 容器并临时开启 noVNC
+- 自动打开设置页和 noVNC 页面
+
+在 noVNC 页面中完成闲鱼登录后，Cookie 会保存到 `data/goodprice.db`。登录完成后执行普通启动，关闭 noVNC：
+
+```powershell
+.\scripts\start-docker.ps1
+```
+
+普通访问地址是 <http://127.0.0.1:18000>，登录时的 noVNC 地址是 <http://127.0.0.1:16080/vnc.html>。这种模式不需要 NAS，也不需要 Conda、uv 或 Node.js。
+
+Linux/macOS 或 NAS 也可以使用对应脚本：
+
+```bash
+./scripts/start-docker.sh --login   # 临时开启 noVNC 登录
+./scripts/start-docker.sh            # 普通长期运行，关闭 noVNC
+```
+
+#### B. NAS 长期运行：默认关闭 noVNC
+
+NAS 上长期运行时，先在 `.env` 设置端口绑定地址。例如只允许局域网访问，可以填 NAS 的局域网 IP：
+
+```env
+BIND_ADDRESS=192.168.1.20
+```
+
+然后运行：
+
+```bash
+./scripts/start-docker.sh
+# 或：docker compose up -d --build
+```
+
+访问 `http://192.168.1.20:18000`。此模式默认关闭 noVNC；需要重新登录时临时执行：
+
+```bash
+./scripts/start-docker.sh --login
+```
+
+然后在同一局域网电脑打开 `http://192.168.1.20:16080/vnc.html`。登录完成后再次执行不带 `--login` 的普通启动命令，关闭 noVNC。不要把 noVNC 端口直接暴露到公网；如果使用反向代理，请给 Web 页面和 noVNC 都配置认证。
+
+> Windows 本机和 NAS 的区别不在代码分支，而在启动参数：本机用 `start-docker.ps1 -Login` 快速登录；NAS 默认长期关闭 noVNC，需要时临时 `--login`。两种方式共享同一个 `data/` 数据目录和 Compose 配置。
 
 ### 方式二：uv（开发推荐）
 
@@ -117,10 +158,11 @@ docker compose up -d --build
 
 **推荐方式：一键登录（免 F12）**
 
-1. 打开本工具的「设置」页，点击「一键登录」
-2. 本地运行时会弹出浏览器窗口；Docker/NAS 运行时需临时启用带密码的 noVNC，再打开 `http://NAS_IP:16080/vnc.html` 查看虚拟浏览器
-3. 像正常上网一样扫码或用账号密码登录闲鱼（密码只输入在淘宝/闲鱼官方登录页，程序不保存密码）
-4. 登录成功后程序自动抓取 Cookie 并保存；登录态保存在本地，下次可能免登录
+1. 本地 uv/Conda 启动：点击「设置 → 一键登录」，会打开本机浏览器窗口。
+2. Docker 本机或 NAS 启动：先用 `start-docker.ps1 -Login` 或 `start-docker.sh --login` 临时开启 noVNC，再打开当前主机的 `:16080/vnc.html`。
+3. 像正常上网一样扫码或用账号密码登录闲鱼（密码只输入在淘宝/闲鱼官方登录页，程序不保存密码）。
+4. 登录成功后程序自动抓取 Cookie 并保存；登录态保存在 `data/`，下次可能免登录。
+5. 登录完成后恢复普通启动，关闭 noVNC。
 
 **手动方式**
 
@@ -131,7 +173,7 @@ docker compose up -d --build
 
 > Cookie 会过期，过期后工具会记录错误提示，重新登录即可。
 
-> Docker 部署的 noVNC 默认关闭；启用时必须配置 `data/.novnc-password`，且端口默认只绑定本机。登录完成后应关闭 noVNC。
+> Docker 部署的 noVNC 默认关闭；登录脚本会在本地生成 `data/.novnc-password`，且端口绑定由 `BIND_ADDRESS` 控制。登录完成后应关闭 noVNC。
 
 ## 企业微信群机器人（推荐，免费）
 

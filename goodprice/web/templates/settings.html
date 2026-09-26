@@ -5,11 +5,11 @@
   <h3 class="text-md font-semibold mb-2">闲鱼登录</h3>
   <div class="flex items-center gap-3">
     <form method="post" action="/settings/login"><button class="btn btn-green">一键登录（免 F12）</button></form>
-    <span class="text-xs text-gray-500">本地启动会打开浏览器窗口；Docker 启动需先启用 noVNC。扫码或用账号密码登录后自动保存，若未自动识别可点「登录完成」按钮。</span>
+    <span class="text-xs text-gray-500">本地启动会打开浏览器窗口；Docker 请先用登录模式开启 noVNC。扫码或用账号密码登录后自动保存，若未自动识别可点「登录完成」按钮。</span>
   </div>
   {% if login_remote and not login_browser_accessible %}
   <div class="bg-yellow-50 text-yellow-800 rounded px-3 py-2 text-sm mt-3">
-    当前通过 Docker 运行，容器浏览器无法直接弹到 Windows 桌面。请在 <code>.env</code> 设置 <code>ENABLE_NOVNC=1</code>，然后执行 <code>docker compose up -d</code>；登录完成后建议恢复为 <code>0</code>。也可以停止 Docker，改用 uv/Conda 本地启动。
+    当前通过 Docker 运行，容器浏览器无法直接弹到 Windows 桌面或其它宿主机桌面。Windows 本机可执行 <code>scripts\start-docker.ps1 -Login</code>；Linux/NAS 可执行 <code>scripts/start-docker.sh --login</code>，脚本会临时开启带密码的 noVNC。登录完成后再次执行普通启动命令关闭 noVNC。
   </div>
   {% endif %}
   {% include "login_status.html" %}
