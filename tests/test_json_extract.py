@@ -43,6 +43,18 @@ def test_no_json_raises():
         extract_json_object("抱歉，我无法判断")
 
 
+def test_repair_fallback_for_truncated_json():
+    pytest.importorskip("json_repair")
+    raw = '```json\n{"matched": true, "reason": "x"'
+    assert extract_json_object(raw) == {"matched": True, "reason": "x"}
+
+
+def test_repair_never_invents_object_from_prose():
+    # 即使装了 json-repair，纯文本也不应被强行解析成对象
+    with pytest.raises(ValueError):
+        extract_json_object("抱歉，我无法判断")
+
+
 def test_empty_raises():
     with pytest.raises(ValueError):
         extract_json_object("   ")
