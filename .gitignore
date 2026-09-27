@@ -16,3 +16,7 @@ video_script.md
 .DS_Store
 Thumbs.db
 video/
+
+# Personal Windows convenience launchers (not part of the portable project interface)
+/start-*.cmd
+/scripts/start-*.ps1

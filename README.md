@@ -1,448 +1,314 @@
-# 闲鱼盯价助手（second-eye）
+# second-eye：闲鱼盯价助手
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://www.python.org/)
 [![CI](https://github.com/Comui520/second-eye/actions/workflows/ci.yml/badge.svg)](https://github.com/Comui520/second-eye/actions/workflows/ci.yml)
 
-盯住闲鱼上你感兴趣的关键词：价格符合预期、品相达标、性价比高的商品会自动收录，并推送到你的微信或企业微信。
-AI 品相筛选、卖家信用、降价重推、本地开源——一个面向中文二手市场的个人盯价工具。
+一个面向中文二手市场的本地开源工具：按关键词和价格区间监控闲鱼商品，使用 LLM 进行需求匹配、品相分析和批量性价比判断，并通过多种通知渠道推送结果。
 
-> 本地单进程应用：FastAPI + SQLite + Playwright + LLM，一条命令启动，数据和 Cookie 只存在你自己电脑上。
+项目以 **Python + FastAPI + SQLite + Playwright** 为核心，不需要 Node.js/npm。Cookie、任务和分析结果默认保存在部署机器的本地数据库中。
 
-## 功能
+> 本项目仅供个人学习和研究使用。请遵守闲鱼及相关平台的服务条款，控制访问频率并自行承担账号使用风险。
 
-**核心能力**
+## 功能概览
 
-- **关键词盯价**：每个监控任务可设关键词、价格区间、排除词与品相要求，定时扫描闲鱼新上架商品
-- **三阶段 AI 筛选**：需求匹配（文本）→ 品相分析（看图，1-10 分）→ 本批横向性价比对比，标出「本批最优」
-- **降价重推**：价格变化触发重评，满意度提高才再次推送并标明「价格更新重推」，无变化不打扰
-- **卖家信用**：好评率、卖出件数、信用等级与评价标签（7 天缓存），风险分级随通知提示，只提示不拦截
-- **消息通知**：Server酱、企业微信群机器人、飞书机器人与 Gotify，可独立开关；站内可查全部推送记录
-- **本地安全**：一键登录抓 Cookie（免 F12，不保存密码），数据与 Cookie 只存本地 SQLite
+- 关键词、价格区间、排除词和品相要求监控
+- 需求匹配、图片品相分析、批量性价比判断
+- 降价重评估和重复通知抑制
+- 商品与卖家信息、风险提示、价格变化和通知历史
+- Server酱、企业微信机器人、飞书机器人、Gotify 等通知渠道
+- Web 设置页、任务队列、运行日志和 SQLite 持久化
+- 可选 Jev 类型化判断层：逐件评估、置信度裁决和低置信度回落
+- Docker 镜像、noVNC 登录模式和 GitHub Actions CI
 
-**细节能力**
+## 支持的平台与部署方式
 
-- 价格下限 + 排除词过滤超低价配件噪音；同名任务互不干扰（商品按 任务id + 外部id 去重）
-- 串行任务队列：同一时刻只跑一个任务，任务间间隔 5 分钟，运行超时后自动补跑
-- 更新重评估、多规格价格区间、连续 3 轮未见标记「已下架」
-- 任务/商品详情页：改参数、看运行统计、价格走势、通知历史，支持手动「重新分析」
-- 命中列表排序/筛选/加载更多、商品与卖家拉黑、控制台分步日志
-- 评分公式：需求 40 + 品相 30 + 性价比 20 + 卖家 10（视觉关闭自动切换为 需求 50 + 性价比 30 + 卖家 20，较首见降价有加成）
-- 视觉模型可选：未配置时跳过品相分析并注明；分析失败不拦截（宁多勿漏）
-
-## 快速开始
-
-项目是 Python/FastAPI 应用，不需要 Node.js/npm。仓库提供三个可直接点击的 Windows 启动脚本：
-
-```text
-start-conda.cmd   # Conda 环境
-start-uv.cmd      # uv 环境
-start-docker.cmd  # Docker 环境
-```
-
-它们会自动检查、创建或补齐项目环境，环境已经存在时会尽量复用。第一次运行需要下载依赖、Python 或 Chromium，耗时取决于网络；以后启动会快很多。
-
-> 现实限制：脚本可以自动配置 Python 依赖，但不能可靠地替你安装操作系统级运行时。Conda 脚本要求电脑已经安装 Miniconda/Anaconda；Docker 脚本要求已经安装并启动 Docker Desktop。若电脑什么都没有，推荐先双击 `start-uv.cmd`，它会尝试自动安装 uv 和 Python 3.11。
-
-### 三种启动方式怎么选
-
-| 启动脚本 | 适合谁 | 是否需要手动安装 | 登录浏览器 | 典型用途 |
+| 方式 | Windows | macOS | Linux / NAS | 推荐场景 |
 | --- | --- | --- | --- | --- |
-| `start-uv.cmd` | 大多数 Windows 用户 | 脚本尝试自动安装 uv；需要网络 | Windows 原生浏览器窗口 | 最推荐的本机方式 |
-| `start-conda.cmd` | 已经使用 Conda 的用户 | 需要先有 Miniconda/Anaconda | Windows 原生浏览器窗口 | 兼容原有 Conda 流程 |
-| `start-docker.cmd` | 不想配置 Python 的用户 | 需要 Docker Desktop | noVNC 网页中的容器浏览器 | 本机快速体验 |
+| Docker Compose | 支持 Docker Desktop | 支持 Docker Desktop | 支持 Docker Engine + Compose | 最可复现的部署方式 |
+| uv 本地运行 | 支持 | 支持 | 支持 | 开发、调试、需要本机浏览器登录 |
+| Conda 本地运行 | 支持 | 理论上支持 | 理论上支持 | 已经使用 Conda 的环境 |
 
-三种方式不要同时运行：它们默认共享 `data/goodprice.db`，同时启动可能导致任务重复执行或通知重复发送。
+Docker 是推荐的通用部署方式：应用、Python 依赖、Chromium 和 noVNC 都封装在镜像中，Windows、macOS、Linux 和 NAS 使用同一套 Compose 配置。
 
-### 方式一：uv（本机推荐）
+本仓库不再把 Windows 双击启动器作为公共安装接口。仓库中曾经使用的 `.cmd`/PowerShell 启动器只适合作者自己的 Windows 工作流，已从 Git 追踪中排除；它们不会影响 Docker Compose 和跨平台手动启动方式。
 
-直接双击：
+## 快速开始：Docker Compose
 
-```text
-start-uv.cmd
-```
+### 1. 获取代码并创建配置
 
-脚本会自动：
+~~~bash
+git clone https://github.com/Comui520/second-eye.git
+cd second-eye
+cp .env.example .env
+~~~
 
-1. 检查 uv；找不到时尝试从官方安装脚本安装；
-2. 使用 `pyproject.toml` 和 `uv.lock` 创建 `.venv`；
-3. 安装 Python 依赖和 Playwright Chromium；
-4. 启动应用。
+Windows PowerShell 可以使用：
 
-也可以在 PowerShell 中运行：
+~~~powershell
+Copy-Item .env.example .env
+~~~
 
-```powershell
-.\scripts\start-uv.ps1
-```
+编辑 .env，至少配置一个 OpenAI 兼容的文本模型。也可以先保持空配置，启动后在 Web 设置页填写。
 
-启动后打开 <http://127.0.0.1:8000>。在「设置 → 一键登录」时会打开 Windows 本机浏览器窗口。
+### 2. 构建并启动
 
-如果自动安装 uv 被网络或安全软件拦截，可以手动安装 uv 后再次双击脚本；脚本会复用已经存在的环境。
+~~~bash
+docker compose up -d --build
+~~~
 
-### 方式二：Conda（兼容原有流程）
+打开：
 
-确认已经安装 Miniconda 或 Anaconda 后，直接双击：
+~~~text
+http://127.0.0.1:18000
+~~~
 
-```text
-start-conda.cmd
-```
+查看日志和停止服务：
 
-脚本会自动：
+~~~bash
+docker compose logs -f second-eye
+docker compose down
+~~~
 
-1. 查找 Conda（包括常见的用户目录安装位置）；
-2. 如果没有 `good-price` 环境，按 `environment.yml` 创建；
-3. 如果环境已存在，补齐当前项目依赖；
-4. 安装或检查 Playwright Chromium；
-5. 启动应用。
+首次构建会下载 Python 依赖、Chromium、Debian 系统包和 noVNC 组件，耗时取决于网络；后续构建会复用 Docker 缓存。
 
-也可以运行：
+### 3. Docker 登录
 
-```powershell
-.\scripts\start-conda.ps1
-```
+Docker 内的 Chromium 不会弹出到宿主机桌面，需要通过 noVNC 网页完成一次登录。默认 noVNC 关闭，避免把远程桌面长期暴露出去。
 
-Conda 没有安装时，脚本会明确提示原因；此时可以改用 `start-uv.cmd`，不需要为了本项目额外安装 Conda。
+Linux/macOS/NAS 可以使用仓库提供的跨平台辅助脚本：
 
-### 方式三：Docker（不需要配置 Python）
+~~~bash
+./scripts/start-docker.sh --login
+~~~
 
-#### Windows 本机快速使用
+脚本会生成 data/.novnc-password，启动容器并提示访问地址。默认访问：
 
-直接双击：
-
-```text
-start-docker.cmd
-```
-
-这个 Windows 快捷脚本默认使用“登录模式”，会自动：
-
-- 检查 Docker Desktop 和 Docker Compose；
-- 创建 `.env`、`data/`；
-- 构建并启动镜像；
-- 自动生成 noVNC 密码；
-- 打开设置页和 noVNC 页面。
-
-在 noVNC 页面中完成闲鱼登录。登录地址是：
-
-```text
+~~~text
 http://127.0.0.1:16080/vnc.html
-```
+~~~
 
-Docker 里的 Chromium **不会变成 Windows 桌面上的原生弹窗**；它显示在 noVNC 网页里的虚拟桌面中。登录完成后，执行普通启动关闭 noVNC：
+完成登录后，关闭 noVNC 并保持应用运行：
 
-```powershell
-.\scripts\start-docker.ps1
-```
-
-普通访问地址为 <http://127.0.0.1:18000>。
-
-如果希望手动控制：
-
-```powershell
-.\scripts\start-docker.ps1 -Login    # 临时开启 noVNC 并打开登录页面
-.\scripts\start-docker.ps1           # 普通运行，关闭 noVNC
-.\scripts\start-docker.ps1 -NoBuild # 不重新构建镜像，直接启动
-```
-
-#### NAS 或 Linux 长期运行
-
-Docker 长期运行时默认关闭 noVNC。先在 `.env` 设置端口绑定地址，例如 NAS 局域网 IP：
-
-```env
-BIND_ADDRESS=192.168.1.20
-```
-
-然后运行：
-
-```bash
+~~~bash
 ./scripts/start-docker.sh
-```
+~~~
+
+Windows Docker Desktop 可以直接使用 Compose 完成相同操作：
+
+~~~powershell
+New-Item -ItemType Directory -Force data | Out-Null
+Set-Content -Path data/.novnc-password -Value "请替换为至少 8 位密码" -NoNewline
+$env:ENABLE_NOVNC = "1"
+docker compose up -d --build
+Start-Process http://127.0.0.1:16080/vnc.html
+~~~
+
+登录完成后执行：
+
+~~~powershell
+$env:ENABLE_NOVNC = "0"
+docker compose up -d
+~~~
+
+noVNC 只建议在登录期间开启，不要直接暴露到公网。应用本身没有内置用户认证；如果需要局域网或公网访问，请在反向代理、VPN 或访问控制层增加认证。
+
+### 4. NAS / Linux 长期运行
+
+在 NAS 或 Linux 主机上，将 .env 中的 BIND_ADDRESS 设置为主机的局域网地址，例如：
+
+~~~env
+BIND_ADDRESS=192.168.1.20
+~~~
+
+然后启动：
+
+~~~bash
+./scripts/start-docker.sh
+~~~
 
 访问：
 
-```text
+~~~text
 http://192.168.1.20:18000
-```
+~~~
 
-需要重新登录时临时执行：
+需要重新登录时临时执行 ./scripts/start-docker.sh --login，完成登录后再次执行不带 --login 的命令关闭 noVNC。
 
-```bash
-./scripts/start-docker.sh --login
-```
+不要把 BIND_ADDRESS 设置为 0.0.0.0 后直接映射到公网。默认应用和 noVNC 都没有公网安全防护。
 
-然后在局域网电脑打开：
+## 使用预构建 GHCR 镜像
 
-```text
-http://192.168.1.20:16080/vnc.html
-```
+正式版本会由 GitHub Actions 构建并推送到 GHCR。当前版本示例：
 
-登录完成后再次执行不带 `--login` 的命令，关闭 noVNC。不要把 noVNC 直接暴露到公网；如果通过反向代理发布，Web 页面和 noVNC 都应配置认证。
+~~~bash
+docker pull ghcr.io/comui520/second-eye:0.1.0
+~~~
 
-> 本机 Docker 和 NAS Docker 使用同一份代码、同一个 `compose.yml`，区别只在启动脚本、`BIND_ADDRESS` 和 noVNC 是否临时开启，不需要维护不同 Git 分支。
+如果希望 Compose 使用预构建镜像，可以在启动前设置镜像变量：
 
-### 首次启动后的三步
+~~~bash
+SECOND_EYE_IMAGE=ghcr.io/comui520/second-eye:0.1.0 docker compose pull second-eye
+SECOND_EYE_IMAGE=ghcr.io/comui520/second-eye:0.1.0 docker compose up -d --no-build
+~~~
 
-1. 浏览器打开本工具：uv/Conda 是 <http://127.0.0.1:8000>，Docker 是 <http://127.0.0.1:18000>；
-2. 进入「设置 → 一键登录」，按当前启动方式完成登录；
-3. 在「设置 → 大模型」填写 OpenAI 兼容模型地址和 API Key，再到「监控任务」新建任务。
+PowerShell：
 
-### 常见意外情况
+~~~powershell
+$env:SECOND_EYE_IMAGE = "ghcr.io/comui520/second-eye:0.1.0"
+docker compose pull second-eye
+docker compose up -d --no-build
+~~~
 
-#### 1. 双击后窗口一闪而过
+如果 GHCR 包是私有的，先执行 docker login ghcr.io。镜像标签使用不带 v 的版本号，例如 Git Tag v0.1.0 对应镜像标签 0.1.0。
 
-优先从项目目录打开 PowerShell 执行对应脚本，这样可以看到完整错误：
+## 本地运行：uv
 
-```powershell
-.\scripts\start-uv.ps1
-.\scripts\start-conda.ps1
-.\scripts\start-docker.ps1 -Login
-```
+本地运行适合开发和调试，也可以直接使用宿主机浏览器完成登录。需要 Python 3.11 或更高版本，以及 uv。
 
-仓库根目录的 `.cmd` 启动器已经使用 `ExecutionPolicy Bypass`，通常不需要修改 PowerShell 全局执行策略。
+~~~bash
+uv sync --extra dev
+uv run python -m playwright install chromium
+uv run python -m goodprice
+~~~
 
-#### 2. uv、Conda 或 Docker 找不到
+访问：
 
-- `start-uv.cmd` 会尝试自动安装 uv；如果下载被代理或安全软件拦截，请手动安装 uv 后重试。
-- `start-conda.cmd` 不会静默下载并安装 Conda；请安装 Miniconda/Anaconda，或者直接改用 `start-uv.cmd`。
-- `start-docker.cmd` 不能替你安装 Docker Desktop；请先安装 Docker Desktop 并等待 Docker Engine 显示为 Running。
+~~~text
+http://127.0.0.1:8000
+~~~
 
-#### 3. 第一次启动很慢
+测试：
 
-这是正常的：需要下载 Python 依赖、Playwright Chromium，Docker 还需要构建镜像。后续启动会复用 `.venv`、Conda 环境、Docker 层和浏览器缓存。
+~~~bash
+uv run pytest -q
+~~~
 
-#### 4. 端口被占用
+如果系统尚未安装 uv，可以按 uv 官方文档安装；本仓库不静默安装系统级运行时。Windows、macOS、Linux 的命令行用法基本一致，但不同系统的浏览器、权限和代理配置可能不同。
 
-默认端口如下：
+## 本地运行：Conda
 
-| 用途 | 本地 uv/Conda | Docker |
-| --- | ---: | ---: |
-| Web | `8000` | `18000` |
-| noVNC | 不使用 | `16080` |
-| Gotify | 不使用 | `18080` |
+已有 Miniconda/Anaconda 的用户可以使用：
 
-如果端口被占用，可以先停止旧进程/容器；Docker 端口也可以在 `compose.yml` 中修改。不要让本地进程和 Docker 同时使用同一份 `data/`。
+~~~bash
+conda env create -f environment.yml
+conda activate good-price
+python -m playwright install chromium
+python -m goodprice
+~~~
 
-#### 5. Docker 登录页没有原生弹窗
+已有环境需要同步依赖时：
 
-这是预期行为，不是故障。Docker 中的 Chromium 不能弹到 Windows 桌面。请双击 `start-docker.cmd`，在自动打开的 noVNC 页面中操作容器浏览器；如果必须使用原生浏览器窗口，请使用 `start-uv.cmd` 或 `start-conda.cmd`。
+~~~bash
+conda activate good-price
+python -m pip install -e ".[dev]"
+python -m playwright install chromium
+python -m goodprice
+~~~
 
-#### 6. noVNC 打不开或密码不对
+Conda 不是运行本项目的必需条件；新用户优先选择 Docker 或 uv。
 
-确认使用的是登录模式：
+## 配置
 
-```powershell
-.\scripts\start-docker.ps1 -Login
-```
+配置文件：
 
-脚本会显示 noVNC 密码并写入 `data/.novnc-password`。如果容器启动失败，查看日志：
+~~~text
+.env.example   配置模板
+.env           本地配置，不要提交
+~~~
 
-```powershell
-docker compose logs --tail=100 second-eye
-```
+主要配置项：
 
-登录完成后执行不带 `-Login` 的普通启动，关闭 noVNC。不要把 noVNC 端口直接暴露到公网。
+| 配置项 | 作用 |
+| --- | --- |
+| XIANYU_COOKIE | 闲鱼登录 Cookie；也可以在设置页使用一键登录 |
+| LLM_BASE_URL / LLM_API_KEY / LLM_MODEL | OpenAI 兼容文本模型 |
+| VISION_BASE_URL / VISION_API_KEY / VISION_MODEL | 图片品相分析模型；不配置时跳过品相分析 |
+| SERVERCHAN_SENDKEY | Server酱通知 |
+| WECOM_WEBHOOK | 企业微信群机器人 |
+| FEISHU_WEBHOOK / FEISHU_SECRET | 飞书机器人及可选签名密钥 |
+| GOTIFY_URL / GOTIFY_TOKEN | Gotify 通知 |
+| JEV_ENABLED | 启用实验性的 Jev 判断层 |
+| JEV_BACKEND / JEV_API_KEY | Jev 后端和可选官方服务密钥 |
+| PROXY | Docker 构建及运行时使用的 HTTP 代理 |
+| BIND_ADDRESS | Docker 端口绑定地址，默认 127.0.0.1 |
+| DEFAULT_CRAWL_INTERVAL_MINUTES | 默认抓取间隔 |
+| DEFAULT_CRAWL_JITTER_MINUTES | 请求随机抖动 |
 
-#### 7. Docker 构建出现 502、超时或 Chromium 下载失败
+Web 设置页中的配置会保存到数据库，并覆盖 .env 中的默认值。不要把 .env、Cookie、API Key 或 data/ 提交到仓库。
 
-通常是 Docker、Debian 软件源、PyPI 或 Playwright CDN 的临时网络问题。重新运行启动器即可；网络受限时在 `.env` 配置：
+## 数据与备份
 
-```env
-PROXY=http://127.0.0.1:7890
-```
+Docker 和本地运行都会在项目的 data/ 目录中保存 SQLite 数据库、Cookie、日志和 noVNC 密码文件。建议：
 
-#### 8. 页面能打开，但任务没有通知
+- 定期备份 data/goodprice.db；
+- 不要把 data/ 目录上传到公共仓库；
+- 不要把 noVNC 端口暴露到公网；
+- 迁移到 NAS 时同时迁移数据库和配置，并检查文件权限。
 
-启动脚本只负责运行环境，不会自动配置模型和通知服务。请在「设置」页面填写 LLM、视觉模型和通知渠道；没有有效 Cookie 时也无法正常抓取闲鱼。
+## 发版与分支
 
-### Docker / NAS 构建说明
+- main：日常开发和合并 Pull Request；
+- release：稳定版本准备和验证；
+- vX.Y.Z：正式 Git Tag 和 GitHub Release。
 
-项目提供单容器 Docker 部署方式，浏览器依赖只在镜像构建时安装，运行数据通过 `data/` 持久化。构建需要访问 PyPI、Debian 软件源和 Playwright 下载地址；网络受限时可在 `.env` 设置 `PROXY`。依赖和浏览器层会被 Docker 缓存，后续只修改源码通常不会重复下载浏览器。
+推送版本 Tag 后，GitHub Actions 会运行测试、构建 Docker 镜像并推送到 GHCR：
 
-手动构建命令：
-
-```bash
-docker compose up -d --build
-```
-
-如果构建过程中出现 Debian 软件源 `502 Bad Gateway`、Playwright CDN 超时等错误，通常是临时网络问题，重新执行构建即可；必要时配置代理。
-
-### 预构建镜像与发版
-
-GitHub Actions 会在每个 PR 以及 `main`/`release` 分支推送时运行测试和 Docker 镜像构建校验。正式版本通过 `release` 分支上的语义化版本 Tag 发布：
-
-```bash
+~~~bash
 git switch release
 git pull --ff-only origin release
-git tag v0.1.0
-git push origin v0.1.0
-```
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin v0.1.1
+~~~
 
-推送 `vX.Y.Z` Tag 后，Actions 会再次运行测试，并将镜像推送到 GHCR：
-
-```bash
-docker pull ghcr.io/comui520/second-eye:0.1.0
-```
-
-Git Tag 使用 `v0.1.0` 命名，而 Docker 镜像版本标签使用 `0.1.0`（不带 `v`）。只有版本 Tag 会更新 `latest`；直接推送 `release` 分支只做测试和 Docker 构建校验，不会覆盖稳定镜像。GHCR 包可能默认是私有的；如果拉取时提示无权限，请先执行 `docker login ghcr.io`，或在仓库的 Packages 设置中将其改为公开。
-
-分支职责：`main` 用于日常开发和合并 PR，`release` 只接收准备发布的稳定提交，`vX.Y.Z` 是可复现的正式版本。日常功能开发不需要维护多套代码分支。
-## 大模型配置
-
-阶段一「需求匹配」使用现有 LLM 配置；阶段二「品相分析」需要视觉模型。推荐全部使用智谱免费模型：
-
-- **文本（需求匹配）：GLM-4.7-Flash**（免费）：Base URL `https://open.bigmodel.cn/api/paas/v4`，模型 ID `glm-4.7-flash`
-- **视觉（品相分析）：GLM-4.6V-Flash**（免费）：模型 ID `glm-4.6v-flash`，支持图片与视频输入；高峰期可能限流，工具会自动重试。备选 `glm-4.1v-thinking-flash`（免费，响应更稳定）
-- 模型 ID 必须小写；其他视觉模型我们未实际使用过，暂不做推荐
-
-未配置视觉模型或关闭「视觉品相分析」开关时，品相分析会被跳过并在通知中注明，评分自动切换为「需求 50 + 性价比 30 + 卖家 20」。
-
-## Jev 判断层（实验性）
-
-设置页可开启「Jev 类型化判断」：需求匹配与批量性价比从「整批一次 JSON 调用」改为**逐件独立评估**——
-
-- 每件商品独立判断并附带置信度，单件解析失败只损失该件，不再拖垮整批
-- 「本批最优」按评分与置信度共同选出
-- 置信度低于阈值（默认 0.85，`JEV_AUTO_THRESHOLD` 可调）的判断自动回落到原模型路径，宁多勿漏
-- 关闭开关即完全回到原模型路径，无残留
-
-两种后端可选（设置页切换）：
-
-| 后端 | 依赖 | 成本 | 说明 |
-| --- | --- | --- | --- |
-| `adapter`（默认） | 无 | 0，复用现有 `LLM_*` 配置（推荐智谱免费模型） | 内置类型化判断：约束模型输出带概率的结构化 JSON |
-| `typesafe` | `pip install ".[jev]"`（官方 typesafe-sdk） | 官方云服务计费 | 直连 `api.typesafe.ai` 官方 Jev 模型，需在 [console.typesafe.ai/keys](https://console.typesafe.ai/keys) 获取 API Key |
-
-```env
-JEV_ENABLED=true
-JEV_BACKEND=typesafe
-JEV_API_KEY=tsk_live_xxx
-```
-
-两种后端行为一致（逐件评估 + 置信度裁决 + 自动回落），切换后端无需改业务代码。
-
-## 获取闲鱼 Cookie
-
-**推荐方式：一键登录（免 F12）**
-
-1. 本地 uv/Conda 启动：点击「设置 → 一键登录」，会打开本机浏览器窗口。
-2. Docker 本机或 NAS 启动：先用 `start-docker.ps1 -Login` 或 `start-docker.sh --login` 临时开启 noVNC，再打开当前主机的 `:16080/vnc.html`。
-3. 像正常上网一样扫码或用账号密码登录闲鱼（密码只输入在淘宝/闲鱼官方登录页，程序不保存密码）。
-4. 登录成功后程序自动抓取 Cookie 并保存；登录态保存在 `data/`，下次可能免登录。
-5. 登录完成后恢复普通启动，关闭 noVNC。
-
-**手动方式**
-
-1. 用浏览器（建议 Chrome/Edge）登录 <https://www.goofish.com>
-2. 按 `F12` 打开开发者工具 → Network（网络）面板
-3. 刷新页面，任选一个请求，在 Headers 里找到 `Cookie` 字段，整段复制
-4. 粘贴到本工具的「设置」页面（或写入 `.env` 的 `XIANYU_COOKIE`）
-
-> Cookie 会过期，过期后工具会记录错误提示，重新登录即可。
-
-> Docker 部署的 noVNC 默认关闭；登录脚本会在本地生成 `data/.novnc-password`，且端口绑定由 `BIND_ADDRESS` 控制。登录完成后应关闭 noVNC。
-
-## 企业微信群机器人（推荐，免费）
-
-应用消息需要可信域名/回调 URL，家庭用户配置困难；群机器人只需一个 Webhook，无需域名和 IP 白名单：
-
-1. 在企业微信里建一个群（自己拉自己即可），群设置 → 群机器人 → 添加机器人
-2. 复制机器人 Webhook 地址，填入本工具「设置」页 →「消息通知」→「群机器人 Webhook」，并确认开关已勾选
-3. 限制：每个机器人 20 条/分钟；消息发到企业微信群，手机装企业微信 App 即可收到通知
-
-## Gotify（推荐自托管）
-
-Docker Compose 会同时启动 Gotify 服务，默认地址为 <http://127.0.0.1:18080>。首次登录使用 `admin` / `admin`，登录后请立即修改密码。
-
-1. 打开 Gotify Web 页面，进入 `Applications`
-2. 创建一个应用并复制 Application Token
-3. 在 second-eye「设置 → 消息通知」中填入 Gotify 地址、Token，并打开 Gotify 开关
-
-容器内部地址填写 `http://gotify`；Gotify 管理页面默认只绑定宿主机 `127.0.0.1:18080`。如需从其它设备访问，应通过带认证的反向代理发布，或在确认网络边界后自行修改 Compose 端口绑定。Gotify 数据保存在独立的 Docker Volume 中。
-
-## 飞书机器人
-
-飞书自定义机器人使用 Webhook，支持文本消息和签名校验。将机器人 Webhook 与可选签名密钥填入「设置 → 消息通知」即可。Webhook 属于敏感凭据，请勿提交到 Git 或公开分享。
-
-## Codex 中转
-
-如果使用 OpenAI Responses API 兼容的 Codex 中转，可配置：
-
-```env
-LLM_BASE_URL=http://192.168.x.x:15722/v1
-LLM_API_KEY=PROXY_MANAGED
-LLM_MODEL=gpt-5.6-luna
-LLM_API_FORMAT=responses
-```
-
-视觉模型仍需单独配置；Codex 文本模型不作为视觉模型使用。
-
-## 卖家信用/评价
-
-- 数据来源：商品详情页卖家区块（好评率、卖出件数、信用等级）+ 卖家主页「信用及评价」标签（好评数、评价标签统计）
-- 缓存：每个卖家 7 天内只抓一次，避免频繁请求
-- 风险分级：好评率 ≥98% 或「信用极好」→ 低；≥90% → 中；否则高；数据不足 → 未知
-- 策略：风险只出现在通知和页面徽标中（绿/黄/红），**不会拦截通知**
-
-## 配置说明
-
-所有配置都可以在 Web 界面的「设置」页修改，并持久化到数据库；`.env` 中的值作为默认值。
-
-| 配置项 | 说明 |
-| --- | --- |
-| `XIANYU_COOKIE` | 闲鱼登录 Cookie（推荐用「一键登录」获取） |
-| `LLM_BASE_URL` | OpenAI 兼容服务地址，如 `https://open.bigmodel.cn/api/paas/v4`（智谱） |
-| `LLM_API_KEY` | 大模型 API Key |
-| `LLM_MODEL` | 模型名，阶段一需求匹配使用（推荐智谱 `glm-4.7-flash`，免费，小写） |
-| `LLM_API_FORMAT` | `chat_completions` 或 `responses`；Codex bridge 使用 `responses` |
-| `VISION_BASE_URL` / `VISION_API_KEY` / `VISION_MODEL` | 阶段二视觉模型（推荐智谱 `glm-4.6v-flash` / `glm-4.1v-thinking-flash`，免费，小写）；不填则跳过品相分析 |
-| `SERVERCHAN_SENDKEY` | Server酱 SendKey（<https://sct.ftqq.com>），留空则只写日志 |
-| `WECOM_WEBHOOK` | 企业微信群机器人 Webhook（推荐，无需域名/IP） |
-| `FEISHU_WEBHOOK` / `FEISHU_SECRET` | 飞书自定义机器人 Webhook 与可选签名密钥 |
-| `GOTIFY_URL` / `GOTIFY_TOKEN` / `GOTIFY_PRIORITY` | Gotify 服务地址、Application Token 和消息优先级 |
-| `SERVERCHAN_ENABLED` / `WECOM_ROBOT_ENABLED` / `FEISHU_ENABLED` / `GOTIFY_ENABLED` / `VISION_ENABLED` | 通知和视觉分析独立开关 |
-| `JEV_ENABLED` / `JEV_AUTO_THRESHOLD` | Jev 判断层（实验性）开关与置信度阈值（默认 0.85）；开启后需求匹配与性价比逐件独立评估，低置信回落原模型 |
-| `JEV_BACKEND` / `JEV_API_KEY` | Jev 后端：`adapter`（默认，复用 LLM 配置）或 `typesafe`（官方 Jev 云服务，需 API Key） |
-| `PROXY` | 可选 HTTP 代理，如 `http://127.0.0.1:7890` |
-| `BIND_ADDRESS` | Docker 端口绑定地址；本机默认 `127.0.0.1`，NAS 局域网访问可填写 NAS 局域网 IP |
-| `DEFAULT_CRAWL_INTERVAL_MINUTES` | 默认抓取间隔（分钟） |
-| `DEFAULT_CRAWL_JITTER_MINUTES` | 请求随机抖动（分钟），降低风控概率 |
-
-## 常见问题
-
-- **Cookie 过期了怎么办？** 设置页重新「一键登录」即可；任务出错时黑窗和任务详情页会写明原因。
-- **为什么有些商品没有品相分/性价比？** 品相分析需要视觉模型且有有效商品图；失败会「宁多勿漏」放行，详情页会注明原因，可点「重新分析」补跑。
-- **免费视觉模型限流怎么办？** `glm-4.6v-flash` 高峰期可能返回 429，工具会自动重试；仍失败可临时切换 `glm-4.1v-thinking-flash`。
-- **两个任务关键词一样会冲突吗？** 不会，商品按任务独立记录与通知，互不干扰。
-- **搜索总超时或结果不对？** 先检查 Cookie 是否过期、代理是否可用；错误信息会写清楚是登录失效、页面改版还是网络问题。
+普通 PR 和 main/release 推送会执行测试和 Docker 构建校验，但不会覆盖正式镜像。
 
 ## 开发与测试
 
-```bash
-conda run -n good-price pytest -v
-```
+使用 uv：
 
-## 架构
+~~~bash
+uv sync --extra dev
+uv run pytest -q
+~~~
 
-单进程一体化：FastAPI 提供 Web 界面与 JSON API，APScheduler + 串行任务队列调度抓取，SQLAlchemy + SQLite 持久化。
+使用 Conda：
 
-- `goodprice/crawler/`：平台适配器协议 + 闲鱼 Playwright 适配器 + HTML 解析 + 一键登录（选择器集中维护，平台改版只改适配器）
-- `goodprice/analysis/`：OpenAI 兼容 LLM 客户端与品相/性价比提示词
-- `goodprice/notify/`：通知通道协议（日志、Server酱、企业微信群机器人、飞书、Gotify）
-- `goodprice/services/`：设置服务（env 默认值 + 数据库覆盖）、任务服务、核心爬取流水线、串行任务队列
-- `goodprice/web/`：Jinja2 + HTMX + Tailwind（CDN）页面与路由
+~~~bash
+conda activate good-price
+python -m pytest -q
+~~~
 
-## 合规与免责声明
+Docker 构建校验：
 
-- 本工具仅供个人学习与研究使用，请遵守闲鱼及相关平台的服务条款。
-- 使用自己账号的登录态、控制抓取频率（默认带随机抖动），风险自负。
-- 本项目不存储、不上传任何第三方平台的账号密码；Cookie 仅保存在本地数据库中。
-- 若因使用本工具产生账号限制或其它问题，作者不承担任何责任。
+~~~bash
+docker compose config --quiet
+docker compose build second-eye
+~~~
+
+## 项目结构
+
+~~~text
+goodprice/crawler/       闲鱼适配器、Playwright 登录与解析
+goodprice/analysis/      LLM、视觉分析和 Jev 判断层
+goodprice/notify/        通知渠道
+goodprice/services/      设置、任务、抓取流水线和队列
+goodprice/web/           Web 路由和模板
+tests/                   自动化测试
+scripts/start-docker.sh  Linux/macOS/NAS 的 Docker 辅助脚本
+.github/workflows/       CI 与 GHCR 发版流程
+~~~
+
+## 免责声明
+
+- 本工具不保存第三方平台账号密码，只保存用户主动提供或登录产生的 Cookie。
+- 请遵守目标平台服务条款，合理控制请求频率。
+- 因使用本工具导致的账号限制、数据丢失或其他问题由使用者自行承担。
 
 ## 路线图
 
-- [ ] 转转等平台适配器
-- [ ] 单品盯价（收藏链接盯降价/下架）
-- [ ] 企业微信智能机器人 WebSocket 通知
-- [ ] 价格走势图表
-- [ ] 通知图片上传与图文消息
-- [ ] 商品视频解析（`glm-4.6v-flash` 支持视频输入，可作为后续增强）
-
+- [ ] 更多二手平台适配器
+- [ ] 收藏链接盯降价 / 下架
+- [ ] 更丰富的价格走势图表
+- [ ] 通知图片和图文消息
+- [ ] 商品视频解析

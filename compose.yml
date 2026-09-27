@@ -5,7 +5,7 @@ services:
       args:
         HTTP_PROXY: ${PROXY:-}
         HTTPS_PROXY: ${PROXY:-}
-    image: second-eye:local
+    image: ${SECOND_EYE_IMAGE:-second-eye:local}
     container_name: second-eye
     restart: unless-stopped
     env_file:
