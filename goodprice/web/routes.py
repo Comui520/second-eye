@@ -718,6 +718,10 @@ def save_settings(
     gotify_priority: int = Form(5),
     gotify_enabled: Optional[int] = Form(None),
     vision_enabled: Optional[int] = Form(None),
+    jev_enabled: Optional[int] = Form(None),
+    jev_auto_threshold: float = Form(0.85),
+    jev_backend: str = Form("adapter"),
+    jev_api_key: str = Form(""),
 ):
     _, settings_service = _services(request)
     values = {
@@ -745,6 +749,10 @@ def save_settings(
         "gotify_priority": str(gotify_priority),
         "gotify_enabled": "1" if gotify_enabled else "0",
         "vision_enabled": "1" if vision_enabled else "0",
+        "jev_enabled": "1" if jev_enabled else "0",
+        "jev_auto_threshold": str(jev_auto_threshold),
+        "jev_backend": jev_backend if jev_backend in ("adapter", "typesafe") else "adapter",
+        "jev_api_key": jev_api_key,
     }
     for key in (
         "llm_api_key",
@@ -754,6 +762,7 @@ def save_settings(
         "feishu_webhook",
         "feishu_secret",
         "gotify_token",
+        "jev_api_key",
     ):
         if values.get(key) == "":
             values.pop(key)  # 留空 = 保持原值
@@ -803,6 +812,185 @@ def test_notification(request: Request, channel: str):
     return RedirectResponse(
         "/settings?" + urlencode({"toast": f"{channel} 测试发送成功"}), status_code=303
     )
+
+
+def _safe_test_url(raw: str) -> str:
+    """校验「测试连接」的目标地址：仅允许 http/https，阻断云元数据与链路本地地址。
+
+    本地回环与私有网段予以放行，因为本地/局域网 LLM 与中转服务是本项目的核心使用场景；
+    这里只拦截 SSRF 常见的元数据服务与链路本地/保留地址，并保持超时与不跟随重定向。
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    parts = urlsplit(value)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("仅支持 http/https 地址")
+    host = parts.hostname
+    if not host:
+        raise ValueError("地址缺少主机名")
+    if host.lower() in {"metadata.google.internal", "metadata", "instance-data"}:
+        raise ValueError("禁止访问云元数据地址")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        infos = []
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            raise ValueError("禁止访问链路本地或保留地址")
+    return value
+
+
+@router.post("/settings/test-llm")
+async def test_llm_endpoint(request: Request):
+    import time
+    from fastapi.responses import JSONResponse
+    from goodprice.analysis.llm import LLMClient
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    settings = request.app.state.settings_service.get()
+
+    try:
+        base_url = _safe_test_url(body.get("base_url") or settings.llm_base_url or "")
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "msg": f"地址不合法：{exc}"}, status_code=200)
+    api_key = (body.get("api_key") or settings.llm_api_key or "").strip()
+    model = (body.get("model") or settings.llm_model or "").strip()
+    api_format = (body.get("api_format") or settings.llm_api_format or "chat_completions").strip()
+
+    if not base_url:
+        return JSONResponse({"ok": False, "msg": "LLM Base URL 未配置"}, status_code=200)
+
+    t0 = time.time()
+    try:
+        client = LLMClient(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            api_format=api_format,
+            timeout=10.0,
+            retry_delay=0,
+        )
+        payload = {"messages": [{"role": "user", "content": "hello"}], "model": model}
+        if api_format == "responses":
+            client._complete_responses(payload, parser=lambda s: s)
+        else:
+            client._complete(payload, parser=lambda s: s)
+        ms = int((time.time() - t0) * 1000)
+        return JSONResponse({"ok": True, "msg": f"连接成功！耗时 {ms}ms"})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "msg": f"连接失败: {str(exc)[:120]}"}, status_code=200)
+
+
+@router.post("/settings/test-vision")
+async def test_vision_endpoint(request: Request):
+    import time
+    from fastapi.responses import JSONResponse
+    from goodprice.analysis.llm import LLMClient
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    settings = request.app.state.settings_service.get()
+
+    try:
+        base_url = _safe_test_url(body.get("base_url") or settings.vision_base_url or "")
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "msg": f"地址不合法：{exc}"}, status_code=200)
+    api_key = (body.get("api_key") or settings.vision_api_key or "").strip()
+    model = (body.get("model") or settings.vision_model or "").strip()
+    api_format = (body.get("api_format") or settings.vision_api_format or "chat_completions").strip()
+
+    if not base_url:
+        return JSONResponse({"ok": False, "msg": "Vision Base URL 未配置"}, status_code=200)
+
+    t0 = time.time()
+    try:
+        client = LLMClient(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            api_format=api_format,
+            timeout=10.0,
+            retry_delay=0,
+        )
+        payload = {"messages": [{"role": "user", "content": "hello"}], "model": model}
+        if api_format == "responses":
+            client._complete_responses(payload, parser=lambda s: s)
+        else:
+            client._complete(payload, parser=lambda s: s)
+        ms = int((time.time() - t0) * 1000)
+        return JSONResponse({"ok": True, "msg": f"视觉模型连通成功！耗时 {ms}ms"})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "msg": f"视觉连接失败: {str(exc)[:120]}"}, status_code=200)
+
+
+@router.post("/settings/test-jev")
+async def test_jev_endpoint(request: Request):
+    import time
+    from fastapi.responses import JSONResponse
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    settings = request.app.state.settings_service.get()
+
+    backend = (body.get("backend") or settings.jev_backend or "adapter").strip()
+    api_key = (body.get("api_key") or settings.jev_api_key or "").strip()
+
+    t0 = time.time()
+    try:
+        if backend == "typesafe":
+            if not api_key:
+                return JSONResponse({"ok": False, "msg": "TypeSafe API Key 未配置"}, status_code=200)
+            from goodprice.analysis.jev_typesafe import TypeSafeJudger
+
+            judger = TypeSafeJudger(api_key=api_key, auto_threshold=0.85)
+            verdict = judger.analyze_requirement(
+                title="测试商品", description="成色完好", requirement="完好"
+            )
+            ms = int((time.time() - t0) * 1000)
+            return JSONResponse({
+                "ok": True,
+                "msg": f"TypeSafe 官方云连接成功！置信度 {verdict.confidence:.2f} (耗时 {ms}ms)",
+            })
+        else:
+            # adapter 复用 LLM
+            from goodprice.analysis.judge import JevJudger
+            from goodprice.analysis.llm import LLMClient
+
+            if not settings.llm_base_url:
+                return JSONResponse({"ok": False, "msg": "主文本 LLM 未配置"}, status_code=200)
+            llm = LLMClient(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key,
+                model=settings.llm_model,
+                api_format=settings.llm_api_format,
+                timeout=10.0,
+                retry_delay=0,
+            )
+            judger = JevJudger(llm=llm, auto_threshold=0.85)
+            res = judger.analyze_requirement(
+                title="测试商品", description="成色完好", requirement="完好"
+            )
+            ms = int((time.time() - t0) * 1000)
+            return JSONResponse({
+                "ok": True,
+                "msg": f"Adapter 后端连通成功！置信度 {res.confidence:.2f} (耗时 {ms}ms)",
+            })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "msg": f"Jev 测试失败: {str(exc)[:120]}"}, status_code=200)
 
 
 @router.get("/api/tasks")

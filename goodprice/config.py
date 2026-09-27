@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     runtime_mode: str = "local"
     enable_novnc: bool = False
     novnc_password_file: str = "/app/data/.novnc-password"
+    jev_enabled: bool = False
+    jev_auto_threshold: float = 0.85
+    jev_backend: str = "adapter"
+    jev_api_key: str = ""
 
 
 @lru_cache

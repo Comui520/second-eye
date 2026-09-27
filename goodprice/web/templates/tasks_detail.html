@@ -52,8 +52,8 @@
       <input name="name" value="{{ task.name }}" class="w-full border rounded px-3 py-2">
     </div>
     <div class="md:col-span-2">
-      <label class="block text-sm text-gray-600 mb-1">品相要求:</label>
-      <input name="condition_requirement" value="{{ task.condition_requirement }}" placeholder="如 屏幕完好、电池健康" class="w-full border rounded px-3 py-2">
+       <label class="block text-sm text-gray-600 mb-1">需求:</label>
+       <textarea name="condition_requirement" rows="2" data-autosize placeholder="如 屏幕完好、电池健康" class="w-full border rounded px-3 py-2 resize-y">{{ task.condition_requirement }}</textarea>
     </div>
     <div class="md:col-span-3 flex items-center gap-6">
       <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" {{ 'checked' if task.enabled }}> 启用</label>

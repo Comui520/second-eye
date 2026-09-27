@@ -19,6 +19,7 @@ if [ "${ENABLE_NOVNC:-0}" = "1" ]; then
   chmod 600 /tmp/x11vnc.pass
   x11vnc -display "$DISPLAY" -localhost -forever -shared -rfbport 5900 \
     -rfbauth /tmp/x11vnc.pass >/tmp/x11vnc.log 2>&1 &
+  [ ! -e /usr/share/novnc/index.html ] && ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
   websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/websockify.log 2>&1 &
 fi
 

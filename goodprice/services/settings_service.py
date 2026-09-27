@@ -12,12 +12,14 @@ class RuntimeSettings:
         "default_crawl_jitter_minutes",
         "gotify_priority",
     }
+    _FLOAT_FIELDS = {"jev_auto_threshold"}
     _BOOL_FIELDS = {
         "serverchan_enabled",
         "wecom_robot_enabled",
         "feishu_enabled",
         "gotify_enabled",
         "vision_enabled",
+        "jev_enabled",
     }
 
     xianyu_cookie: str = ""
@@ -44,6 +46,10 @@ class RuntimeSettings:
     serverchan_enabled: bool = True
     wecom_robot_enabled: bool = True
     vision_enabled: bool = True
+    jev_enabled: bool = False
+    jev_auto_threshold: float = 0.85
+    jev_backend: str = "adapter"
+    jev_api_key: str = ""
 
     @classmethod
     def from_sources(cls, base: Settings, overrides: dict[str, str]) -> "RuntimeSettings":
@@ -53,6 +59,9 @@ class RuntimeSettings:
         for key in cls._INT_FIELDS:
             if values.get(key) not in ("", None):
                 values[key] = int(values[key])
+        for key in cls._FLOAT_FIELDS:
+            if values.get(key) not in ("", None):
+                values[key] = float(values[key])
         for key in cls._BOOL_FIELDS:
             if values.get(key) not in ("", None):
                 values[key] = str(values[key]).lower() in ("1", "true", "yes", "on")

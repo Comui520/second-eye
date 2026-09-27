@@ -51,6 +51,15 @@
   </main>
   <div id="toast" class="hidden fixed top-4 right-4 bg-green-700 text-white rounded shadow px-4 py-3"></div>
   <script>
+    document.querySelectorAll('[data-autosize]').forEach(function (el) {
+      var resize = function () {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+      };
+      el.addEventListener('input', resize);
+      resize();
+    });
+
     (function () {
       var params = new URLSearchParams(location.search);
       var msg = params.get('toast');
