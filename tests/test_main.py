@@ -10,8 +10,11 @@ def test_build_app_health(base_settings, session_factory):
     app = build_app(settings=base_settings, session_factory=session_factory, with_scheduler=False)
     with TestClient(app) as client:
         response = client.get("/api/stats")
+        health = client.get("/healthz")
     assert response.status_code == 200
     assert response.json() == {"tasks": 0, "enabled_tasks": 0, "listings": 0, "notified": 0}
+    assert health.status_code == 200
+    assert health.json() == {"status": "ok"}
 
 
 def test_main_entry_importable():

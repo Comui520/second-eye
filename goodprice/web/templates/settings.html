@@ -25,12 +25,17 @@
     <div class="bg-gray-50 rounded-lg p-4 border border-gray-100 flex flex-wrap items-center justify-between gap-3">
       <div>
         <div class="text-sm font-medium text-gray-800">一键扫码登录</div>
-        <div class="text-xs text-gray-500 mt-0.5">点击后将启动远程浏览器窗口，完成登录后自动保存凭证并生效。</div>
+        <div class="text-xs text-gray-500 mt-0.5">本地启动会打开浏览器窗口；Docker 请先用登录模式开启 noVNC。扫码或用账号密码登录后自动保存，若未自动识别可点「登录完成」按钮。</div>
       </div>
       <form method="post" action="/settings/login" class="inline">
         <button class="btn btn-green shadow-sm text-sm px-4 py-2">打开浏览器窗口一键登录</button>
       </form>
     </div>
+    {% if login_remote and not login_browser_accessible %}
+    <div class="bg-yellow-50 text-yellow-800 rounded px-3 py-2 text-sm mt-3 border border-yellow-200">
+      当前通过 Docker 运行，容器浏览器无法直接弹到 Windows 桌面或其它宿主机桌面。Windows 本机可执行 <code>scripts\start-docker.ps1 -Login</code>；Linux/NAS 可执行 <code>scripts/start-docker.sh --login</code>，脚本会临时开启带密码的 noVNC。登录完成后再次执行普通启动命令关闭 noVNC。
+    </div>
+    {% endif %}
     {% include "login_status.html" %}
   </div>
 
@@ -175,6 +180,7 @@
         </div>
         <p class="text-xs text-gray-400 mt-2">关闭视觉分析后，仅依据文字描述进行品相与需求评估。</p>
       </div>
+      <p class="text-xs text-gray-400 mt-3">免费推荐智谱 GLM（模型名必须小写）：文本 <code>glm-4.7-flash</code>、视觉 <code>glm-4.6v-flash</code>；Base URL <code>https://open.bigmodel.cn/api/paas/v4</code>。</p>
     </div>
 
     <!-- 卡片 3：Jev 独立判断层（实验性） -->

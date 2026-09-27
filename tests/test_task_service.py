@@ -49,3 +49,41 @@ def test_update_task(session_factory):
     assert updated.max_price == 500.0
     assert updated.condition_requirement == "屏幕完好"
     assert service.update_task(999, {"keyword": "x"}) is None
+
+
+def test_rejects_invalid_task_ranges(session_factory):
+    service = _service(session_factory)
+    for data in (
+        {"keyword": "   "},
+        {"keyword": "x", "min_price": 100, "max_price": 50},
+        {"keyword": "x", "min_condition_score": 11},
+        {"keyword": "x", "interval_minutes": 0},
+        {"keyword": "x", "max_price": float("inf")},
+    ):
+        try:
+            service.create_task(data)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected invalid data to fail: {data}")
+
+
+def test_normalizes_task_text_and_numbers(session_factory):
+    service = _service(session_factory)
+    task = service.create_task(
+        {
+            "keyword": "  camera  ",
+            "name": "  used  ",
+            "exclude_words": "  parts ",
+            "condition_requirement": " screen ",
+            "min_price": "10",
+            "max_price": "100",
+            "interval_minutes": "5",
+        }
+    )
+    assert task.keyword == "camera"
+    assert task.name == "used"
+    assert task.exclude_words == "parts"
+    assert task.condition_requirement == "screen"
+    assert task.min_price == 10.0
+    assert task.interval_minutes == 5

@@ -184,3 +184,20 @@ def test_login_status_exposed(session_factory, base_settings, tmp_path):
     login.start()
     assert login.status()[0] == "running"
     login.stop()
+
+
+def test_docker_login_requires_novnc(session_factory, base_settings, tmp_path):
+    settings_service = SettingsService(session_factory, base=base_settings)
+    login, browser = _login(
+        settings_service,
+        [[]],
+        tmp_path,
+        runtime_mode="docker",
+        novnc_enabled=False,
+    )
+    assert login.browser_accessible is False
+    assert login.start() is False
+    assert browser.launch_count == 0
+    status, message = login.status()
+    assert status == "error"
+    assert "ENABLE_NOVNC=1" in message

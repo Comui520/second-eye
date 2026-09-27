@@ -53,16 +53,36 @@ class LoginSession:
         timeout_seconds: float = 300.0,
         poll_interval: float = 3.0,
         playwright_factory: Optional[Callable] = None,
+        runtime_mode: str = "local",
+        novnc_enabled: bool = False,
     ):
         self._settings_service = settings_service
         self._profile_dir = Path(profile_dir)
         self._timeout_seconds = timeout_seconds
         self._poll_interval = poll_interval
         self._playwright_factory = playwright_factory or sync_playwright
+        self._runtime_mode = runtime_mode
+        self._novnc_enabled = novnc_enabled
         self._status = "idle"
         self._message = ""
         self._lock = threading.Lock()
         self._stop = threading.Event()
+
+    @property
+    def is_remote_browser(self) -> bool:
+        return self._runtime_mode.lower() in {"docker", "container", "remote"}
+
+    @property
+    def browser_accessible(self) -> bool:
+        return not self.is_remote_browser or self._novnc_enabled
+
+    def unavailable_reason(self) -> str:
+        if self.is_remote_browser and not self._novnc_enabled:
+            return (
+                "当前运行在 Docker 容器中，noVNC 未启用，无法在宿主机显示浏览器。"
+                "请在 .env 设置 ENABLE_NOVNC=1 并重启容器，或改用本地 uv/Conda 启动。"
+            )
+        return ""
 
     def status(self) -> tuple[str, str]:
         with self._lock:
@@ -73,14 +93,23 @@ class LoginSession:
             self._status = status
             self._message = message
 
-    def start(self) -> None:
+    def start(self) -> bool:
         with self._lock:
             if self._status == "running":
-                return
+                return False
+            if not self.browser_accessible:
+                self._status = "error"
+                self._message = self.unavailable_reason()
+                return False
             self._status = "running"
-            self._message = "正在打开浏览器窗口…"
+            self._message = (
+                "正在启动容器浏览器，请通过 noVNC 查看…"
+                if self.is_remote_browser
+                else "正在打开本机浏览器窗口…"
+            )
         self._stop.clear()
         threading.Thread(target=self._run, daemon=True, name="goofish-login").start()
+        return True
 
     def stop(self) -> None:
         self._stop.set()
@@ -101,7 +130,12 @@ class LoginSession:
                 try:
                     page = context.new_page()
                     page.goto(GOOFISH_HOME, wait_until="domcontentloaded", timeout=45000)
-                    self._set_status("running", "浏览器窗口已打开，请扫码或登录，完成后会自动保存")
+                    self._set_status(
+                        "running",
+                        "容器浏览器已启动，请在 noVNC 中扫码或登录，完成后会自动保存"
+                        if self.is_remote_browser
+                        else "浏览器窗口已打开，请扫码或登录，完成后会自动保存",
+                    )
                     deadline = time.time() + self._timeout_seconds
                     while time.time() < deadline:
                         if self._stop.is_set():

@@ -1,7 +1,12 @@
 <div id="login-status">
 {% if login_status == 'running' %}
   <div class="bg-blue-50 text-blue-800 rounded px-3 py-2 text-sm mt-2" hx-get="/settings/login-status" hx-trigger="every 2s" hx-target="#login-status" hx-swap="outerHTML">
-    {{ login_message }} 请打开 <a class="underline font-medium" target="_blank" href="{{ request.url.scheme }}://{{ request.url.hostname }}:16080/vnc.html">NAS_IP:16080/vnc.html</a> 查看浏览器窗口，完成登录后会自动保存 Cookie。
+    {{ login_message }}
+    {% if login_remote and login_browser_accessible %}
+      请打开 <a class="underline font-medium" target="_blank" href="{{ request.url.scheme }}://{{ request.url.hostname }}:16080/vnc.html">{{ request.url.hostname }}:16080/vnc.html</a> 查看浏览器窗口，完成登录后会自动保存 Cookie。
+    {% elif not login_remote %}
+      请在本机新打开的浏览器窗口中扫码或登录，完成后会自动保存 Cookie。
+    {% endif %}
   </div>
 {% elif login_status == 'success' %}
   <div class="bg-green-50 text-green-800 rounded px-3 py-2 text-sm mt-2">登录成功，Cookie 已保存。</div>

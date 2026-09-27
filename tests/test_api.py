@@ -514,7 +514,7 @@ def test_settings_page_layout(base_settings, session_factory):
     page = client.get("/settings")
     assert page.status_code == 200
     assert "消息通知" in page.text
-    assert "max-w-2xl mx-auto" in page.text
+    assert "max-w-4xl mx-auto" in page.text
 
 
 def test_settings_save(base_settings, session_factory):
@@ -650,3 +650,36 @@ def _settings_form():
         "wecom_robot_enabled": "1",
         "vision_enabled": "1",
     }
+
+
+def test_api_rejects_invalid_task_input(base_settings, session_factory):
+    client = _client(base_settings, session_factory)
+    for payload in (
+        {"keyword": ""},
+        {"keyword": "   "},
+        {"keyword": "x", "min_price": 100, "max_price": 50},
+        {"keyword": "x", "interval_minutes": 0},
+        {"keyword": "x", "min_condition_score": 11},
+    ):
+        response = client.post("/api/tasks", json=payload)
+        assert response.status_code == 422, payload
+    assert client.get("/api/tasks").json() == []
+
+
+def test_docker_login_page_explains_novnc_requirement(base_settings, session_factory):
+    from goodprice.config import Settings
+
+    docker_settings = Settings(
+        database_url=base_settings.database_url,
+        _env_file=None,
+        runtime_mode="docker",
+        enable_novnc=False,
+    )
+    app = build_app(settings=docker_settings, session_factory=session_factory, with_scheduler=False)
+    client = TestClient(app, follow_redirects=False)
+    page = client.get("/settings")
+    assert page.status_code == 200
+    assert "容器浏览器无法直接弹到 Windows 桌面" in page.text
+    response = client.post("/settings/login")
+    assert response.status_code == 303
+    assert "ENABLE_NOVNC%3D1" in response.headers["location"]

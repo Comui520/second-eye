@@ -6,29 +6,70 @@ from urllib.parse import parse_qsl, urlencode
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from sqlalchemy import func
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import func, text
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+@router.get("/healthz", include_in_schema=False)
+def healthz(request: Request):
+    """Lightweight liveness/readiness endpoint for Docker and reverse proxies."""
+    with request.app.state.session_factory() as session:
+        session.execute(text("SELECT 1"))
+    return {"status": "ok"}
+
+
 class TaskCreate(BaseModel):
     name: str = ""
-    keyword: str
-    max_price: float = 0
-    min_price: float = 0
+    keyword: str = Field(min_length=1)
+    max_price: float = Field(default=0, ge=0, allow_inf_nan=False)
+    min_price: float = Field(default=0, ge=0, allow_inf_nan=False)
     exclude_words: str = ""
     condition_requirement: str = ""
-    min_condition_score: int = 0
+    min_condition_score: int = Field(default=0, ge=0, le=10)
     platform: str = "xianyu"
-    interval_minutes: int = 20
+    interval_minutes: int = Field(default=20, ge=1)
     fetch_detail: bool = True
     enabled: bool = True
+
+    @field_validator("keyword")
+    @classmethod
+    def validate_keyword(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("关键词不能为空")
+        return value
+
+    @model_validator(mode="after")
+    def validate_price_range(self):
+        if self.max_price and self.min_price > self.max_price:
+            raise ValueError("最低价不能高于最高价")
+        return self
 
 
 def _services(request: Request):
     return request.app.state.task_service, request.app.state.settings_service
+
+
+def _login_context(login_session) -> dict:
+    if login_session is None:
+        return {
+            "login_remote": False,
+            "login_browser_accessible": False,
+            "login_unavailable_reason": "登录功能不可用",
+        }
+    reason = getattr(login_session, "unavailable_reason", lambda: "")
+    return {
+        "login_remote": bool(getattr(login_session, "is_remote_browser", False)),
+        # Keep compatibility with lightweight test doubles and extensions that
+        # implement the original LoginSession API.
+        "login_browser_accessible": bool(
+            getattr(login_session, "browser_accessible", True)
+        ),
+        "login_unavailable_reason": reason(),
+    }
 
 
 def _task_dict(task) -> dict:
@@ -217,20 +258,25 @@ def create_task_form(
     enabled: Optional[int] = Form(None),
 ):
     task_service, _ = _services(request)
-    task_service.create_task(
-        {
-            "keyword": keyword.strip(),
-            "name": name.strip(),
-            "max_price": max_price,
-            "min_price": min_price,
-            "exclude_words": exclude_words.strip(),
-            "condition_requirement": condition_requirement,
-            "min_condition_score": min_condition_score,
-            "interval_minutes": interval_minutes,
-            "fetch_detail": bool(fetch_detail),
-            "enabled": bool(enabled),
-        }
-    )
+    try:
+        task_service.create_task(
+            {
+                "keyword": keyword,
+                "name": name,
+                "max_price": max_price,
+                "min_price": min_price,
+                "exclude_words": exclude_words,
+                "condition_requirement": condition_requirement,
+                "min_condition_score": min_condition_score,
+                "interval_minutes": interval_minutes,
+                "fetch_detail": bool(fetch_detail),
+                "enabled": bool(enabled),
+            }
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            "/tasks?" + urlencode({"toast": str(exc)}), status_code=303
+        )
     request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 
@@ -294,21 +340,26 @@ def edit_task_form(
     enabled: Optional[int] = Form(None),
 ):
     task_service, _ = _services(request)
-    task_service.update_task(
-        task_id,
-        {
-            "keyword": keyword.strip(),
-            "name": name.strip(),
-            "max_price": max_price,
-            "min_price": min_price,
-            "exclude_words": exclude_words.strip(),
-            "condition_requirement": condition_requirement,
-            "min_condition_score": min_condition_score,
-            "interval_minutes": interval_minutes,
-            "fetch_detail": bool(fetch_detail),
-            "enabled": bool(enabled),
-        },
-    )
+    try:
+        task_service.update_task(
+            task_id,
+            {
+                "keyword": keyword,
+                "name": name,
+                "max_price": max_price,
+                "min_price": min_price,
+                "exclude_words": exclude_words,
+                "condition_requirement": condition_requirement,
+                "min_condition_score": min_condition_score,
+                "interval_minutes": interval_minutes,
+                "fetch_detail": bool(fetch_detail),
+                "enabled": bool(enabled),
+            },
+        )
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/tasks/{task_id}?" + urlencode({"toast": str(exc)}), status_code=303
+        )
     request.app.state.sync_scheduler()
     return RedirectResponse("/tasks", status_code=303)
 
@@ -600,6 +651,7 @@ def settings_page(request: Request):
             "settings": settings,
             "login_status": login_status,
             "login_message": login_message,
+            **_login_context(login_session),
             "active": "settings",
         },
     )
@@ -608,9 +660,18 @@ def settings_page(request: Request):
 @router.post("/settings/login")
 def settings_login(request: Request):
     login_session = getattr(request.app.state, "login_session", None)
-    if login_session:
-        login_session.start()
-    return RedirectResponse("/settings?toast=已打开浏览器窗口，请完成登录", status_code=303)
+    if not login_session:
+        return RedirectResponse(
+            "/settings?" + urlencode({"toast": "登录功能不可用"}), status_code=303
+        )
+    login_context = _login_context(login_session)
+    if not login_context["login_browser_accessible"]:
+        return RedirectResponse(
+            "/settings?" + urlencode({"toast": login_context["login_unavailable_reason"]}),
+            status_code=303,
+        )
+    login_session.start()
+    return RedirectResponse("/settings?toast=已启动登录浏览器，请完成登录", status_code=303)
 
 
 @router.get("/settings/login-status")
@@ -622,7 +683,11 @@ def settings_login_status(request: Request):
     return templates.TemplateResponse(
         request,
         "login_status.html",
-        {"login_status": login_status, "login_message": login_message},
+        {
+            "login_status": login_status,
+            "login_message": login_message,
+            **_login_context(login_session),
+        },
     )
 
 
@@ -749,6 +814,39 @@ def test_notification(request: Request, channel: str):
     )
 
 
+def _safe_test_url(raw: str) -> str:
+    """校验「测试连接」的目标地址：仅允许 http/https，阻断云元数据与链路本地地址。
+
+    本地回环与私有网段予以放行，因为本地/局域网 LLM 与中转服务是本项目的核心使用场景；
+    这里只拦截 SSRF 常见的元数据服务与链路本地/保留地址，并保持超时与不跟随重定向。
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    parts = urlsplit(value)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("仅支持 http/https 地址")
+    host = parts.hostname
+    if not host:
+        raise ValueError("地址缺少主机名")
+    if host.lower() in {"metadata.google.internal", "metadata", "instance-data"}:
+        raise ValueError("禁止访问云元数据地址")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        infos = []
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            raise ValueError("禁止访问链路本地或保留地址")
+    return value
+
+
 @router.post("/settings/test-llm")
 async def test_llm_endpoint(request: Request):
     import time
@@ -761,7 +859,10 @@ async def test_llm_endpoint(request: Request):
         body = {}
     settings = request.app.state.settings_service.get()
 
-    base_url = (body.get("base_url") or settings.llm_base_url or "").strip()
+    try:
+        base_url = _safe_test_url(body.get("base_url") or settings.llm_base_url or "")
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "msg": f"地址不合法：{exc}"}, status_code=200)
     api_key = (body.get("api_key") or settings.llm_api_key or "").strip()
     model = (body.get("model") or settings.llm_model or "").strip()
     api_format = (body.get("api_format") or settings.llm_api_format or "chat_completions").strip()
@@ -802,7 +903,10 @@ async def test_vision_endpoint(request: Request):
         body = {}
     settings = request.app.state.settings_service.get()
 
-    base_url = (body.get("base_url") or settings.vision_base_url or "").strip()
+    try:
+        base_url = _safe_test_url(body.get("base_url") or settings.vision_base_url or "")
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "msg": f"地址不合法：{exc}"}, status_code=200)
     api_key = (body.get("api_key") or settings.vision_api_key or "").strip()
     model = (body.get("model") or settings.vision_model or "").strip()
     api_format = (body.get("api_format") or settings.vision_api_format or "chat_completions").strip()

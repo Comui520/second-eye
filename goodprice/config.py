@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     serverchan_enabled: bool = True
     wecom_robot_enabled: bool = True
     vision_enabled: bool = True
+    runtime_mode: str = "local"
+    enable_novnc: bool = False
+    novnc_password_file: str = "/app/data/.novnc-password"
     jev_enabled: bool = False
     jev_auto_threshold: float = 0.85
     jev_backend: str = "adapter"
