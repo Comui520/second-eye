@@ -71,7 +71,7 @@ class XianyuAdapter:
                     card_selector = sel.RESULT_CARD
                     try:
                         page.wait_for_selector(card_selector, timeout=30000)
-                    except Exception:
+                    except Exception as exc:
                         if page.locator(sel.RESULT_CARD_FALLBACK).count() > 0:
                             card_selector = sel.RESULT_CARD_FALLBACK
                         else:
@@ -83,10 +83,10 @@ class XianyuAdapter:
                             if "加载中" in body_text:
                                 raise CrawlerAuthError(
                                     "搜索结果一直显示加载中，Cookie 可能已失效或未登录，请重新获取"
-                                )
+                                ) from exc
                             raise RuntimeError(
                                 f"未在页面中找到商品卡片，页面可能改版或触发风控。页面摘要: {body_text[:150]}"
-                            )
+                            ) from exc
                     # 等待真实结果渲染（刚出现卡片时可能只是占位/推荐位）
                     page.wait_for_timeout(3000)
                     for item in parse_search_html(page.content(), card_selector=card_selector):

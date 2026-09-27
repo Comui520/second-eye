@@ -1,7 +1,7 @@
 import logging
+from logging.handlers import RotatingFileHandler
 
 from fastapi.testclient import TestClient
-from logging.handlers import RotatingFileHandler
 
 from goodprice.main import build_app
 

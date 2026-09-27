@@ -409,7 +409,7 @@ def test_two_tasks_same_keyword_keep_separate_listings(session_factory, base_set
     with session_factory() as session:
         listings = session.query(Listing).all()
         assert len(listings) == 2
-        assert {l.task_id for l in listings} == {t1.id, t2.id}
+        assert {listing.task_id for listing in listings} == {t1.id, t2.id}
 
 
 def test_last_run_count_increments(session_factory, base_settings):
@@ -599,7 +599,7 @@ def test_exclude_words_filter(session_factory, base_settings):
     assert len(notifier.messages) == 1
     with session_factory() as session:
         listings = session.query(Listing).all()
-        assert [l.external_id for l in listings] == ["1001"]
+        assert [listing.external_id for listing in listings] == ["1001"]
 
 
 def test_requirement_mismatch_blocks_and_skips_vision(session_factory, base_settings):

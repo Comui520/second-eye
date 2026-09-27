@@ -1,8 +1,7 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
-from goodprice.models import Seller
+from goodprice.models import Listing, Notification, PriceSnapshot, Seller, WatchTask
 
 
 def test_watch_task_crud(session_factory):
@@ -92,11 +91,11 @@ def test_seller_crud_and_listing_columns(session_factory):
 
 def test_blocked_flags(session_factory):
     with session_factory() as session:
-        l = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u", blocked=True)
+        listing = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u", blocked=True)
         s = Seller(platform="xianyu", seller_uid="u1", blocked=True)
-        session.add_all([l, s])
+        session.add_all([listing, s])
         session.commit()
-        assert l.blocked is True
+        assert listing.blocked is True
         assert s.blocked is True
 
 
