@@ -279,10 +279,10 @@ git push origin v0.1.0
 推送 `vX.Y.Z` Tag 后，Actions 会再次运行测试，并将镜像推送到 GHCR：
 
 ```bash
-docker pull ghcr.io/comui520/second-eye:v0.1.0
+docker pull ghcr.io/comui520/second-eye:0.1.0
 ```
 
-只有版本 Tag 会更新 `latest`；直接推送 `release` 分支只做测试和 Docker 构建校验，不会覆盖稳定镜像。GHCR 包可能默认是私有的；如果拉取时提示无权限，请先执行 `docker login ghcr.io`，或在仓库的 Packages 设置中将其改为公开。
+Git Tag 使用 `v0.1.0` 命名，而 Docker 镜像版本标签使用 `0.1.0`（不带 `v`）。只有版本 Tag 会更新 `latest`；直接推送 `release` 分支只做测试和 Docker 构建校验，不会覆盖稳定镜像。GHCR 包可能默认是私有的；如果拉取时提示无权限，请先执行 `docker login ghcr.io`，或在仓库的 Packages 设置中将其改为公开。
 
 分支职责：`main` 用于日常开发和合并 PR，`release` 只接收准备发布的稳定提交，`vX.Y.Z` 是可复现的正式版本。日常功能开发不需要维护多套代码分支。
 ## 大模型配置
@@ -445,3 +445,4 @@ conda run -n good-price pytest -v
 - [ ] 价格走势图表
 - [ ] 通知图片上传与图文消息
 - [ ] 商品视频解析（`glm-4.6v-flash` 支持视频输入，可作为后续增强）
+
