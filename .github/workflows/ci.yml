@@ -39,8 +39,11 @@ jobs:
       - name: Check whitespace errors
         run: git diff --check
 
+      - name: Lint (ruff)
+        run: uv run --locked ruff check .
+
       - name: Run tests
-        run: uv run --locked pytest -q
+        run: uv run --locked pytest -q --cov --cov-fail-under=80
 
   docker:
     name: Docker build
