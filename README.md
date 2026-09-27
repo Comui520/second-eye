@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://www.python.org/)
+[![CI](https://github.com/Comui520/second-eye/actions/workflows/ci.yml/badge.svg)](https://github.com/Comui520/second-eye/actions/workflows/ci.yml)
 
 盯住闲鱼上你感兴趣的关键词：价格符合预期、品相达标、性价比高的商品会自动收录，并推送到你的微信或企业微信。
 AI 品相筛选、卖家信用、降价重推、本地开源——一个面向中文二手市场的个人盯价工具。
@@ -264,6 +265,26 @@ docker compose up -d --build
 
 如果构建过程中出现 Debian 软件源 `502 Bad Gateway`、Playwright CDN 超时等错误，通常是临时网络问题，重新执行构建即可；必要时配置代理。
 
+### 预构建镜像与发版
+
+GitHub Actions 会在每个 PR 以及 `main`/`release` 分支推送时运行测试和 Docker 镜像构建校验。正式版本通过 `release` 分支上的语义化版本 Tag 发布：
+
+```bash
+git switch release
+git pull --ff-only origin release
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+推送 `vX.Y.Z` Tag 后，Actions 会再次运行测试，并将镜像推送到 GHCR：
+
+```bash
+docker pull ghcr.io/comui520/second-eye:v0.1.0
+```
+
+只有版本 Tag 会更新 `latest`；直接推送 `release` 分支只做测试和 Docker 构建校验，不会覆盖稳定镜像。GHCR 包可能默认是私有的；如果拉取时提示无权限，请先执行 `docker login ghcr.io`，或在仓库的 Packages 设置中将其改为公开。
+
+分支职责：`main` 用于日常开发和合并 PR，`release` 只接收准备发布的稳定提交，`vX.Y.Z` 是可复现的正式版本。日常功能开发不需要维护多套代码分支。
 ## 大模型配置
 
 阶段一「需求匹配」使用现有 LLM 配置；阶段二「品相分析」需要视觉模型。推荐全部使用智谱免费模型：
