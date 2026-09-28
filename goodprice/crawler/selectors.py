@@ -7,7 +7,7 @@ RESULT_CARD_FALLBACK = "a[href*='/item?id=']"
 TITLE = "[class*='main-title--']"
 PRICE = "[class*='price-wrap--']"
 IMAGE = "img[class*='feeds-image--']"
-SELLER = "[class*='seller-text--']"
+# 搜索结果卡片只有地区文本（seller-text--），不含卖家昵称；昵称从详情页解析。
 LOCATION = "[class*='seller-text--']"
 
 # 商品详情页（实测：描述 span[class*='desc--']，主图 img.ant-image-img）

@@ -6,8 +6,9 @@ from bs4 import BeautifulSoup
 
 from goodprice.crawler import selectors as sel
 from goodprice.crawler.base import ListingData, ListingDetail, SellerData
+from goodprice.crawler.constants import GOOFISH_ORIGIN
 
-BASE_URL = "https://www.goofish.com"
+BASE_URL = GOOFISH_ORIGIN
 _PRICE_RE = re.compile(r"(\d+(?:\.\d+)?)")
 
 
@@ -59,7 +60,6 @@ def parse_search_html(html: str, card_selector: str = sel.RESULT_CARD) -> list[L
         img_el = card.select_one(sel.IMAGE)
         src = img_el.get("src") if img_el else ""
         image_urls = [_absolute(src)] if src and is_product_image(src) else []
-        seller_el = card.select_one(sel.SELLER)
         location_el = card.select_one(sel.LOCATION)
         items.append(
             ListingData(
@@ -68,7 +68,7 @@ def parse_search_html(html: str, card_selector: str = sel.RESULT_CARD) -> list[L
                 price=price,
                 url=_absolute(href),
                 image_urls=[_absolute(u) for u in image_urls],
-                seller=seller_el.get_text(strip=True) if seller_el else None,
+                seller=None,
                 location=location_el.get_text(strip=True) if location_el else None,
             )
         )
@@ -106,7 +106,7 @@ def parse_detail_html(html: str) -> ListingDetail:
     images.sort(key=lambda u: 0 if "xy_item" in u else 1)  # 主图优先
     seller_link = soup.select_one(sel.DETAIL_SELLER_LINK)
     seller_uid = extract_user_id(seller_link.get("href")) if seller_link else None
-    seller_name, positive_rate, sold_count, _ = _parse_seller_block(seller_link)
+    seller_name, positive_rate, sold_count = _parse_seller_block(seller_link)
     nick_el = soup.select_one(sel.DETAIL_SELLER_NICK)
     if nick_el:
         seller_name = nick_el.get_text(strip=True) or seller_name
@@ -134,9 +134,11 @@ def is_product_image(url: str) -> bool:
     return "bao/uploaded" in (url or "")
 
 
-def _parse_seller_block(seller_link):
+def _parse_seller_block(
+    seller_link,
+) -> tuple[Optional[str], Optional[float], Optional[int]]:
     if seller_link is None:
-        return None, None, None, None
+        return None, None, None
     block_text = seller_link.get_text(" ", strip=True)
     first_line = seller_link.get_text("\n", strip=True).splitlines()
     name = first_line[0] if first_line else None
@@ -148,7 +150,7 @@ def _parse_seller_block(seller_link):
     m = re.search(r"卖出\s*(\d+)\s*件", block_text)
     if m:
         sold_count = int(m.group(1))
-    return name, positive_rate, sold_count, block_text
+    return name, positive_rate, sold_count
 
 
 _TAG_NAMES = ("沟通愉快", "收货快", "回复快", "下单爽快", "描述真实", "发货快")

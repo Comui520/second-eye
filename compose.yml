@@ -36,7 +36,7 @@ services:
       start_period: 30s
 
   gotify:
-    image: gotify/server:latest
+    image: gotify/server:3.1.1
     container_name: second-eye-gotify
     restart: unless-stopped
     ports:

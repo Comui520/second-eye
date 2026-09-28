@@ -27,12 +27,12 @@ class ServerChanNotifier(Notifier):
     def send(self, message: NotificationMessage) -> None:
         if not self.enabled:
             raise RuntimeError("Server酱未配置 sendkey")
-        client = httpx.Client(transport=self._transport, timeout=self.timeout)
-        response = client.post(
-            SERVERCHAN_URL.format(key=self.sendkey),
-            data={"title": message.title, "desp": f"{message.content}\n{message.url}"},
-        )
-        response.raise_for_status()
-        data = response.json()
+        with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
+            response = client.post(
+                SERVERCHAN_URL.format(key=self.sendkey),
+                data={"title": message.title, "desp": f"{message.content}\n{message.url}"},
+            )
+            response.raise_for_status()
+            data = response.json()
         if data.get("code") != 0:
             raise RuntimeError(f"Server酱返回错误: {data}")

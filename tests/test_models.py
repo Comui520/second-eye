@@ -51,7 +51,7 @@ def test_listing_relations(session_factory):
         assert len(listing.notifications) == 1
 
 
-def test_round2_model_columns(session_factory):
+def test_task_and_listing_optional_columns(session_factory):
     with session_factory() as session:
         task = WatchTask(keyword="k")
         session.add(task)
@@ -99,7 +99,7 @@ def test_blocked_flags(session_factory):
         assert s.blocked is True
 
 
-def test_round7_listing_columns(session_factory):
+def test_listing_status_and_value_defaults(session_factory):
     with session_factory() as session:
         listing = Listing(platform="xianyu", external_id="1", title="t", price=1, url="u")
         session.add(listing)
@@ -113,7 +113,7 @@ def test_round7_listing_columns(session_factory):
         assert listing.last_notified_satisfaction is None
 
 
-def test_round8_task_columns(session_factory):
+def test_task_price_and_exclude_defaults(session_factory):
     with session_factory() as session:
         task = WatchTask(keyword="k")
         session.add(task)

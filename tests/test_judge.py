@@ -133,8 +133,6 @@ def test_build_judger_typesafe_backend():
         backend="typesafe",
         api_key="ts-key",
     )
-    from goodprice.analysis.jev_typesafe import TypeSafeJudger
-
     assert isinstance(judger, TypeSafeJudger)
     assert judger.enabled is True
     assert build_judger(

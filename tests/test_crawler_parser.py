@@ -4,6 +4,8 @@ import pytest
 
 from goodprice.crawler.parser import (
     extract_id,
+    extract_user_id,
+    is_product_image,
     parse_detail_html,
     parse_price,
     parse_search_html,
@@ -38,12 +40,14 @@ def test_parse_search_html():
     assert first.price == 2999.0
     assert first.url == "https://www.goofish.com/item?id=1001&categoryId=1"
     assert first.image_urls == ["https://img.alicdn.com/bao/uploaded/1001.jpg"]
-    assert first.seller == "杭州"
+    # 搜索卡片里 seller-text-- 实际是地区文本，不是卖家昵称
+    assert first.seller is None
     assert first.location == "杭州"
     second = items[1]
     assert second.external_id == "1002"
     assert second.price == 450.0
     assert second.seller is None
+    assert second.location is None
 
 
 def test_parse_search_html_drops_placeholder_images():
@@ -100,15 +104,11 @@ def test_parse_detail_html_price_range_as_variants():
 
 
 def test_extract_user_id():
-    from goodprice.crawler.parser import extract_user_id
-
     assert extract_user_id("https://www.goofish.com/personal?userId=2672367114") == "2672367114"
     assert extract_user_id("https://x/other") is None
 
 
 def test_is_product_image_filters_placeholder():
-    from goodprice.crawler.parser import is_product_image
-
     assert is_product_image("https://img.alicdn.com/bao/uploaded/i2/x.jpg") is True
     assert is_product_image("https://img.alicdn.com/imgextra/i4/xxx-2-tps-2-2.png") is False
     assert is_product_image("https://img.alicdn.com/imgextra/i1/xxx-tps-480-144.png") is False

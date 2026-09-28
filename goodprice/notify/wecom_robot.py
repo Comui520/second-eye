@@ -26,12 +26,12 @@ class WeComRobotNotifier(Notifier):
         if not self.enabled:
             raise RuntimeError("企业微信群机器人未配置 webhook")
         content = f"{message.title}\n{message.content}\n{message.url}"
-        client = httpx.Client(transport=self._transport, timeout=self.timeout)
-        response = client.post(
-            self.webhook, json={"msgtype": "text", "text": {"content": content}}
-        )
-        response.raise_for_status()
-        data = response.json()
+        with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
+            response = client.post(
+                self.webhook, json={"msgtype": "text", "text": {"content": content}}
+            )
+            response.raise_for_status()
+            data = response.json()
         errcode = data.get("errcode", -1)
         if errcode == 93000:
             raise RuntimeError("企业微信群机器人 webhook 无效或机器人已被移除，请重新添加")
