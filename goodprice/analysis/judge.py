@@ -1,12 +1,11 @@
 # Jev 判断层（实验性）：需求匹配与批量性价比的类型化逐件评估。
 # 与默认路径的区别：每次判断独立成请求并附带置信度，单件失败不拖累整批；
 # 置信度低于阈值的判断由调用方回落到原 LLMClient 路径（宁多勿漏）。
-import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from goodprice.analysis.json_extract import extract_json_object
 from goodprice.analysis.llm import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -40,19 +39,8 @@ VALUE_TYPED_USER_TEMPLATE = (
 )
 
 
-def _extract_json(raw: str) -> dict[str, Any]:
-    text = (raw or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"LLM 输出中没有 JSON: {raw!r}")
-    return json.loads(text[start : end + 1])
-
-
 def parse_requirement_typed(raw: str) -> dict[str, Any]:
-    data = _extract_json(raw)
+    data = extract_json_object(raw)
     matched = data.get("matched")
     if not isinstance(matched, bool):
         raise ValueError(f"类型化需求判断缺少布尔 matched: {raw!r}")
@@ -64,7 +52,7 @@ def parse_requirement_typed(raw: str) -> dict[str, Any]:
 
 
 def parse_value_typed(raw: str) -> dict[str, Any]:
-    data = _extract_json(raw)
+    data = extract_json_object(raw)
     try:
         score = max(1, min(10, int(data.get("value_score", 0))))
     except (TypeError, ValueError):

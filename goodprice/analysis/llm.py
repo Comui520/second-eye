@@ -1,11 +1,11 @@
 import json
 import logging
-import re
 import time
 from typing import Any, Optional
 
 import httpx
 
+from goodprice.analysis.json_extract import extract_json_object
 from goodprice.analysis.prompts import (
     BATCH_VALUE_SYSTEM_PROMPT,
     BATCH_VALUE_USER_TEMPLATE,
@@ -29,19 +29,8 @@ _IMAGE_ERROR_MARKERS = (
 )
 
 
-def _extract_json(raw: str) -> dict[str, Any]:
-    text = (raw or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"LLM 输出中没有 JSON: {raw!r}")
-    return json.loads(text[start : end + 1])
-
-
 def parse_analysis_json(raw: str) -> dict[str, Any]:
-    data = _extract_json(raw)
+    data = extract_json_object(raw)
     score = max(1, min(10, int(data.get("condition_score", 0))))
     defects = [str(d) for d in data.get("defects", [])][:10]
     return {
@@ -53,7 +42,7 @@ def parse_analysis_json(raw: str) -> dict[str, Any]:
 
 
 def parse_requirement_json(raw: str) -> dict[str, Any]:
-    data = _extract_json(raw)
+    data = extract_json_object(raw)
     matched = data.get("matched")
     if not isinstance(matched, bool):
         raise ValueError(f"需求判断输出缺少布尔 matched: {raw!r}")
@@ -62,7 +51,7 @@ def parse_requirement_json(raw: str) -> dict[str, Any]:
 
 def parse_batch_value_json(raw: str) -> dict[str, Any]:
     """解析批量性价比输出：{"items": [{"id", "value_score", "reason"}], "best": id}。"""
-    data = _extract_json(raw)
+    data = extract_json_object(raw)
     items = data.get("items")
     if not isinstance(items, list) or not items:
         raise ValueError(f"批量性价比输出缺少 items: {raw!r}")
