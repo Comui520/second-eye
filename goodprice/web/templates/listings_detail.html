@@ -15,7 +15,7 @@
       {% if notify_count > 1 %}<span class="px-2 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700">已重推</span>{% endif %}
       {% if listing.blocked %}<span class="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-600">已拉黑</span>{% endif %}
       <span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">满足分 {{ listing.satisfaction|round(1) }}</span>
-      {% if drop_pct >= 0.05 %}<span class="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">较首见降价 {{ '%.0f'|format(drop_pct * 100) }}%</span>{% endif %}
+      {% if drop_pct >= drop_pct_threshold %}<span class="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">较首见降价 {{ '%.0f'|format(drop_pct * 100) }}%</span>{% endif %}
     </div>
     <div class="mt-3 flex items-center gap-2 flex-wrap">
       <a href="{{ listing.url }}" target="_blank" class="btn btn-primary">跳转商品页</a>

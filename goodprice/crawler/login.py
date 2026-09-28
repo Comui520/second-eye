@@ -7,15 +7,11 @@ from typing import Callable, Optional
 from playwright.sync_api import sync_playwright
 
 from goodprice.config import PROJECT_ROOT
+from goodprice.crawler.constants import GOOFISH_HOME, USER_AGENT
 
 logger = logging.getLogger(__name__)
 
 LOGIN_PROFILE_DIR = PROJECT_ROOT / "data" / "browser_profile"
-GOOFISH_HOME = "https://www.goofish.com/"
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
 
 # 淘宝系真正的登录态 cookie（未登录时不会出现）；`t`/`cookie2` 匿名访问也会种，不能作为登录依据
 LOGIN_COOKIES = ("unb", "sn", "uc1", "lgc")

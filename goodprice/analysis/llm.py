@@ -6,6 +6,7 @@ from typing import Any, Optional
 import httpx
 
 from goodprice.analysis.json_extract import extract_json_object
+from goodprice.analysis.parse_utils import clamp_score
 from goodprice.analysis.prompts import (
     BATCH_VALUE_SYSTEM_PROMPT,
     BATCH_VALUE_USER_TEMPLATE,
@@ -31,7 +32,7 @@ _IMAGE_ERROR_MARKERS = (
 
 def parse_analysis_json(raw: str) -> dict[str, Any]:
     data = extract_json_object(raw)
-    score = max(1, min(10, int(data.get("condition_score", 0))))
+    score = clamp_score(data.get("condition_score", 0))
     defects = [str(d) for d in data.get("defects", [])][:10]
     return {
         "condition_score": score,
@@ -61,7 +62,7 @@ def parse_batch_value_json(raw: str) -> dict[str, Any]:
         item_id = str(it.get("id", "")).strip()
         if not item_id:
             continue
-        score = max(1, min(10, int(it.get("value_score", 0))))
+        score = clamp_score(it.get("value_score", 0))
         scores[item_id] = score
         reasons[item_id] = str(it.get("reason", ""))[:200]
     best = str(data.get("best", "")).strip()

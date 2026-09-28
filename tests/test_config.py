@@ -19,7 +19,8 @@ def test_settings_defaults():
 
 def test_round2_settings_defaults():
     settings = Settings(_env_file=None)
-    assert settings.vision_model == "qwen-vl-max"
+    assert settings.llm_model == "glm-4.7-flash"
+    assert settings.vision_model == "glm-4.6v-flash"
     assert settings.vision_api_format == "chat_completions"
     assert settings.vision_base_url == ""
     assert settings.serverchan_enabled is True

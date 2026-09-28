@@ -1,71 +1,12 @@
-from dataclasses import asdict, dataclass
 from typing import Optional
 
 from goodprice.config import Settings
 from goodprice.models import AppSetting
 
-
-@dataclass
-class RuntimeSettings:
-    _INT_FIELDS = {
-        "default_crawl_interval_minutes",
-        "default_crawl_jitter_minutes",
-        "gotify_priority",
-    }
-    _FLOAT_FIELDS = {"jev_auto_threshold"}
-    _BOOL_FIELDS = {
-        "serverchan_enabled",
-        "wecom_robot_enabled",
-        "feishu_enabled",
-        "gotify_enabled",
-        "vision_enabled",
-        "jev_enabled",
-    }
-
-    xianyu_cookie: str = ""
-    llm_base_url: str = ""
-    llm_api_key: str = ""
-    llm_model: str = ""
-    llm_api_format: str = "chat_completions"
-    serverchan_sendkey: str = ""
-    proxy: str = ""
-    default_crawl_interval_minutes: int = 20
-    default_crawl_jitter_minutes: int = 10
-    vision_base_url: str = ""
-    vision_api_key: str = ""
-    vision_model: str = ""
-    vision_api_format: str = "chat_completions"
-    wecom_webhook: str = ""
-    feishu_webhook: str = ""
-    feishu_secret: str = ""
-    feishu_enabled: bool = True
-    gotify_url: str = ""
-    gotify_token: str = ""
-    gotify_priority: int = 5
-    gotify_enabled: bool = True
-    serverchan_enabled: bool = True
-    wecom_robot_enabled: bool = True
-    vision_enabled: bool = True
-    jev_enabled: bool = False
-    jev_auto_threshold: float = 0.85
-    jev_backend: str = "adapter"
-    jev_api_key: str = ""
-
-    @classmethod
-    def from_sources(cls, base: Settings, overrides: dict[str, str]) -> "RuntimeSettings":
-        values = asdict(cls())
-        values.update({k: v for k, v in base.model_dump().items() if k in values})
-        values.update({k: v for k, v in overrides.items() if v != "" and k in values})
-        for key in cls._INT_FIELDS:
-            if values.get(key) not in ("", None):
-                values[key] = int(values[key])
-        for key in cls._FLOAT_FIELDS:
-            if values.get(key) not in ("", None):
-                values[key] = float(values[key])
-        for key in cls._BOOL_FIELDS:
-            if values.get(key) not in ("", None):
-                values[key] = str(values[key]).lower() in ("1", "true", "yes", "on")
-        return cls(**values)
+# 设置字段只在 goodprice.config.Settings 定义一次。运行时值与数据库覆盖都经同一个
+# pydantic 模型校验与类型转换（int/float/bool 由字段类型自动完成），不再维护第二份
+# dataclass 字段副本和手写的类型集合，避免两处字段/类型漂移。
+RuntimeSettings = Settings
 
 
 class SettingsService:
@@ -76,9 +17,16 @@ class SettingsService:
     def _overrides(self, session) -> dict[str, str]:
         return {row.key: row.value for row in session.query(AppSetting).all()}
 
+    def _merge(self, overrides: dict[str, str]) -> RuntimeSettings:
+        values = self._base.model_dump()
+        for key, value in overrides.items():
+            if key in values and value != "":
+                values[key] = value
+        return Settings(_env_file=None, **values)
+
     def get(self) -> RuntimeSettings:
         with self._session_factory() as session:
-            return RuntimeSettings.from_sources(self._base, self._overrides(session))
+            return self._merge(self._overrides(session))
 
     def set_many(self, values: dict[str, str]) -> RuntimeSettings:
         with self._session_factory() as session:
@@ -92,4 +40,4 @@ class SettingsService:
                 else:
                     session.add(AppSetting(key=key, value=value))
             session.commit()
-            return RuntimeSettings.from_sources(self._base, self._overrides(session))
+            return self._merge(self._overrides(session))

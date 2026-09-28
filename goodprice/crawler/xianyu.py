@@ -5,15 +5,12 @@ from playwright.sync_api import sync_playwright
 
 from goodprice.crawler import selectors as sel
 from goodprice.crawler.base import CrawlerAuthError, ListingData, ListingDetail, SellerData
+from goodprice.crawler.constants import GOOFISH_ORIGIN, USER_AGENT
 from goodprice.crawler.parser import parse_detail_html, parse_search_html, parse_seller_html
 
-SEARCH_URL = "https://www.goofish.com/search?q={keyword}&spm=a21ybx.search.searchInput.0"
+SEARCH_URL = f"{GOOFISH_ORIGIN}/search?q={{keyword}}&spm=a21ybx.search.searchInput.0"
 SEARCH_ATTEMPTS = 3
 SEARCH_ATTEMPT_GAP_MS = 5000
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
 
 
 class XianyuAdapter:

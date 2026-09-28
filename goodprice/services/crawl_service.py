@@ -10,6 +10,7 @@ from goodprice.crawler.parser import is_product_image
 from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
 from goodprice.notify.base import NotificationMessage
 from goodprice.services.satisfaction import (
+    DROP_PCT_DISPLAY_THRESHOLD,
     compute_satisfaction,
     drop_pct_from_snapshots,
 )
@@ -592,7 +593,7 @@ class CrawlService:
 
         lines = [f"价格：{_fmt(listing.price)} 元"]
         drop_pct = self._drop_pct(listing)
-        if drop_pct >= 0.05:
+        if drop_pct >= DROP_PCT_DISPLAY_THRESHOLD:
             lines.append(f"较首见降价 {drop_pct:.0%}")
         if is_renotify and old_price is not None:
             lines.append(f"价格更新重推：{_fmt(old_price)} → {_fmt(listing.price)} 元")
