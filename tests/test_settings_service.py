@@ -1,4 +1,3 @@
-from goodprice.config import Settings
 from goodprice.services.settings_service import RuntimeSettings, SettingsService
 
 

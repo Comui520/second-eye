@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=4.1"]
+dev = ["pytest>=8.0", "pytest-cov>=4.1", "ruff>=0.6"]
 jev = ["typesafe-sdk>=0.7"]
 
 [project.scripts]
@@ -38,4 +38,23 @@ include = ["goodprice*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# 起步基线：pyflakes + 导入排序 + 核心 pycodestyle + bugbear。
+# E501 交给将来的 formatter；B008 是 FastAPI 依赖注入惯用法。
+select = ["E", "F", "I", "B"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["goodprice"]
+
+[tool.coverage.run]
+source = ["goodprice"]
+
+[tool.coverage.report]
+show_missing = true
 

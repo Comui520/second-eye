@@ -3,13 +3,13 @@ import json
 import httpx
 import pytest
 
+from goodprice.analysis.jev_typesafe import TypeSafeJudger
 from goodprice.analysis.judge import (
     JevJudger,
     build_judger,
     parse_requirement_typed,
     parse_value_typed,
 )
-from goodprice.analysis.jev_typesafe import TypeSafeJudger
 from goodprice.analysis.llm import LLMClient
 from goodprice.config import Settings
 from goodprice.crawler.base import ListingData

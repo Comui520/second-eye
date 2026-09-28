@@ -56,7 +56,7 @@ def parse_value_typed(raw: str) -> dict[str, Any]:
     try:
         score = max(1, min(10, int(data.get("value_score", 0))))
     except (TypeError, ValueError):
-        raise ValueError(f"类型化性价比缺少整数 value_score: {raw!r}")
+        raise ValueError(f"类型化性价比缺少整数 value_score: {raw!r}") from None
     return {
         "value_score": score,
         "probability": _clamp01(data.get("probability", 0.5)),

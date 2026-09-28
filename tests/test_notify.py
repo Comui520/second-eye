@@ -4,10 +4,10 @@ import httpx
 import pytest
 
 from goodprice.notify.base import NotificationMessage
+from goodprice.notify.feishu import FeishuNotifier
 from goodprice.notify.log import LogNotifier
 from goodprice.notify.serverchan import ServerChanNotifier
 from goodprice.notify.wecom_robot import WeComRobotNotifier
-from goodprice.notify.feishu import FeishuNotifier
 
 
 def test_log_notifier_logs(caplog):

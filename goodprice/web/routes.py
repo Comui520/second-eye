@@ -776,6 +776,7 @@ def save_settings(
 @router.post("/settings/test-notification/{channel}")
 def test_notification(request: Request, channel: str):
     from fastapi import HTTPException
+
     from goodprice.notify.base import NotificationMessage
     from goodprice.notify.feishu import FeishuNotifier
     from goodprice.notify.gotify import GotifyNotifier
@@ -850,7 +851,9 @@ def _safe_test_url(raw: str) -> str:
 @router.post("/settings/test-llm")
 async def test_llm_endpoint(request: Request):
     import time
+
     from fastapi.responses import JSONResponse
+
     from goodprice.analysis.llm import LLMClient
 
     try:
@@ -894,7 +897,9 @@ async def test_llm_endpoint(request: Request):
 @router.post("/settings/test-vision")
 async def test_vision_endpoint(request: Request):
     import time
+
     from fastapi.responses import JSONResponse
+
     from goodprice.analysis.llm import LLMClient
 
     try:
@@ -938,6 +943,7 @@ async def test_vision_endpoint(request: Request):
 @router.post("/settings/test-jev")
 async def test_jev_endpoint(request: Request):
     import time
+
     from fastapi.responses import JSONResponse
 
     try:

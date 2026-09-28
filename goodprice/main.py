@@ -50,11 +50,11 @@ def _make_crawl_service(session_factory, settings_service, guard):
     runtime = settings_service.get()
     from goodprice.analysis.llm import LLMClient
     from goodprice.crawler.xianyu import XianyuAdapter
+    from goodprice.notify.feishu import FeishuNotifier
+    from goodprice.notify.gotify import GotifyNotifier
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.serverchan import ServerChanNotifier
     from goodprice.notify.wecom_robot import WeComRobotNotifier
-    from goodprice.notify.feishu import FeishuNotifier
-    from goodprice.notify.gotify import GotifyNotifier
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     seller_service = SellerService(session_factory, adapter=adapter)
