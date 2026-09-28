@@ -50,7 +50,7 @@ fi
 
 echo "second-eye 已启动：http://127.0.0.1:18000"
 if [ "$login" -eq 1 ]; then
-  echo "登录模式已启用 noVNC：http://<主机IP>:16080/vnc.html"
+  echo "登录模式已启用 noVNC：http://<主机IP>:${NOVNC_PORT:-16080}/vnc.html"
   echo "登录完成后请重新执行：$0（关闭 noVNC）"
 else
   echo "普通运行模式：noVNC 已关闭。需要登录时执行 $0 --login"

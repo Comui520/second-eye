@@ -13,7 +13,7 @@ services:
     ports:
       # Bind to localhost by default: the app has no built-in authentication.
       - "${BIND_ADDRESS:-127.0.0.1}:18000:8000"
-      - "${BIND_ADDRESS:-127.0.0.1}:16080:6080"
+      - "${BIND_ADDRESS:-127.0.0.1}:${NOVNC_PORT:-16080}:6080"
     environment:
       DATABASE_URL: sqlite:////app/data/goodprice.db
       PROXY: ${PROXY:-}

@@ -89,12 +89,13 @@ def _services(request: Request):
     return request.app.state.task_service, request.app.state.settings_service
 
 
-def _login_context(login_session) -> dict:
+def _login_context(login_session, novnc_port: int = 16080) -> dict:
     if login_session is None:
         return {
             "login_remote": False,
             "login_browser_accessible": False,
             "login_unavailable_reason": "登录功能不可用",
+            "novnc_port": novnc_port,
         }
     reason = getattr(login_session, "unavailable_reason", lambda: "")
     return {
@@ -105,6 +106,7 @@ def _login_context(login_session) -> dict:
             getattr(login_session, "browser_accessible", True)
         ),
         "login_unavailable_reason": reason(),
+        "novnc_port": novnc_port,
     }
 
 
@@ -655,7 +657,7 @@ def settings_page(request: Request):
             "settings": settings,
             "login_status": login_status,
             "login_message": login_message,
-            **_login_context(login_session),
+            **_login_context(login_session, settings.novnc_port),
             "active": "settings",
         },
     )
@@ -690,7 +692,9 @@ def settings_login_status(request: Request):
         {
             "login_status": login_status,
             "login_message": login_message,
-            **_login_context(login_session),
+            **_login_context(
+                login_session, request.app.state.settings_service.get().novnc_port
+            ),
         },
     )
 
