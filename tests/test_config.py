@@ -17,7 +17,7 @@ def test_settings_defaults():
     assert settings.default_crawl_jitter_minutes == 10
 
 
-def test_round2_settings_defaults():
+def test_llm_and_vision_defaults():
     settings = Settings(_env_file=None)
     assert settings.llm_model == "glm-4.7-flash"
     assert settings.vision_model == "glm-4.6v-flash"
@@ -28,7 +28,7 @@ def test_round2_settings_defaults():
     assert settings.vision_enabled is True
 
 
-def test_round2_settings_env_overrides(monkeypatch):
+def test_vision_env_overrides(monkeypatch):
     monkeypatch.setenv("VISION_ENABLED", "false")
     monkeypatch.setenv("VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     settings = Settings(_env_file=None)

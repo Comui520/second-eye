@@ -13,7 +13,7 @@ def compute_risk(
     seller: Optional[Seller],
     credit_label: Optional[str] = None,
     detail_rate: Optional[float] = None,
-):
+) -> tuple[str, str]:
     """返回 (风险等级, 一句话理由)。只提示不拦截。"""
     rate = detail_rate if detail_rate is not None else (seller.positive_rate if seller else None)
     label = credit_label or getattr(seller, "credit_label", None) or ""

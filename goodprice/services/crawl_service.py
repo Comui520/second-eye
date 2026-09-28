@@ -144,37 +144,24 @@ class CrawlService:
                         logger.info("任务 %s 新品 %s：%s ¥%s", task_id, data.external_id, data.title[:30], data.price)
                         if task.fetch_detail:
                             self._fetch_detail(session, listing)
-                        if not self._requirement_pass(session, listing, task):
-                            logger.info("任务 %s 需求不匹配，不收录：%s", task_id, listing.title[:30])
-                            session.commit()
-                            continue
-                        self._condition_analysis(session, listing, task)
-                        if self._condition_gate_fails(task, listing):
-                            logger.info("任务 %s 品相分低于门槛，不收录：%s", task_id, listing.title[:30])
-                            session.commit()
-                            continue
-                        self._seller_check(session, listing, task)
-                        batch_rows.append(
-                            self._batch_row(listing, task.condition_requirement or "")
+                        reason = self._evaluate_and_queue(
+                            session, task, listing, old_price, batch_rows, pending, False
                         )
-                        pending.append((task, listing, old_price, False))
+                        if reason:
+                            logger.info("任务 %s %s，不收录：%s", task_id, reason, listing.title[:30])
+                            session.commit()
+                            continue
                     else:
                         changed = old_price is not None or listing.status == "gone"
                         if changed:
                             stats["reevaluated"] += 1
                             logger.info("任务 %s 重评 %s：%s（价格变化或重新上架）", task_id, data.external_id, data.title[:30])
-                            if not self._requirement_pass(session, listing, task):
-                                session.commit()
-                                continue
-                            self._condition_analysis(session, listing, task)
-                            if self._condition_gate_fails(task, listing):
-                                session.commit()
-                                continue
-                            self._seller_check(session, listing, task)
-                            batch_rows.append(
-                                self._batch_row(listing, task.condition_requirement or "")
+                            reason = self._evaluate_and_queue(
+                                session, task, listing, old_price, batch_rows, pending, True
                             )
-                            pending.append((task, listing, old_price, True))
+                            if reason:
+                                session.commit()
+                                continue
                         else:
                             if self._backfill(session, listing, task):
                                 stats["backfilled"] += 1
@@ -221,6 +208,27 @@ class CrawlService:
                 raise
             session.commit()
         return stats
+
+    def _evaluate_and_queue(
+        self,
+        session,
+        task: WatchTask,
+        listing: Listing,
+        old_price: Optional[float],
+        batch_rows: list[dict],
+        pending: list[tuple],
+        is_renotify: bool,
+    ) -> Optional[str]:
+        """需求→品相→门槛→卖家评估并入队；不通过时返回原因（调用方需 commit 后跳过）。"""
+        if not self._requirement_pass(session, listing, task):
+            return "需求不匹配"
+        self._condition_analysis(session, listing, task)
+        if self._condition_gate_fails(task, listing):
+            return "品相分低于门槛"
+        self._seller_check(session, listing, task)
+        batch_rows.append(self._batch_row(listing, task.condition_requirement or ""))
+        pending.append((task, listing, old_price, is_renotify))
+        return None
 
     def _upsert_listing(self, session, task: WatchTask, data: ListingData):
         listing = (
@@ -413,10 +421,12 @@ class CrawlService:
             api_key=getattr(settings, "jev_api_key", "") or "",
         )
         if judger is not None and not judger.enabled:
+            backend_name = getattr(settings, "jev_backend", "adapter") or "adapter"
+            reason = "缺少 TypeSafe API Key" if backend_name == "typesafe" else "LLM 未配置"
             logger.warning(
                 "Jev 判断层已开启但后端不可用（backend=%s：%s），将完全走原模型路径",
-                getattr(settings, "jev_backend", "adapter"),
-                "缺少 TypeSafe API Key" if judger is not None and hasattr(judger, "api_key") else "LLM 未配置",
+                backend_name,
+                reason,
             )
         return judger
 

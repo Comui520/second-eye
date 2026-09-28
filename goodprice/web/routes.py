@@ -1,3 +1,4 @@
+import logging
 import threading
 from pathlib import Path
 from typing import Optional
@@ -11,10 +12,17 @@ from sqlalchemy import func, text
 
 from goodprice.constants import SCORE_MAX
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 PAGE_SIZE = 100
+
+
+def _optional_int(value: str) -> Optional[int]:
+    """把查询参数安全转成 int；非数字返回 None，避免非法输入导致 500。"""
+    return int(value) if str(value).isdigit() else None
 
 
 def _apply_listing_filters(query, *, task_id, show, sort):
@@ -137,7 +145,9 @@ def tasks_page(request: Request):
     running_ids = request.app.state.guard.running_ids()
     queued_ids = _queued_ids(request)
     just_ran = request.query_params.get("run")
-    running, status, items = _progress_context(request, just_ran)
+    running, status, items = _progress_context(
+        request, just_ran, running_ids=running_ids, queued_ids=queued_ids
+    )
     return templates.TemplateResponse(
         request,
         "tasks.html",
@@ -161,10 +171,12 @@ def _queued_ids(request) -> set[int]:
     return set(queue.queued_ids())
 
 
-def _progress_context(request: Request, just_ran=None):
+def _progress_context(request: Request, just_ran=None, *, running_ids=None, queued_ids=None):
     guard = request.app.state.guard
-    running_ids = guard.running_ids()
-    queued_ids = _queued_ids(request)
+    if running_ids is None:
+        running_ids = guard.running_ids()
+    if queued_ids is None:
+        queued_ids = _queued_ids(request)
     active = running_ids | queued_ids
     status = None
     if active:
@@ -418,7 +430,7 @@ def listings_page(
 
         query = session.query(Listing)
         tasks = session.query(WatchTask).order_by(WatchTask.id).all()
-        task_id_int = int(task_id) if task_id else None
+        task_id_int = _optional_int(task_id)
         query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         query = query.offset(offset)
         listings = query.limit(PAGE_SIZE).all()
@@ -483,7 +495,7 @@ def listings_more(
         from goodprice.models import Listing
 
         query = session.query(Listing)
-        task_id_int = int(task_id) if task_id else None
+        task_id_int = _optional_int(task_id)
         query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         listings = query.offset(offset).limit(PAGE_SIZE).all()
         notify_counts = _notify_counts(session, listings)
@@ -732,6 +744,7 @@ def test_notification(request: Request, channel: str):
             )
         )
     except Exception:
+        logger.exception("测试通知[%s]发送失败", channel)
         return RedirectResponse(
             "/settings?" + urlencode({"toast": "发送失败，请查看容器日志"}), status_code=303
         )
@@ -783,7 +796,8 @@ async def test_llm_endpoint(request: Request):
 
     try:
         body = await request.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("测试端点请求体解析失败，按空处理: %s", exc)
         body = {}
     settings = request.app.state.settings_service.get()
 
@@ -809,10 +823,7 @@ async def test_llm_endpoint(request: Request):
             retry_delay=0,
         )
         payload = {"messages": [{"role": "user", "content": "hello"}], "model": model}
-        if api_format == "responses":
-            client._complete_responses(payload, parser=lambda s: s)
-        else:
-            client._complete(payload, parser=lambda s: s)
+        client.complete(payload, parser=lambda s: s)
         ms = int((time.time() - t0) * 1000)
         return JSONResponse({"ok": True, "msg": f"连接成功！耗时 {ms}ms"})
     except Exception as exc:
@@ -829,7 +840,8 @@ async def test_vision_endpoint(request: Request):
 
     try:
         body = await request.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("测试端点请求体解析失败，按空处理: %s", exc)
         body = {}
     settings = request.app.state.settings_service.get()
 
@@ -855,10 +867,7 @@ async def test_vision_endpoint(request: Request):
             retry_delay=0,
         )
         payload = {"messages": [{"role": "user", "content": "hello"}], "model": model}
-        if api_format == "responses":
-            client._complete_responses(payload, parser=lambda s: s)
-        else:
-            client._complete(payload, parser=lambda s: s)
+        client.complete(payload, parser=lambda s: s)
         ms = int((time.time() - t0) * 1000)
         return JSONResponse({"ok": True, "msg": f"视觉模型连通成功！耗时 {ms}ms"})
     except Exception as exc:
@@ -873,7 +882,8 @@ async def test_jev_endpoint(request: Request):
 
     try:
         body = await request.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("测试端点请求体解析失败，按空处理: %s", exc)
         body = {}
     settings = request.app.state.settings_service.get()
 
@@ -962,7 +972,7 @@ def api_list_listings(
         from goodprice.models import Listing
 
         query = session.query(Listing)
-        task_id_int = int(task_id) if task_id else None
+        task_id_int = _optional_int(task_id)
         query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         rows = query.offset(offset).limit(PAGE_SIZE).all()
     return [

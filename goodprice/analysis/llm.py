@@ -157,7 +157,7 @@ class LLMClient:
             raise RuntimeError("LLM 未配置")
         if not items:
             return {"scores": {}, "best": None, "reasons": {}}
-        requirement = str(items[0].get("requirement") or "") if items else ""
+        requirement = str(items[0].get("requirement") or "")
         lines = []
         for i, it in enumerate(items, 1):
             defects = "、".join(str(d) for d in (it.get("defects") or [])[:5]) or "无"
@@ -187,6 +187,14 @@ class LLMClient:
             ],
             "temperature": 0.2,
         }
+
+    def payload(self, content: list[dict[str, Any]], system: str = "") -> dict[str, Any]:
+        """公开请求体构造，供判断层/路由复用，无需访问私有 ``_payload``。"""
+        return self._payload(content, system=system)
+
+    def complete(self, payload: dict[str, Any], parser=parse_analysis_json) -> dict[str, Any]:
+        """公开补全入口，按 ``api_format`` 自动选择 chat/responses。"""
+        return self._complete(payload, parser=parser)
 
     def _complete(
         self, payload: dict[str, Any], parser=parse_analysis_json

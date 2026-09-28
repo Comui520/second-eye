@@ -1,4 +1,4 @@
-from goodprice.constants import RISK_FACTOR, RISK_MEDIUM
+from goodprice.constants import RISK_FACTOR, RISK_MEDIUM, SCORE_MAX
 
 # 展示“较首见降价”的统一阈值：通知文案与详情页徽标共用，避免两处各写 0.05。
 DROP_PCT_DISPLAY_THRESHOLD = 0.05
@@ -29,12 +29,12 @@ def compute_satisfaction(
         score += req_w / 2
     if cond_w:
         if listing.condition_score is not None:
-            score += min(cond_w, listing.condition_score * cond_w / 10)
+            score += min(cond_w, listing.condition_score * cond_w / SCORE_MAX)
         else:
             score += cond_w / 2
     value_base = listing.value_score if listing.value_score is not None else 5.0
-    value_eff = min(10.0, value_base + _drop_bonus(price_drop_pct))
-    score += min(value_w, value_eff * value_w / 10)
+    value_eff = min(float(SCORE_MAX), value_base + _drop_bonus(price_drop_pct))
+    score += min(value_w, value_eff * value_w / SCORE_MAX)
     risk = None
     if isinstance(listing.seller_risk, dict):
         risk = listing.seller_risk.get("risk_level")

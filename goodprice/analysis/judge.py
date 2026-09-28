@@ -154,8 +154,8 @@ class JevJudger:
         }
 
     def _ask(self, system: str, text: str, parser) -> dict[str, Any]:
-        payload = self.llm._payload([{"type": "text", "text": text}], system=system)
-        return self.llm._complete(payload, parser=parser)
+        payload = self.llm.payload([{"type": "text", "text": text}], system=system)
+        return self.llm.complete(payload, parser=parser)
 
 
 def build_judger(

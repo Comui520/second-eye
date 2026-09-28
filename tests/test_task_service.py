@@ -1,3 +1,5 @@
+import pytest
+
 from goodprice.services.task_service import TaskService
 
 
@@ -60,12 +62,8 @@ def test_rejects_invalid_task_ranges(session_factory):
         {"keyword": "x", "interval_minutes": 0},
         {"keyword": "x", "max_price": float("inf")},
     ):
-        try:
+        with pytest.raises(ValueError):
             service.create_task(data)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"expected invalid data to fail: {data}")
 
 
 def test_normalizes_task_text_and_numbers(session_factory):

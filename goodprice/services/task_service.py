@@ -32,7 +32,7 @@ def normalize_task_data(data: dict) -> dict:
     except (TypeError, ValueError) as exc:
         raise ValueError("品相分数和抓取间隔必须是整数") from exc
     if not 0 <= min_condition_score <= SCORE_MAX:
-        raise ValueError("最低品相分必须在 0 到 10 之间")
+        raise ValueError(f"最低品相分必须在 0 到 {SCORE_MAX} 之间")
     if interval_minutes < 1:
         raise ValueError("抓取间隔不能小于 1 分钟")
 

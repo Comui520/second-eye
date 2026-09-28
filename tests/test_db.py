@@ -66,7 +66,7 @@ def test_migrate_adds_notification_columns(tmp_db):
     assert {"title", "content"} <= cols
 
 
-def test_migrate_adds_round7_columns(tmp_db):
+def test_migrate_adds_listing_value_columns(tmp_db):
     engine = create_engine(tmp_db)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE listings (id INTEGER PRIMARY KEY, external_id TEXT)"))
@@ -85,7 +85,7 @@ def test_migrate_adds_round7_columns(tmp_db):
     } <= cols
 
 
-def test_migrate_adds_round8_task_columns(tmp_db):
+def test_migrate_adds_task_price_columns(tmp_db):
     engine = create_engine(tmp_db)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE watch_tasks (id INTEGER PRIMARY KEY, keyword TEXT)"))
