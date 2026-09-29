@@ -565,7 +565,7 @@ def test_settings_save_recomputes_satisfaction(base_settings, session_factory):
         assert session.query(Listing).one().satisfaction == 90.0
 
 
-def test_task_api_accepts_round8_fields(base_settings, session_factory):
+def test_task_api_accepts_price_and_exclude_fields(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     task = client.post(
         "/api/tasks",
@@ -610,7 +610,7 @@ def test_edit_page_redirects_to_detail(base_settings, session_factory):
     assert f"/tasks/{task['id']}" in resp.headers["location"]
 
 
-def test_task_detail_form_saves_round8_fields(base_settings, session_factory):
+def test_task_detail_form_saves_price_and_exclude_fields(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     task = client.post("/api/tasks", json={"keyword": "k"}).json()
     resp = client.post(
@@ -629,11 +629,16 @@ def test_task_detail_form_saves_round8_fields(base_settings, session_factory):
 
 
 def _settings_form():
-    return {
+    """设置页表单基线：字段须与 settings.html 一致，不得再出现已废弃字段。"""
+    from goodprice.config import Settings
+
+    defaults = Settings(_env_file=None)
+    form = {
         "xianyu_cookie": "",
         "llm_base_url": "",
         "llm_api_key": "",
-        "llm_model": "qwen-vl-max",
+        "llm_model": defaults.llm_model,
+        "llm_api_format": "chat_completions",
         "serverchan_sendkey": "",
         "proxy": "",
         "default_crawl_interval_minutes": "20",
@@ -641,14 +646,25 @@ def _settings_form():
         "vision_base_url": "",
         "vision_api_key": "",
         "vision_model": "",
-        "wecom_corpid": "",
-        "wecom_agentid": "",
-        "wecom_secret": "",
+        "vision_api_format": "chat_completions",
         "wecom_webhook": "",
+        "feishu_webhook": "",
+        "feishu_secret": "",
+        "gotify_url": "",
+        "gotify_token": "",
+        "gotify_priority": "5",
+        "jev_api_key": "",
+        "jev_auto_threshold": "0.85",
+        "jev_backend": "adapter",
         "serverchan_enabled": "1",
         "wecom_robot_enabled": "1",
+        "feishu_enabled": "1",
+        "gotify_enabled": "1",
         "vision_enabled": "1",
+        "jev_enabled": "0",
     }
+    assert set(form) <= set(Settings.model_fields)
+    return form
 
 
 def test_api_rejects_invalid_task_input(base_settings, session_factory):

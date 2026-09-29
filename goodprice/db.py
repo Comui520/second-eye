@@ -3,14 +3,6 @@ from pathlib import Path
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-_LISTINGS_COLUMNS = (
-    "id, platform, external_id, title, price, url, image_urls, seller, location, "
-    "published_at, first_seen_at, last_seen_at, condition_score, condition_detail, "
-    "notified_at, description, requirement_match, requirement_reason, seller_uid, "
-    "seller_name, seller_risk, blocked, satisfaction, status, missed_count, variants, "
-    "value_score, value_batch_at, best_of_batch, last_notified_satisfaction, task_id"
-)
-
 _LISTINGS_DDL = """
     id INTEGER PRIMARY KEY,
     platform VARCHAR(50) NOT NULL,
@@ -148,7 +140,7 @@ def _listing_unique_columns(session):
 def _rebuild_listings(session) -> None:
     """重建 listings 表：把全局唯一(platform, external_id)换成按任务唯一(platform, external_id, task_id)。"""
     old_cols = [r[1] for r in session.execute(text("PRAGMA table_info('listings')"))]
-    new_cols = [c.strip() for c in _LISTINGS_COLUMNS.split(",")]
+    new_cols = list(_COLUMN_DDL)  # 列清单由 DDL 派生，避免再维护一份 _LISTINGS_COLUMNS
     # 老表缺的列先以可空形式补上，保证拷贝时列齐全
     for col in new_cols:
         if col == "id" or col in old_cols:
@@ -174,6 +166,8 @@ def _rebuild_listings(session) -> None:
 
 
 _COLUMN_DDL: dict[str, str] = {}
+# 重建表用的列定义从 _LISTINGS_DDL 解析而来；测试保证其与 Listing 模型列一致
+# （tests/test_db.py::test_listings_ddl_covers_model_columns）。
 for _line in _LISTINGS_DDL.strip().splitlines():
     _line = _line.strip().rstrip(",")
     if not _line or _line.startswith("CONSTRAINT") or _line.startswith("FOREIGN"):

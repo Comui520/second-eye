@@ -6,13 +6,15 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from goodprice.analysis.judge import RequirementVerdict
+from goodprice.analysis.prompts import REQUIREMENT_CRITERION, VALUE_CRITERION
+from goodprice.constants import SCORE_MAX, SCORE_MIN
 
 logger = logging.getLogger(__name__)
 
-VALUE_LEVELS = [f"{i} 分" for i in range(1, 11)]  # Score 评分为索引空间 [0, 9]
+VALUE_LEVELS = [f"{i} 分" for i in range(SCORE_MIN, SCORE_MAX + 1)]  # SDK 返回 0–9 索引，+1 映射到 1–10
 
-REQUIREMENT_NOUL_INSTRUCTION = "该二手商品是否满足买家的硬性需求？"
-VALUE_SCORE_INSTRUCTION = "该商品按当前价格是否划算，1 分最不划算，10 分最划算"
+REQUIREMENT_NOUL_INSTRUCTION = f"该二手{REQUIREMENT_CRITERION}？"
+VALUE_SCORE_INSTRUCTION = f"该商品{VALUE_CRITERION}，1 分最不划算，10 分最划算"
 
 
 @dataclass
@@ -28,7 +30,7 @@ class TypeSafeJudger:
 
     def analyze_requirement(
         self, title: str, description: str = "", requirement: str = ""
-    ) -> dict[str, Any]:
+    ) -> RequirementVerdict:
         if not self.enabled:
             raise RuntimeError("TypeSafe API Key 未配置")
         state = (
@@ -66,7 +68,7 @@ class TypeSafeJudger:
                 logger.warning("TypeSafe 性价比评估失败，跳过 %s: %s", external_id, exc)
                 continue
             raw = float(answer.score)
-            scores[external_id] = min(10, max(1, int(round(raw)) + 1))
+            scores[external_id] = min(SCORE_MAX, max(SCORE_MIN, int(round(raw)) + 1))
             confidences[external_id] = float(getattr(answer, "confidence", 0.0))
             reasons[external_id] = f"官方 Jev Score={raw:.1f}"
         best = None

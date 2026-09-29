@@ -5,3 +5,12 @@ tests
 docs
 __pycache__
 *.pyc
+.venv
+*.egg-info
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+*.db
+browser_profile
+uv.lock

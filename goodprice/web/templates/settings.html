@@ -404,11 +404,12 @@
       document.getElementById('vision_model').value = 'glm-4.6v-flash';
       document.getElementById('vision_api_format').value = 'chat_completions';
     } else if (type === 'local') {
-      document.getElementById('llm_base_url').value = 'http://192.168.5.21:15722/v1';
-      document.getElementById('llm_model').value = 'gpt-5.6-luna';
+      // 通用占位：请替换为你的 OpenAI 兼容中转地址，不要写入具体内网 IP。
+      document.getElementById('llm_base_url').value = 'http://<你的中转地址>/v1';
+      document.getElementById('llm_model').value = '';
       document.getElementById('llm_api_format').value = 'responses';
-      document.getElementById('vision_base_url').value = 'http://192.168.5.21:15722/v1';
-      document.getElementById('vision_model').value = 'gpt-5.6-luna';
+      document.getElementById('vision_base_url').value = 'http://<你的中转地址>/v1';
+      document.getElementById('vision_model').value = '';
       document.getElementById('vision_api_format').value = 'responses';
     }
   }

@@ -82,7 +82,7 @@ Linux/macOS/NAS 可以使用仓库提供的跨平台辅助脚本：
 ./scripts/start-docker.sh --login
 ~~~
 
-脚本会生成 data/.novnc-password，启动容器并提示访问地址。默认访问：
+脚本会生成 data/.novnc-password，启动容器并提示访问地址。默认访问（端口可用 NOVNC_PORT 修改）：
 
 ~~~text
 http://127.0.0.1:16080/vnc.html

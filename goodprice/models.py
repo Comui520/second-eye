@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -54,26 +54,26 @@ class Listing(Base):
     title: Mapped[str] = mapped_column(String(500))
     price: Mapped[float] = mapped_column(Float)
     url: Mapped[str] = mapped_column(Text)
-    image_urls: Mapped[list] = mapped_column(JSON, default=list)
+    image_urls: Mapped[list[str]] = mapped_column(JSON, default=list)
     seller: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     location: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     condition_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    condition_detail: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    condition_detail: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     requirement_match: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     requirement_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     seller_uid: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     seller_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    seller_risk: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    seller_risk: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     blocked: Mapped[bool] = mapped_column(default=False)
     satisfaction: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(20), default="active")
     missed_count: Mapped[int] = mapped_column(Integer, default=0)
-    variants: Mapped[list] = mapped_column(JSON, default=list)
+    variants: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     value_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     value_batch_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     best_of_batch: Mapped[bool] = mapped_column(default=False)
@@ -141,7 +141,7 @@ class Seller(Base):
     credit_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     positive_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    tags: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     positive_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     last_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     blocked: Mapped[bool] = mapped_column(default=False)

@@ -1,3 +1,4 @@
+import logging
 import threading
 from pathlib import Path
 from typing import Optional
@@ -9,8 +10,43 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, text
 
+from goodprice.constants import SCORE_MAX
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+PAGE_SIZE = 100
+
+
+def _optional_int(value: str) -> Optional[int]:
+    """把查询参数安全转成 int；非数字返回 None，避免非法输入导致 500。"""
+    return int(value) if str(value).isdigit() else None
+
+
+def _apply_listing_filters(query, *, task_id, show, sort):
+    """列表页 / 加载更多 / API 共用的过滤与排序，避免三处 if/elif 语义分叉。
+
+    show 的取值由模板下拉决定；未知值（含 "all"）不追加过滤条件。
+    """
+    from goodprice.models import Listing
+
+    if task_id:
+        query = query.filter(Listing.task_id == task_id)
+    if show == "active":
+        query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
+    elif show == "gone":
+        query = query.filter(Listing.status == "gone")
+    elif show == "blocked":
+        query = query.filter(Listing.blocked.is_(True))
+    if sort == "price_asc":
+        return query.order_by(Listing.price.asc())
+    if sort == "price_desc":
+        return query.order_by(Listing.price.desc())
+    if sort == "newest":
+        return query.order_by(Listing.first_seen_at.desc())
+    return query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
 
 
 @router.get("/healthz", include_in_schema=False)
@@ -28,7 +64,7 @@ class TaskCreate(BaseModel):
     min_price: float = Field(default=0, ge=0, allow_inf_nan=False)
     exclude_words: str = ""
     condition_requirement: str = ""
-    min_condition_score: int = Field(default=0, ge=0, le=10)
+    min_condition_score: int = Field(default=0, ge=0, le=SCORE_MAX)
     platform: str = "xianyu"
     interval_minutes: int = Field(default=20, ge=1)
     fetch_detail: bool = True
@@ -53,12 +89,13 @@ def _services(request: Request):
     return request.app.state.task_service, request.app.state.settings_service
 
 
-def _login_context(login_session) -> dict:
+def _login_context(login_session, novnc_port: int = 16080) -> dict:
     if login_session is None:
         return {
             "login_remote": False,
             "login_browser_accessible": False,
             "login_unavailable_reason": "登录功能不可用",
+            "novnc_port": novnc_port,
         }
     reason = getattr(login_session, "unavailable_reason", lambda: "")
     return {
@@ -69,25 +106,14 @@ def _login_context(login_session) -> dict:
             getattr(login_session, "browser_accessible", True)
         ),
         "login_unavailable_reason": reason(),
+        "novnc_port": novnc_port,
     }
 
 
 def _task_dict(task) -> dict:
-    return {
-        "id": task.id,
-        "name": task.name,
-        "keyword": task.keyword,
-        "max_price": task.max_price,
-        "min_price": task.min_price,
-        "exclude_words": task.exclude_words,
-        "condition_requirement": task.condition_requirement,
-        "min_condition_score": task.min_condition_score,
-        "platform": task.platform,
-        "interval_minutes": task.interval_minutes,
-        "enabled": task.enabled,
-        "last_run_at": task.last_run_at.isoformat() if task.last_run_at else None,
-        "last_error": task.last_error,
-    }
+    from goodprice.services.task_service import task_to_dict
+
+    return task_to_dict(task)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -121,7 +147,9 @@ def tasks_page(request: Request):
     running_ids = request.app.state.guard.running_ids()
     queued_ids = _queued_ids(request)
     just_ran = request.query_params.get("run")
-    running, status, items = _progress_context(request, just_ran)
+    running, status, items = _progress_context(
+        request, just_ran, running_ids=running_ids, queued_ids=queued_ids
+    )
     return templates.TemplateResponse(
         request,
         "tasks.html",
@@ -145,10 +173,12 @@ def _queued_ids(request) -> set[int]:
     return set(queue.queued_ids())
 
 
-def _progress_context(request: Request, just_ran=None):
+def _progress_context(request: Request, just_ran=None, *, running_ids=None, queued_ids=None):
     guard = request.app.state.guard
-    running_ids = guard.running_ids()
-    queued_ids = _queued_ids(request)
+    if running_ids is None:
+        running_ids = guard.running_ids()
+    if queued_ids is None:
+        queued_ids = _queued_ids(request)
     active = running_ids | queued_ids
     status = None
     if active:
@@ -402,27 +432,12 @@ def listings_page(
 
         query = session.query(Listing)
         tasks = session.query(WatchTask).order_by(WatchTask.id).all()
-        task_id_int = int(task_id) if task_id else None
-        if task_id_int:
-            query = query.filter(Listing.task_id == task_id_int)
-        if show == "active":
-            query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
-        elif show == "gone":
-            query = query.filter(Listing.status == "gone")
-        elif show == "blocked":
-            query = query.filter(Listing.blocked.is_(True))
-        if sort == "price_asc":
-            query = query.order_by(Listing.price.asc())
-        elif sort == "price_desc":
-            query = query.order_by(Listing.price.desc())
-        elif sort == "newest":
-            query = query.order_by(Listing.first_seen_at.desc())
-        else:
-            query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
+        task_id_int = _optional_int(task_id)
+        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         query = query.offset(offset)
-        listings = query.limit(100).all()
+        listings = query.limit(PAGE_SIZE).all()
         notify_counts = _notify_counts(session, listings)
-        more = len(listings) >= 100
+        more = len(listings) >= PAGE_SIZE
     partial_url = f"/listings?partial=1&task_id={task_id or ''}&sort={sort}&show={show}"
     if partial:
         return templates.TemplateResponse(
@@ -482,24 +497,9 @@ def listings_more(
         from goodprice.models import Listing
 
         query = session.query(Listing)
-        task_id_int = int(task_id) if task_id else None
-        if task_id_int:
-            query = query.filter(Listing.task_id == task_id_int)
-        if show == "active":
-            query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
-        elif show == "gone":
-            query = query.filter(Listing.status == "gone")
-        elif show == "blocked":
-            query = query.filter(Listing.blocked.is_(True))
-        if sort == "price_asc":
-            query = query.order_by(Listing.price.asc())
-        elif sort == "price_desc":
-            query = query.order_by(Listing.price.desc())
-        elif sort == "newest":
-            query = query.order_by(Listing.first_seen_at.desc())
-        else:
-            query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
-        listings = query.offset(offset).limit(100).all()
+        task_id_int = _optional_int(task_id)
+        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
+        listings = query.offset(offset).limit(PAGE_SIZE).all()
         notify_counts = _notify_counts(session, listings)
     return templates.TemplateResponse(
         request, "listings_cards.html", {"listings": listings, "notify_counts": notify_counts}
@@ -528,7 +528,12 @@ def listing_detail_page(request: Request, listing_id: int):
         )
         notify_count = sum(1 for n in notifications if n.status == "sent")
         first_price = snapshots[0].price if snapshots else listing.price
-        drop_pct = (first_price - listing.price) / first_price if first_price else 0.0
+        from goodprice.services.satisfaction import (
+            DROP_PCT_DISPLAY_THRESHOLD,
+            drop_pct_from_snapshots,
+        )
+
+        drop_pct = drop_pct_from_snapshots(listing)
     return templates.TemplateResponse(
         request,
         "listings_detail.html",
@@ -539,6 +544,7 @@ def listing_detail_page(request: Request, listing_id: int):
             "notify_count": notify_count,
             "first_price": first_price,
             "drop_pct": drop_pct,
+            "drop_pct_threshold": DROP_PCT_DISPLAY_THRESHOLD,
             "active": "listings",
         },
     )
@@ -651,7 +657,7 @@ def settings_page(request: Request):
             "settings": settings,
             "login_status": login_status,
             "login_message": login_message,
-            **_login_context(login_session),
+            **_login_context(login_session, settings.novnc_port),
             "active": "settings",
         },
     )
@@ -686,86 +692,32 @@ def settings_login_status(request: Request):
         {
             "login_status": login_status,
             "login_message": login_message,
-            **_login_context(login_session),
+            **_login_context(
+                login_session, request.app.state.settings_service.get().novnc_port
+            ),
         },
     )
 
 
 @router.post("/settings")
-def save_settings(
-    request: Request,
-    xianyu_cookie: str = Form(""),
-    llm_base_url: str = Form(""),
-    llm_api_key: str = Form(""),
-    llm_model: str = Form(""),
-    llm_api_format: str = Form("chat_completions"),
-    serverchan_sendkey: str = Form(""),
-    proxy: str = Form(""),
-    default_crawl_interval_minutes: int = Form(20),
-    default_crawl_jitter_minutes: int = Form(10),
-    vision_base_url: str = Form(""),
-    vision_api_key: str = Form(""),
-    vision_model: str = Form(""),
-    vision_api_format: str = Form("chat_completions"),
-    wecom_webhook: str = Form(""),
-    feishu_webhook: str = Form(""),
-    feishu_secret: str = Form(""),
-    serverchan_enabled: Optional[int] = Form(None),
-    wecom_robot_enabled: Optional[int] = Form(None),
-    feishu_enabled: Optional[int] = Form(None),
-    gotify_url: str = Form(""),
-    gotify_token: str = Form(""),
-    gotify_priority: int = Form(5),
-    gotify_enabled: Optional[int] = Form(None),
-    vision_enabled: Optional[int] = Form(None),
-    jev_enabled: Optional[int] = Form(None),
-    jev_auto_threshold: float = Form(0.85),
-    jev_backend: str = Form("adapter"),
-    jev_api_key: str = Form(""),
-):
+async def save_settings(request: Request):
+    from goodprice.config import SECRET_FIELDS, Settings
+
     _, settings_service = _services(request)
-    values = {
-        "xianyu_cookie": xianyu_cookie,
-        "llm_base_url": llm_base_url,
-        "llm_api_key": llm_api_key,
-        "llm_model": llm_model,
-        "llm_api_format": llm_api_format,
-        "serverchan_sendkey": serverchan_sendkey,
-        "proxy": proxy,
-        "default_crawl_interval_minutes": str(default_crawl_interval_minutes),
-        "default_crawl_jitter_minutes": str(default_crawl_jitter_minutes),
-        "vision_base_url": vision_base_url,
-        "vision_api_key": vision_api_key,
-        "vision_model": vision_model,
-        "vision_api_format": vision_api_format,
-        "wecom_webhook": wecom_webhook,
-        "feishu_webhook": feishu_webhook,
-        "feishu_secret": feishu_secret,
-        "serverchan_enabled": "1" if serverchan_enabled else "0",
-        "wecom_robot_enabled": "1" if wecom_robot_enabled else "0",
-        "feishu_enabled": "1" if feishu_enabled else "0",
-        "gotify_url": gotify_url,
-        "gotify_token": gotify_token,
-        "gotify_priority": str(gotify_priority),
-        "gotify_enabled": "1" if gotify_enabled else "0",
-        "vision_enabled": "1" if vision_enabled else "0",
-        "jev_enabled": "1" if jev_enabled else "0",
-        "jev_auto_threshold": str(jev_auto_threshold),
-        "jev_backend": jev_backend if jev_backend in ("adapter", "typesafe") else "adapter",
-        "jev_api_key": jev_api_key,
-    }
-    for key in (
-        "llm_api_key",
-        "serverchan_sendkey",
-        "vision_api_key",
-        "wecom_webhook",
-        "feishu_webhook",
-        "feishu_secret",
-        "gotify_token",
-        "jev_api_key",
-    ):
-        if values.get(key) == "":
-            values.pop(key)  # 留空 = 保持原值
+    form = await request.form()
+    values: dict[str, str] = {}
+    for field in Settings.model_fields:
+        if field.endswith("_enabled"):
+            # 复选框未勾选时不会出现在表单里，统一记为“关闭”。
+            raw = form.get(field)
+            values[field] = "1" if str(raw).lower() in ("1", "true", "on", "yes") else "0"
+        elif field in form:
+            raw = form.get(field)
+            if isinstance(raw, str):
+                values[field] = raw
+    for field in SECRET_FIELDS:
+        if values.get(field) == "":
+            values.pop(field)  # 留空 = 保持原值
     runtime = settings_service.set_many(values)
     from goodprice.services.satisfaction import backfill_satisfaction
 
@@ -778,21 +730,10 @@ def test_notification(request: Request, channel: str):
     from fastapi import HTTPException
 
     from goodprice.notify.base import NotificationMessage
-    from goodprice.notify.feishu import FeishuNotifier
-    from goodprice.notify.gotify import GotifyNotifier
-    from goodprice.notify.serverchan import ServerChanNotifier
-    from goodprice.notify.wecom_robot import WeComRobotNotifier
+    from goodprice.notify.registry import build_channel
 
     settings = request.app.state.settings_service.get()
-    notifiers = {
-        "serverchan": ServerChanNotifier(settings.serverchan_sendkey),
-        "wecom_robot": WeComRobotNotifier(settings.wecom_webhook),
-        "feishu": FeishuNotifier(settings.feishu_webhook, settings.feishu_secret),
-        "gotify": GotifyNotifier(
-            settings.gotify_url, settings.gotify_token, settings.gotify_priority
-        ),
-    }
-    notifier = notifiers.get(channel)
+    notifier = build_channel(channel, settings)
     if notifier is None:
         raise HTTPException(status_code=404, detail="未知通知渠道")
     if not notifier.enabled:
@@ -807,6 +748,7 @@ def test_notification(request: Request, channel: str):
             )
         )
     except Exception:
+        logger.exception("测试通知[%s]发送失败", channel)
         return RedirectResponse(
             "/settings?" + urlencode({"toast": "发送失败，请查看容器日志"}), status_code=303
         )
@@ -858,7 +800,8 @@ async def test_llm_endpoint(request: Request):
 
     try:
         body = await request.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("测试端点请求体解析失败，按空处理: %s", exc)
         body = {}
     settings = request.app.state.settings_service.get()
 
@@ -884,10 +827,7 @@ async def test_llm_endpoint(request: Request):
             retry_delay=0,
         )
         payload = {"messages": [{"role": "user", "content": "hello"}], "model": model}
-        if api_format == "responses":
-            client._complete_responses(payload, parser=lambda s: s)
-        else:
-            client._complete(payload, parser=lambda s: s)
+        client.complete(payload, parser=lambda s: s)
         ms = int((time.time() - t0) * 1000)
         return JSONResponse({"ok": True, "msg": f"连接成功！耗时 {ms}ms"})
     except Exception as exc:
@@ -904,7 +844,8 @@ async def test_vision_endpoint(request: Request):
 
     try:
         body = await request.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("测试端点请求体解析失败，按空处理: %s", exc)
         body = {}
     settings = request.app.state.settings_service.get()
 
@@ -930,10 +871,7 @@ async def test_vision_endpoint(request: Request):
             retry_delay=0,
         )
         payload = {"messages": [{"role": "user", "content": "hello"}], "model": model}
-        if api_format == "responses":
-            client._complete_responses(payload, parser=lambda s: s)
-        else:
-            client._complete(payload, parser=lambda s: s)
+        client.complete(payload, parser=lambda s: s)
         ms = int((time.time() - t0) * 1000)
         return JSONResponse({"ok": True, "msg": f"视觉模型连通成功！耗时 {ms}ms"})
     except Exception as exc:
@@ -948,7 +886,8 @@ async def test_jev_endpoint(request: Request):
 
     try:
         body = await request.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("测试端点请求体解析失败，按空处理: %s", exc)
         body = {}
     settings = request.app.state.settings_service.get()
 
@@ -1037,24 +976,9 @@ def api_list_listings(
         from goodprice.models import Listing
 
         query = session.query(Listing)
-        task_id_int = int(task_id) if task_id else None
-        if task_id_int:
-            query = query.filter(Listing.task_id == task_id_int)
-        if show == "active":
-            query = query.filter(Listing.status == "active", Listing.blocked.is_(False))
-        elif show == "gone":
-            query = query.filter(Listing.status == "gone")
-        elif show == "blocked":
-            query = query.filter(Listing.blocked.is_(True))
-        if sort == "price_asc":
-            query = query.order_by(Listing.price.asc())
-        elif sort == "price_desc":
-            query = query.order_by(Listing.price.desc())
-        elif sort == "newest":
-            query = query.order_by(Listing.first_seen_at.desc())
-        else:
-            query = query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
-        rows = query.offset(offset).limit(100).all()
+        task_id_int = _optional_int(task_id)
+        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
+        rows = query.offset(offset).limit(PAGE_SIZE).all()
     return [
         {
             "id": row.id,

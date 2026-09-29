@@ -22,6 +22,14 @@ def test_migrate_is_idempotent(session_factory):
     migrate_schema(session_factory)
 
 
+def test_listings_ddl_covers_model_columns():
+    """重建表用的列定义必须与 ORM 模型完全一致，否则重建会丢列。"""
+    from goodprice.db import _COLUMN_DDL
+    from goodprice.models import Listing
+
+    assert set(_COLUMN_DDL) == {column.name for column in Listing.__table__.columns}
+
+
 def test_migrate_adds_seller_columns(tmp_db):
     engine = create_engine(tmp_db)
     with engine.begin() as conn:
@@ -58,7 +66,7 @@ def test_migrate_adds_notification_columns(tmp_db):
     assert {"title", "content"} <= cols
 
 
-def test_migrate_adds_round7_columns(tmp_db):
+def test_migrate_adds_listing_value_columns(tmp_db):
     engine = create_engine(tmp_db)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE listings (id INTEGER PRIMARY KEY, external_id TEXT)"))
@@ -77,7 +85,7 @@ def test_migrate_adds_round7_columns(tmp_db):
     } <= cols
 
 
-def test_migrate_adds_round8_task_columns(tmp_db):
+def test_migrate_adds_task_price_columns(tmp_db):
     engine = create_engine(tmp_db)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE watch_tasks (id INTEGER PRIMARY KEY, keyword TEXT)"))

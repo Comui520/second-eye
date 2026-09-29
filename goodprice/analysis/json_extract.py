@@ -5,8 +5,8 @@ LLM 常把 JSON 包在 ```json 围栏里、或在前后夹带解释文字，也�
 的括号与转义）；比原先的 ``find("{")``/``rfind("}")`` 更稳：后者一旦输出里出现
 多个对象、或字符串中含有大括号，就会取错范围。
 
-标准解析仍失败时，若安装了可选依赖 ``json-repair``，则交给它修复畸形或截断的
-JSON（例如输出被 max_tokens 截断）。
+标准解析仍失败时，交给 ``json-repair`` 修复畸形或截断的 JSON（例如输出被
+max_tokens 截断）。
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def _remove_trailing_commas(text: str) -> str:
 
 
 def _try_repair(text: str) -> dict[str, Any] | None:
-    """标准解析失败时，尝试用可选依赖 json-repair 修复畸形/截断的 JSON。"""
+    """标准解析失败时，尝试用 json-repair 修复畸形/截断的 JSON。"""
     try:
         from json_repair import repair_json
     except ImportError:

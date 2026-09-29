@@ -7,26 +7,29 @@ from typing import Any, Callable, Optional
 
 from goodprice.analysis.json_extract import extract_json_object
 from goodprice.analysis.llm import LLMClient
+from goodprice.analysis.parse_utils import clamp_score
+from goodprice.analysis.prompts import (
+    REQUIREMENT_CRITERION,
+    REQUIREMENT_SYSTEM_PREFIX,
+    VALUE_CRITERION,
+)
+from goodprice.analysis.prompts import (
+    REQUIREMENT_USER_TEMPLATE as REQUIREMENT_TYPED_USER_TEMPLATE,
+)
+from goodprice.constants import RISK_UNKNOWN
 
 logger = logging.getLogger(__name__)
 
 REQUIREMENT_TYPED_SYSTEM_PROMPT = (
-    "你是二手商品筛选助手。用户给出商品标题、卖家描述和买家需求，"
-    "请判断商品是否满足买家的硬性需求。只输出 JSON，不要输出其它文字，格式："
+    f"{REQUIREMENT_SYSTEM_PREFIX}"
+    f"请判断{REQUIREMENT_CRITERION}。只输出 JSON，不要输出其它文字，格式："
     '{"matched": true或false, "probability": 0到1的小数（该判断成立的概率，越接近1越确定）, '
     '"reason": "一句话理由"}'
 )
 
-REQUIREMENT_TYPED_USER_TEMPLATE = (
-    "商品标题：{title}\n"
-    "卖家描述：{description}\n"
-    "买家需求：{requirement}\n"
-    "请给出 JSON 结论。"
-)
-
 VALUE_TYPED_SYSTEM_PROMPT = (
     "你是二手商品性价比评估专家。用户给出单个商品（标题、价格、品相分、瑕疵、卖家风险）"
-    "与买家品相要求，请仅依据该商品本身独立评估按当前价格是否划算。只输出 JSON，不要输出其它文字，格式："
+    f"与买家品相要求，请仅依据该商品本身独立评估{VALUE_CRITERION}。只输出 JSON，不要输出其它文字，格式："
     '{"value_score": 1到10的整数（越高越划算）, "probability": 0到1的小数（该评分的可信度）, '
     '"reason": "一句话理由"}'
 )
@@ -54,7 +57,7 @@ def parse_requirement_typed(raw: str) -> dict[str, Any]:
 def parse_value_typed(raw: str) -> dict[str, Any]:
     data = extract_json_object(raw)
     try:
-        score = max(1, min(10, int(data.get("value_score", 0))))
+        score = clamp_score(data.get("value_score", 0))
     except (TypeError, ValueError):
         raise ValueError(f"类型化性价比缺少整数 value_score: {raw!r}") from None
     return {
@@ -127,7 +130,7 @@ class JevJudger:
                 price=it.get("price"),
                 condition_score=it.get("condition_score") or "未评估",
                 defects="、".join(str(d) for d in (it.get("defects") or [])[:5]) or "无",
-                seller_risk=it.get("seller_risk") or "未知",
+                seller_risk=it.get("seller_risk") or RISK_UNKNOWN,
             )
             try:
                 data = self._ask(VALUE_TYPED_SYSTEM_PROMPT, text, parse_value_typed)
@@ -151,8 +154,8 @@ class JevJudger:
         }
 
     def _ask(self, system: str, text: str, parser) -> dict[str, Any]:
-        payload = self.llm._payload([{"type": "text", "text": text}], system=system)
-        return self.llm._complete(payload, parser=parser)
+        payload = self.llm.payload([{"type": "text", "text": text}], system=system)
+        return self.llm.complete(payload, parser=parser)
 
 
 def build_judger(

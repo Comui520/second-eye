@@ -1,5 +1,5 @@
 import logging
-import sys
+import os
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -31,7 +31,7 @@ def _setup_logging() -> None:
     console = logging.StreamHandler()
     console.setFormatter(formatter)
     root.addHandler(console)
-    if "pytest" not in sys.modules:
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
         file_handler = RotatingFileHandler(
             LOG_DIR / "app.log",
             maxBytes=5 * 1024 * 1024,
@@ -50,11 +50,8 @@ def _make_crawl_service(session_factory, settings_service, guard):
     runtime = settings_service.get()
     from goodprice.analysis.llm import LLMClient
     from goodprice.crawler.xianyu import XianyuAdapter
-    from goodprice.notify.feishu import FeishuNotifier
-    from goodprice.notify.gotify import GotifyNotifier
     from goodprice.notify.log import LogNotifier
-    from goodprice.notify.serverchan import ServerChanNotifier
-    from goodprice.notify.wecom_robot import WeComRobotNotifier
+    from goodprice.notify.registry import build_enabled_notifiers
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     seller_service = SellerService(session_factory, adapter=adapter)
@@ -75,30 +72,7 @@ def _make_crawl_service(session_factory, settings_service, guard):
         if runtime.vision_enabled
         else LLMClient(base_url="", api_key="", model="")
     )
-    notifiers = [("log", LogNotifier())]
-    if runtime.serverchan_enabled:
-        serverchan = ServerChanNotifier(sendkey=runtime.serverchan_sendkey)
-        if serverchan.enabled:
-            notifiers.append(("serverchan", serverchan))
-    if runtime.wecom_robot_enabled:
-        robot = WeComRobotNotifier(webhook=runtime.wecom_webhook)
-        if robot.enabled:
-            notifiers.append(("wecom_robot", robot))
-    if runtime.feishu_enabled:
-        feishu = FeishuNotifier(
-            webhook=runtime.feishu_webhook,
-            secret=runtime.feishu_secret,
-        )
-        if feishu.enabled:
-            notifiers.append(("feishu", feishu))
-    if runtime.gotify_enabled:
-        gotify = GotifyNotifier(
-            url=runtime.gotify_url,
-            token=runtime.gotify_token,
-            priority=runtime.gotify_priority,
-        )
-        if gotify.enabled:
-            notifiers.append(("gotify", gotify))
+    notifiers = [("log", LogNotifier()), *build_enabled_notifiers(runtime)]
     return CrawlService(
         session_factory=session_factory,
         adapter=adapter,

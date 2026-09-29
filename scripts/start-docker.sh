@@ -48,9 +48,27 @@ else
   docker compose up -d --build
 fi
 
+# Compose reads project variables from the shell first, then .env. Mirror that lookup for
+# the printed login URL without sourcing .env as shell code.
+novnc_port="${NOVNC_PORT:-}"
+if [ -z "$novnc_port" ] && [ -f .env ]; then
+  novnc_port="$(awk '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*NOVNC_PORT[[:space:]]*=/ {
+      value = $0
+      sub(/^[^=]*=/, "", value)
+      sub(/[[:space:]]+#.*/, "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      gsub(/^["\047]|["\047]$/, "", value)
+    }
+    END { print value }
+  ' .env)"
+fi
+novnc_port="${novnc_port:-16080}"
+
 echo "second-eye 已启动：http://127.0.0.1:18000"
 if [ "$login" -eq 1 ]; then
-  echo "登录模式已启用 noVNC：http://<主机IP>:16080/vnc.html"
+  echo "登录模式已启用 noVNC：http://<主机IP>:$novnc_port/vnc.html"
   echo "登录完成后请重新执行：$0（关闭 noVNC）"
 else
   echo "普通运行模式：noVNC 已关闭。需要登录时执行 $0 --login"

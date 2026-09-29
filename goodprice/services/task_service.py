@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from goodprice.constants import SCORE_MAX
 from goodprice.models import WatchTask
 
 
@@ -30,8 +31,8 @@ def normalize_task_data(data: dict) -> dict:
         interval_minutes = int(20 if interval_value in (None, "") else interval_value)
     except (TypeError, ValueError) as exc:
         raise ValueError("品相分数和抓取间隔必须是整数") from exc
-    if not 0 <= min_condition_score <= 10:
-        raise ValueError("最低品相分必须在 0 到 10 之间")
+    if not 0 <= min_condition_score <= SCORE_MAX:
+        raise ValueError(f"最低品相分必须在 0 到 {SCORE_MAX} 之间")
     if interval_minutes < 1:
         raise ValueError("抓取间隔不能小于 1 分钟")
 
@@ -51,6 +52,36 @@ def normalize_task_data(data: dict) -> dict:
     }
 
 
+# 任务可编辑字段的唯一清单：创建、更新、API 序列化共用，避免多处平行维护而脱节。
+TASK_FIELDS: tuple[str, ...] = (
+    "name",
+    "keyword",
+    "max_price",
+    "min_price",
+    "exclude_words",
+    "condition_requirement",
+    "min_condition_score",
+    "platform",
+    "interval_minutes",
+    "fetch_detail",
+    "enabled",
+)
+
+
+def task_to_dict(task) -> dict:
+    """任务 API 输出：可编辑字段由 TASK_FIELDS 派生，杜绝与表单/创建参数脱节。"""
+    data = {field: getattr(task, field) for field in TASK_FIELDS}
+    data.update(
+        {
+            "id": task.id,
+            "last_run_at": task.last_run_at.isoformat() if task.last_run_at else None,
+            "last_error": task.last_error,
+            "last_run_count": task.last_run_count,
+        }
+    )
+    return data
+
+
 class TaskService:
     def __init__(self, session_factory):
         self._session_factory = session_factory
@@ -65,19 +96,7 @@ class TaskService:
 
     def create_task(self, data: dict) -> WatchTask:
         values = normalize_task_data(data)
-        task = WatchTask(
-            name=values["name"],
-            keyword=values["keyword"],
-            max_price=values["max_price"],
-            min_price=values["min_price"],
-            exclude_words=values["exclude_words"],
-            condition_requirement=values["condition_requirement"],
-            min_condition_score=values["min_condition_score"],
-            platform=values["platform"],
-            interval_minutes=values["interval_minutes"],
-            fetch_detail=values["fetch_detail"],
-            enabled=values["enabled"],
-        )
+        task = WatchTask(**{field: values[field] for field in TASK_FIELDS})
         with self._session_factory() as session:
             session.add(task)
             session.commit()
@@ -111,26 +130,11 @@ class TaskService:
             task = session.get(WatchTask, task_id)
             if not task:
                 return None
-            values = normalize_task_data({
-                "name": task.name,
-                "keyword": task.keyword,
-                "max_price": task.max_price,
-                "min_price": task.min_price,
-                "exclude_words": task.exclude_words,
-                "condition_requirement": task.condition_requirement,
-                "min_condition_score": task.min_condition_score,
-                "platform": task.platform,
-                "interval_minutes": task.interval_minutes,
-                "fetch_detail": task.fetch_detail,
-                "enabled": task.enabled,
-                **data,
-            })
-            for key in (
-                "name", "keyword", "max_price", "min_price", "exclude_words",
-                "condition_requirement", "min_condition_score", "platform",
-                "interval_minutes", "fetch_detail", "enabled",
-            ):
-                setattr(task, key, values[key])
+            values = normalize_task_data(
+                {**{field: getattr(task, field) for field in TASK_FIELDS}, **data}
+            )
+            for field in TASK_FIELDS:
+                setattr(task, field, values[field])
             session.commit()
             session.refresh(task)
             return task

@@ -1,3 +1,5 @@
+import pytest
+
 from goodprice.services.task_service import TaskService
 
 
@@ -60,12 +62,8 @@ def test_rejects_invalid_task_ranges(session_factory):
         {"keyword": "x", "interval_minutes": 0},
         {"keyword": "x", "max_price": float("inf")},
     ):
-        try:
+        with pytest.raises(ValueError):
             service.create_task(data)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"expected invalid data to fail: {data}")
 
 
 def test_normalizes_task_text_and_numbers(session_factory):
@@ -87,3 +85,13 @@ def test_normalizes_task_text_and_numbers(session_factory):
     assert task.condition_requirement == "screen"
     assert task.min_price == 10.0
     assert task.interval_minutes == 5
+
+
+def test_task_to_dict_covers_all_editable_fields(session_factory):
+    from goodprice.services.task_service import TASK_FIELDS, TaskService, task_to_dict
+
+    task = TaskService(session_factory).create_task({"keyword": "k", "fetch_detail": False})
+    data = task_to_dict(task)
+    assert set(TASK_FIELDS) <= set(data)
+    assert data["fetch_detail"] is False
+    assert "last_run_count" in data

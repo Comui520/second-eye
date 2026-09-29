@@ -25,7 +25,7 @@ def test_empty_value_clears_override(session_factory, base_settings):
     assert service.get().xianyu_cookie == ""
 
 
-def test_round2_settings_persist(session_factory, base_settings):
+def test_webhook_and_vision_persist(session_factory, base_settings):
     service = SettingsService(session_factory, base=base_settings)
     service.set_many({"wecom_webhook": "https://x/send?key=abc", "vision_model": "glm-4v-flash", "vision_api_format": "responses"})
     settings = service.get()
@@ -35,7 +35,7 @@ def test_round2_settings_persist(session_factory, base_settings):
     assert settings.serverchan_enabled is True
 
 
-def test_round5_toggle_persist(session_factory, base_settings):
+def test_toggle_flags_persist(session_factory, base_settings):
     service = SettingsService(session_factory, base=base_settings)
     service.set_many({"serverchan_enabled": "0", "vision_enabled": "0"})
     settings = service.get()

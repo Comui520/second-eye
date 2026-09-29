@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
+from goodprice.constants import RISK_HIGH, RISK_LOW, RISK_MEDIUM, RISK_UNKNOWN
 from goodprice.models import Seller
 
 logger = logging.getLogger(__name__)
@@ -12,31 +13,31 @@ def compute_risk(
     seller: Optional[Seller],
     credit_label: Optional[str] = None,
     detail_rate: Optional[float] = None,
-):
+) -> tuple[str, str]:
     """返回 (风险等级, 一句话理由)。只提示不拦截。"""
     rate = detail_rate if detail_rate is not None else (seller.positive_rate if seller else None)
     label = credit_label or getattr(seller, "credit_label", None) or ""
     if rate is not None:
         pct = rate * 100
         if rate >= 0.98:
-            return "低", f"好评率 {pct:.0f}%"
+            return RISK_LOW, f"好评率 {pct:.0f}%"
         if rate >= 0.90:
-            return "中", f"好评率 {pct:.0f}%"
-        return "高", f"好评率 {pct:.0f}%"
+            return RISK_MEDIUM, f"好评率 {pct:.0f}%"
+        return RISK_HIGH, f"好评率 {pct:.0f}%"
     if label:
         if "极好" in label:
-            return "低", label
+            return RISK_LOW, label
         if "良好" in label or label.endswith("好"):
-            return "中", label
-        return "高", label
+            return RISK_MEDIUM, label
+        return RISK_HIGH, label
     if seller and seller.positive_count is not None and seller.total_count:
         pct = seller.positive_count / seller.total_count * 100
         if pct >= 98:
-            return "低", f"好评 {seller.positive_count}/{seller.total_count}"
+            return RISK_LOW, f"好评 {seller.positive_count}/{seller.total_count}"
         if pct >= 90:
-            return "中", f"好评 {seller.positive_count}/{seller.total_count}"
-        return "高", f"好评 {seller.positive_count}/{seller.total_count}"
-    return "未知", "卖家数据不足"
+            return RISK_MEDIUM, f"好评 {seller.positive_count}/{seller.total_count}"
+        return RISK_HIGH, f"好评 {seller.positive_count}/{seller.total_count}"
+    return RISK_UNKNOWN, "卖家数据不足"
 
 
 class SellerService:
