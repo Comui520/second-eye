@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "good-price"
-version = "0.1.0"
+version = "0.1.1"
 description = "闲鱼盯价助手：本地 Web 工具，监控关键词新上架商品，LLM 品相分析 + 微信提醒"
 readme = "README.md"
 requires-python = ">=3.11"
