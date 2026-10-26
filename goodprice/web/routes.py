@@ -58,6 +58,8 @@ def healthz(request: Request):
 
 
 class TaskCreate(BaseModel):
+    target_variant: str = ""
+    notify_pending_price: bool = False
     name: str = ""
     keyword: str = Field(min_length=1)
     max_price: float = Field(default=0, ge=0, allow_inf_nan=False)

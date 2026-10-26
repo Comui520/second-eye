@@ -4,7 +4,7 @@ import math
 from typing import Optional
 
 from goodprice.constants import SCORE_MAX
-from goodprice.models import WatchTask
+from goodprice.models import Listing, Notification, WatchTask
 
 
 def normalize_task_data(data: dict) -> dict:
@@ -48,6 +48,8 @@ def normalize_task_data(data: dict) -> dict:
         "platform": str(data.get("platform") or "xianyu").strip() or "xianyu",
         "interval_minutes": interval_minutes,
         "fetch_detail": bool(data.get("fetch_detail", True)),
+        "target_variant": str(data.get("target_variant") or "").strip(),
+        "notify_pending_price": bool(data.get("notify_pending_price", False)),
         "enabled": bool(data.get("enabled", True)),
     }
 
@@ -64,6 +66,8 @@ TASK_FIELDS: tuple[str, ...] = (
     "platform",
     "interval_minutes",
     "fetch_detail",
+    "target_variant",
+    "notify_pending_price",
     "enabled",
 )
 
@@ -108,6 +112,7 @@ class TaskService:
             task = session.get(WatchTask, task_id)
             if task:
                 task.enabled = not task.enabled
+                task.version += 1
                 session.commit()
                 session.refresh(task)
             return task
@@ -117,6 +122,8 @@ class TaskService:
             task = session.get(WatchTask, task_id)
             if not task:
                 return False
+            session.query(Listing).filter_by(task_id=task_id).update({"task_id": None})
+            session.query(Notification).filter_by(task_id=task_id).update({"task_id": None})
             session.delete(task)
             session.commit()
             return True
@@ -133,6 +140,10 @@ class TaskService:
             values = normalize_task_data(
                 {**{field: getattr(task, field) for field in TASK_FIELDS}, **data}
             )
+            for field in TASK_FIELDS:
+                if getattr(task, field) != values[field]:
+                    task.version += 1
+                    break
             for field in TASK_FIELDS:
                 setattr(task, field, values[field])
             session.commit()

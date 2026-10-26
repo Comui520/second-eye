@@ -36,6 +36,9 @@ class WatchTask(Base):
     interval_minutes: Mapped[int] = mapped_column(Integer, default=20)
     enabled: Mapped[bool] = mapped_column(default=True)
     fetch_detail: Mapped[bool] = mapped_column(default=True)
+    target_variant: Mapped[str] = mapped_column(Text, default="")
+    notify_pending_price: Mapped[bool] = mapped_column(default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -88,6 +91,7 @@ class Listing(Base):
     notifications: Mapped[list["Notification"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
+    offers: Mapped[list["ListingOffer"]] = relationship(cascade="all, delete-orphan")
 
 
 class PriceSnapshot(Base):
@@ -105,6 +109,8 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    event_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
     listing_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("listings.id", ondelete="SET NULL"), nullable=True
     )
@@ -126,6 +132,56 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+class SchemaVersion(Base):
+    __tablename__ = "schema_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    legacy_install: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ListingOffer(Base):
+    __tablename__ = "listing_offers"
+    __table_args__ = (UniqueConstraint("listing_id", "offer_key", name="uq_listing_offer"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    offer_key: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(Text, default="")
+    attributes: Mapped[dict] = mapped_column(JSON, default=dict)
+    availability: Mapped[str] = mapped_column(String(20), default="unknown")
+    observations: Mapped[list["OfferObservation"]] = relationship(cascade="all, delete-orphan")
+    quotes: Mapped[list["ManualQuote"]] = relationship(cascade="all, delete-orphan")
+    evaluations: Mapped[list["OfferEvaluationRecord"]] = relationship(cascade="all, delete-orphan")
+
+
+class OfferObservation(Base):
+    __tablename__ = "offer_observations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("listing_offers.id"), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class ManualQuote(Base):
+    __tablename__ = "manual_quotes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("listing_offers.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    evidence_fingerprint: Mapped[str] = mapped_column(String(64))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class OfferEvaluationRecord(Base):
+    __tablename__ = "offer_evaluations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("listing_offers.id"), index=True)
+    task_version: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class Seller(Base):

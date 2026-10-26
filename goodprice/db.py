@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 _LISTINGS_DDL = """
@@ -66,7 +66,17 @@ def init_db(database_url: str) -> None:
     from goodprice import models  # noqa: F401  确保模型注册
 
     factory = make_session_factory(database_url)
-    Base.metadata.create_all(factory().get_bind())
+    engine = factory.kw["bind"]
+    legacy = inspect(engine).has_table("watch_tasks")
+    Base.metadata.create_all(engine)
+    # Record installation type before additive table creation hides its provenance.
+    from goodprice.models import SchemaVersion
+
+    with factory() as session:
+        if session.get(SchemaVersion, 1) is None:
+            session.add(SchemaVersion(id=1, version=0, legacy_install=legacy))
+            session.commit()
+    engine.dispose()
 
 
 def migrate_schema(session_factory) -> None:
@@ -76,6 +86,9 @@ def migrate_schema(session_factory) -> None:
             ("fetch_detail", "fetch_detail BOOLEAN DEFAULT 1"),
             ("min_price", "min_price FLOAT DEFAULT 0"),
             ("exclude_words", "exclude_words TEXT"),
+            ("target_variant", "target_variant TEXT DEFAULT ''"),
+            ("notify_pending_price", "notify_pending_price BOOLEAN DEFAULT 0"),
+            ("version", "version INTEGER DEFAULT 1"),
         ],
         "listings": [
             ("description", "description TEXT"),
@@ -100,6 +113,8 @@ def migrate_schema(session_factory) -> None:
             ("blocked", "blocked BOOLEAN DEFAULT 0"),
         ],
         "notifications": [
+            ("offer_id", "offer_id INTEGER"),
+            ("event_key", "event_key VARCHAR(128)"),
             ("title", "title TEXT"),
             ("content", "content TEXT"),
         ],
@@ -120,6 +135,9 @@ def migrate_schema(session_factory) -> None:
                     session.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
         if "listings" in existing_tables and _listing_unique_columns(session) != _NEW_LISTING_UNIQUE:
             _rebuild_listings(session)
+        from goodprice.migrations import migrate_offer_schema
+
+        migrate_offer_schema(session)
         session.commit()
 
 
