@@ -108,20 +108,24 @@ class TaskService:
             return task
 
     def toggle_task(self, task_id: int) -> Optional[WatchTask]:
+        from goodprice.execution.store import invalidate_in_session
         with self._session_factory() as session:
             task = session.get(WatchTask, task_id)
             if task:
                 task.enabled = not task.enabled
                 task.version += 1
+                invalidate_in_session(session, task_id)
                 session.commit()
                 session.refresh(task)
             return task
 
     def delete_task(self, task_id: int) -> bool:
+        from goodprice.execution.store import invalidate_in_session
         with self._session_factory() as session:
             task = session.get(WatchTask, task_id)
             if not task:
                 return False
+            invalidate_in_session(session, task_id)
             session.query(Listing).filter_by(task_id=task_id).update({"task_id": None})
             session.query(Notification).filter_by(task_id=task_id).update({"task_id": None})
             session.delete(task)
@@ -133,6 +137,7 @@ class TaskService:
             return session.query(WatchTask).filter(WatchTask.enabled.is_(True)).all()
 
     def update_task(self, task_id: int, data: dict) -> Optional[WatchTask]:
+        from goodprice.execution.store import invalidate_in_session
         with self._session_factory() as session:
             task = session.get(WatchTask, task_id)
             if not task:
@@ -143,6 +148,7 @@ class TaskService:
             for field in TASK_FIELDS:
                 if getattr(task, field) != values[field]:
                     task.version += 1
+                    invalidate_in_session(session, task_id)
                     break
             for field in TASK_FIELDS:
                 setattr(task, field, values[field])

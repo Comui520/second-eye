@@ -226,3 +226,61 @@ class MediaAsset(Base):
     status: Mapped[str] = mapped_column(String(30), default="pending")
     failure: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TaskRun(Base):
+    __tablename__ = "task_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(Integer, index=True)
+    task_version: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(30), default="crawl")
+    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    state: Mapped[str] = mapped_column(String(30), default="queued", index=True)
+    followup: Mapped[bool] = mapped_column(default=False)
+    cursor: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deadline_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class WorkItem(Base):
+    __tablename__ = "work_items"
+    __table_args__ = (UniqueConstraint("run_id", "stage", "input_fingerprint", name="uq_work_input"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("task_runs.id"), index=True)
+    task_id: Mapped[int] = mapped_column(Integer, index=True)
+    stage: Mapped[str] = mapped_column(String(20), index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    output: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    state: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    lease_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    not_before: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class NotificationEvent(Base):
+    __tablename__ = "notification_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_key: Mapped[str] = mapped_column(String(128), unique=True)
+    task_id: Mapped[int] = mapped_column(Integer, index=True)
+    task_version: Mapped[int] = mapped_column(Integer)
+    offer_id: Mapped[int] = mapped_column(Integer)
+    listing_id: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    state: Mapped[str] = mapped_column(String(30), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (UniqueConstraint("event_id", "channel", name="uq_delivery_channel"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("notification_events.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(50))
+    state: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    lease_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    not_before: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
