@@ -5,7 +5,16 @@ def select_media(images: list[MediaEvidence], frames: list[MediaEvidence],
                  image_quota: int, frame_quota: int, total_limit: int) -> MediaSelection:
     if not (0 <= image_quota <= 16 and 0 <= frame_quota <= 16 and 1 <= total_limit <= 16):
         raise ValueError("Invalid media input budget")
-    groups = [images, frames]
+    seen = set()
+    groups = []
+    for group in (images, frames):
+        unique = []
+        for item in group:
+            identity = (item.kind, item.content_hash, item.offer_key)
+            if identity not in seen:
+                seen.add(identity)
+                unique.append(item)
+        groups.append(unique)
     quotas = [image_quota, frame_quota]
     positions = [0, 0]
     selected = []

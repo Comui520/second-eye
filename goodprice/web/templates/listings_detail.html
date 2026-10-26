@@ -26,11 +26,34 @@
       <form method="post" action="/listings/{{ listing.id }}/delete" class="inline" onsubmit="return confirm('确认删除该商品？')"><button class="btn btn-outline-red">删除</button></form>
     </div>
 
-    {% if listing.image_urls %}
+    {% if media_assets %}
+    <h3 class="font-semibold mt-5">媒体证据</h3>
+    <p class="text-xs text-gray-500">仅分析选中的画面；视频为有限采样，未验证音频或完整动态过程。未绑定规格的媒体为共享样品。</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+    {% for asset in media_assets %}
+      <div class="border rounded p-2 text-xs break-all">
+        {% if asset.viewable %}<img src="{{ asset.url }}" alt="商品证据 {{ asset.evidence_id }}" loading="lazy" class="w-full object-contain">{% endif %}
+        <p>{{ asset.kind }} {% if asset.timestamp_ms is not none %}{{ asset.timestamp_ms / 1000 }} 秒{% endif %} · {{ asset.offer_key or '共享媒体' }}</p>
+        <p>{{ asset.evidence_id }}</p>
+        {% if not asset.available %}<p>{{ '证据文件已清理' if asset.content_hash else '未分析 / 不可用' }}</p>{% endif %}
+      </div>
+    {% endfor %}
+    </div>
+    {% if listing.condition_detail and listing.condition_detail.limitations %}<p class="text-sm text-amber-700 mt-2">覆盖限制：{{ listing.condition_detail.limitations|join('、') }}</p>{% endif %}
+    {% elif listing.image_urls %}
     <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
       {% for u in listing.image_urls %}<div class="bg-gray-100 rounded overflow-hidden aspect-square"><img src="{{ u }}" onclick="openLightbox(this.src)" class="w-full h-full object-contain cursor-zoom-in hover:opacity-90 transition"></div>{% endfor %}
     </div>
     <div class="text-xs text-gray-400 mt-1">点击图片可放大查看</div>
+    {% endif %}
+
+    {% if listing.condition_detail %}
+      {% for field, label in [('observations','画面观察'), ('seller_claims','卖家声明'), ('conflicts','信息冲突'), ('unverified','未验证项')] %}
+        {% if listing.condition_detail[field] %}
+          <h3 class="font-semibold mt-3">{{ label }}</h3>
+          {% for item in listing.condition_detail[field] %}<p class="text-sm">{{ item.text }} <span class="text-xs text-gray-500">依据：{{ item.evidence_ids|join('、') or '无直接画面证据' }}</span></p>{% endfor %}
+        {% endif %}
+      {% endfor %}
     {% endif %}
 
     <h3 class="font-semibold mt-5 mb-1">规格与价格证据（实验性）</h3>

@@ -18,6 +18,11 @@ def test_default_mixed_selection_is_four_images_four_frames():
     assert len(result.omitted_ids) == 6
 
 
+def test_duplicate_content_does_not_consume_paid_input_slots():
+    images = [MediaEvidence(str(i), "image", "same-hash", Path(f"{i}.jpg")) for i in range(8)]
+    assert len(select_media(images, [], 4, 4, 8).items) == 1
+
+
 def test_single_type_borrows_unused_quota():
     result = select_media(evidence("image", 10), [], 4, 4, 8)
     assert len(result.items) == 8

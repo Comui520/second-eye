@@ -16,6 +16,7 @@ from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
 from goodprice.services.task_queue import DEFAULT_GAP_SECONDS, TaskQueue
 from goodprice.services.task_service import TaskService
+from goodprice.web.media_routes import router as media_router
 from goodprice.web.offer_routes import router as offer_router
 from goodprice.web.routes import router
 
@@ -51,8 +52,11 @@ def _make_crawl_service(session_factory, settings_service, guard):
     runtime = settings_service.get()
     from goodprice.analysis.llm import LLMClient
     from goodprice.crawler.xianyu import XianyuAdapter
+    from goodprice.media.budget import MediaBudget
+    from goodprice.media.processing import MediaProcessor
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.registry import build_enabled_notifiers
+    from goodprice.services.media_service import MediaService
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     seller_service = SellerService(session_factory, adapter=adapter)
@@ -83,6 +87,9 @@ def _make_crawl_service(session_factory, settings_service, guard):
         settings_service=settings_service,
         guard=guard,
         seller_service=seller_service,
+        media_service=MediaService(session_factory, MediaProcessor(MediaBudget(
+            runtime.data_root / "media-cache", runtime.media_cache_mib * 1024**2,
+            runtime.media_retention_days * 86400))),
     )
 
 
@@ -171,6 +178,7 @@ def build_app(
     app.state.login_session = login_session
     app.include_router(router)
     app.include_router(offer_router)
+    app.include_router(media_router)
     return app
 
 

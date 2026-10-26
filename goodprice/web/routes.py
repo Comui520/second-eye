@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import and_, case, func, select, text
 
 from goodprice.constants import SCORE_MAX
+from goodprice.web.media_routes import MEDIA_LABELS, capabilities, public_assets
 
 logger = logging.getLogger(__name__)
 
@@ -577,6 +578,7 @@ def listing_detail_page(request: Request, listing_id: int):
             "drop_pct": drop_pct,
             "drop_pct_threshold": DROP_PCT_DISPLAY_THRESHOLD,
             "offers": OfferPipeline(request.app.state.session_factory).snapshot(listing_id, dt.now(timezone.utc)),
+            "media_assets": public_assets(request, listing_id),
             "active": "listings",
         },
     )
@@ -687,6 +689,9 @@ def settings_page(request: Request):
         "settings.html",
         {
             "settings": settings,
+            "media_capabilities": capabilities(settings),
+            "media_fields": [name for name in type(settings).model_fields if name.startswith("media_")],
+            "media_labels": MEDIA_LABELS,
             "login_status": login_status,
             "login_message": login_message,
             **_login_context(login_session, settings.novnc_port),
@@ -733,12 +738,21 @@ def settings_login_status(request: Request):
 
 @router.post("/settings")
 async def save_settings(request: Request):
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
     from goodprice.config import SECRET_FIELDS, Settings
+    from goodprice.web.media_routes import MEDIA_FIELDS
 
     _, settings_service = _services(request)
     form = await request.form()
+    forbidden = MEDIA_FIELDS | {"database_url", "data_root", "app_name", "runtime_mode", "enable_novnc", "novnc_password_file", "novnc_port"}
+    if set(form) & forbidden:
+        raise HTTPException(422, "请使用媒体分类修改预算；部署参数仅可通过环境配置")
     values: dict[str, str] = {}
     for field in Settings.model_fields:
+        if field in forbidden:
+            continue
         if field.endswith("_enabled"):
             # 复选框未勾选时不会出现在表单里，统一记为“关闭”。
             raw = form.get(field)
@@ -750,7 +764,10 @@ async def save_settings(request: Request):
     for field in SECRET_FIELDS:
         if values.get(field) == "":
             values.pop(field)  # 留空 = 保持原值
-    runtime = settings_service.set_many(values)
+    try:
+        runtime = settings_service.set_many(values)
+    except ValidationError:
+        raise HTTPException(422, "设置值无效，未保存任何更改") from None
     from goodprice.services.satisfaction import backfill_satisfaction
 
     backfill_satisfaction(request.app.state.session_factory, vision_enabled=runtime.vision_enabled)

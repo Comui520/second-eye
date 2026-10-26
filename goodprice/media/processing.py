@@ -64,7 +64,8 @@ class MediaProcessor:
                     with self.budget.reserve(candidate.key, download_size + output_size + 65536) as reservation:
                         raw = self.downloader.download(candidate, download_size, settings.media_download_timeout,
                                                        reservation=reservation)
-                        source_hash = hashlib.sha256(raw.read_bytes()).hexdigest()
+                        with raw.open("rb") as source:
+                            source_hash = hashlib.file_digest(source, "sha256").hexdigest()
                         parameters = {"version": 1, "kind": candidate.kind, "edge": 1280,
                                       "frames": settings.media_frames_per_video,
                                       "max_seconds": settings.media_video_max_seconds}
@@ -84,7 +85,7 @@ class MediaProcessor:
                                     settings.media_decode_timeout, settings.media_ffmpeg_threads,
                                     max_seconds=settings.media_video_max_seconds)
                                 outputs = [f.path for f in frames]
-                                data = [{"file": str(f.path.relative_to(reservation.directory)), "timestamp": f.timestamp_ms,
+                                data = [{"file": f.path.relative_to(reservation.directory).as_posix(), "timestamp": f.timestamp_ms,
                                          "hash": f.content_hash} for f in frames]
                             raw.unlink(missing_ok=True)
                             manifest = reservation.directory / f"{key}.json"

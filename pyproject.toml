@@ -37,6 +37,9 @@ good-price = "goodprice.main:main"
 [tool.setuptools.packages.find]
 include = ["goodprice*"]
 
+[tool.setuptools.package-data]
+"goodprice.web" = ["templates/*.html", "static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

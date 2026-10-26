@@ -115,16 +115,21 @@ class OfferCrawlRunner:
                     changed = True
                 if needs_backfill:
                     changed = False
-            if potential and (changed or needs_backfill):
+            if (potential or self.crawl.media_service) and (changed or needs_backfill or self.crawl.media_service):
                 with self.factory() as session:
                     listing = session.get(Listing, listing_id)
-                    if self.crawl._requirement_pass(session, listing, task):
+                    previous_media = (listing.condition_detail or {}).get("media_cache_key")
+                    previous_score = listing.condition_score
+                    if (not changed and not needs_backfill) or self.crawl._requirement_pass(session, listing, task):
                         if len(candidates) == 1:
-                            self.crawl._condition_analysis(session, listing, task, price=analysis_price)
+                            self.crawl._condition_analysis(session, listing, task, price=analysis_price, offer=candidates[0])
                         else:
                             listing.condition_score = None
                             listing.condition_detail = {"error": "多规格共享媒体，品相待核验"}
                         self.crawl._seller_check(session, listing, task)
+                    if self.crawl.media_service and (previous_media != (listing.condition_detail or {}).get("media_cache_key")
+                                                    or previous_score != listing.condition_score):
+                        changed = True
                     session.commit()
                 ids = self.pipeline.evaluate_listing(listing_id, task_id, candidates, now)
                 stats["reevaluated"] += int(not is_new and changed)
@@ -269,9 +274,9 @@ class OfferCrawlRunner:
             potential = any(session.get(OfferEvaluationRecord, i).payload["state"] == "exact" for i in ids)
             analysis_price = next((session.get(OfferEvaluationRecord, i).payload["amount_cents"] / 100
                                   for i in ids if session.get(OfferEvaluationRecord, i).payload["state"] == "exact"), None)
-            if potential and self.crawl._requirement_pass(session, listing, task):
+            if (potential or self.crawl.media_service) and self.crawl._requirement_pass(session, listing, task):
                 if len(candidates) == 1:
-                    self.crawl._condition_analysis(session, listing, task, price=analysis_price)
+                    self.crawl._condition_analysis(session, listing, task, price=analysis_price, offer=candidates[0], force=True)
                 else:
                     listing.condition_score = None
                     listing.condition_detail = {"error": "多规格共享媒体，品相待核验"}

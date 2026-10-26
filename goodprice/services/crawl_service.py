@@ -47,6 +47,7 @@ class CrawlService:
         settings_service,
         guard=None,
         seller_service=None,
+        media_service=None,
     ):
         self._session_factory = session_factory
         self.adapter = adapter
@@ -56,6 +57,7 @@ class CrawlService:
         self.settings_service = settings_service
         self.guard = guard or TaskRunGuard()
         self.seller_service = seller_service
+        self.media_service = media_service
         self._judger = None
 
     def run_task(self, task_id: int) -> dict[str, Any]:
@@ -132,8 +134,9 @@ class CrawlService:
         except Exception as exc:
             logger.warning("详情抓取失败，退回标题判断: %s", exc)
             return
-        if detail.description:
-            listing.description = detail.description
+        listing.description = detail.description
+        if self.media_service:
+            self.media_service.record(listing.id, detail.media)
         merged = []
         for url in detail.image_urls:
             if url not in merged and is_product_image(url):
@@ -253,10 +256,21 @@ class CrawlService:
         return judger
 
     def _condition_analysis(self, session, listing: Listing, task: WatchTask,
-                            price: float | None = None) -> None:
+                            price: float | None = None, offer=None, force=False) -> None:
         if not self.vision.enabled:
             return
         listing.condition_score = None
+        if self.media_service:
+            from goodprice.offers.types import OfferCandidate
+
+            try:
+                verdict = self.media_service.analyze(listing.id, offer or OfferCandidate("default", {}),
+                    self.vision, task.condition_requirement or "", self.settings_service.get(), force=force)
+                listing.condition_score = verdict.get("condition_score")
+                listing.condition_detail = verdict
+            except Exception:
+                listing.condition_detail = {"error": "媒体分析失败或超出预算，品相待核验"}
+            return
         valid = [u for u in (listing.image_urls or []) if is_product_image(u)]
         if not valid:
             listing.condition_detail = {"error": "无有效商品图"}

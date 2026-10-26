@@ -1,0 +1,20 @@
+<section id="media" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+  <h2 class="text-base font-semibold">媒体证据与用量</h2>
+  <p class="text-sm text-gray-600 mt-2">每次评估只发一个视觉请求，不自动分批。增加图片或帧数通常会增加模型费用、响应延迟、内存与磁盘占用；具体金额以提供商账单为准。抽帧仅检查采样画面，不代表看过完整视频或音频。</p>
+  <p class="text-sm mt-2">当前每次最多 {{ settings.media_total_limit }} 张；原图配额 {{ settings.media_image_quota }}，帧配额 {{ settings.media_frame_quota }}。混合时交替分配，单一类型借用剩余名额；配额为0即不分析该类。保存仅影响后续执行，不自动重新分析历史商品。</p>
+  {% if not media_capabilities.ffmpeg_available %}<p class="text-sm text-amber-700 mt-2">未检测到 FFmpeg/ffprobe，视频暂不可分析，图片与页面可正常使用。Docker 镜像内置工具；本地使用请安装 FFmpeg 并加入 PATH 后重启应用。</p>{% endif %}
+  <form method="post" action="/settings/media" class="mt-4 space-y-3">
+    <input type="hidden" name="media_form" value="1">
+    <label class="block text-sm"><input type="checkbox" name="video_analysis_enabled" value="1" {% if settings.video_analysis_enabled %}checked{% endif %}> 启用视频抽帧分析（默认关闭）</label>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {% for name, label in media_labels.items() %}
+      <label class="block text-sm">{{ label }}
+        <input class="border rounded px-2 py-1 w-full" name="{{ name }}" type="number" required value="{{ settings[name] }}">
+      </label>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-gray-500">未知模型上限保守为8，确认提供商支持后才可提高至16。缓存包括下载、视频、保留原图和帧；磁盘不足会延后或跳过，不突破预算。视频默认100MiB/180秒，下载60秒/解码30秒，缓存1GiB/7天。</p>
+    <label class="block text-sm"><input type="checkbox" name="confirm_cost" value="1"> 我已了解增加预算带来的费用、延迟、内存、存储及模型限制</label>
+    <button class="btn btn-primary">保存媒体设置</button>
+  </form>
+</section>
