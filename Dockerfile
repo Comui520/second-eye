@@ -26,7 +26,7 @@ RUN env HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" \
     sh -c 'pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.lock && playwright install --with-deps chromium'
 
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends x11vnc novnc websockify \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends x11vnc novnc websockify ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./

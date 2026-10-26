@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import goodprice.models  # noqa: F401 -- register tables before fixture creation
 from goodprice.config import Settings
 from goodprice.db import Base, make_session_factory
 
