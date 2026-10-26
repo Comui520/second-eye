@@ -30,6 +30,7 @@ class ExecutionStore:
         self.factory = session_factory
         self.global_limit, self.task_limit, self.active_limit = global_limit, task_limit, active_limit
         self.lease_seconds, self.run_minutes = lease_seconds, run_minutes
+        self._last_task = {}
         with _locks_guard:
             self.lock = _locks.setdefault(str(session_factory.kw["bind"].url), threading.RLock())
 
@@ -101,6 +102,11 @@ class ExecutionStore:
             rows = session.query(WorkItem).join(TaskRun, TaskRun.id == WorkItem.run_id).filter(
                 WorkItem.stage == stage.value, WorkItem.state.in_(("pending", "retry")),
                 TaskRun.state.in_(OPEN_RUN)).order_by(WorkItem.attempt, WorkItem.id).all()
+            task_ids = sorted({row.task_id for row in rows})
+            last = self._last_task.get(stage, 0)
+            rotated = [i for i in task_ids if i > last] + [i for i in task_ids if i <= last]
+            order = {key: i for i, key in enumerate(rotated)}
+            rows.sort(key=lambda row: (order[row.task_id], row.id))
             for item in rows:
                 run = session.get(TaskRun, item.run_id)
                 if not self._valid(session, run, now):
@@ -116,6 +122,7 @@ class ExecutionStore:
                 item.state, item.lease_id = "running", uuid.uuid4().hex
                 item.lease_until = min(run.deadline_at, now + timedelta(seconds=self.lease_seconds))
                 item.attempt += 1
+                self._last_task[stage] = item.task_id
                 session.commit()
                 return WorkItemDTO(item.id, RunToken(run.id, run.task_id, run.task_version, item.lease_id),
                     stage, item.input_fingerprint, freeze(item.payload), item.attempt,
@@ -146,7 +153,7 @@ class ExecutionStore:
                 return False
             if any((item.output or {}).get("next") for item in session.query(WorkItem).filter_by(run_id=run_id, state="done")):
                 return False
-            run.state = "completed"
+            run.state = "failed" if session.query(WorkItem).filter_by(run_id=run_id, state="failed").first() else "completed"
             followup = run.followup
             run.followup = False
             session.flush()

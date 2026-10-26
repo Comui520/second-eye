@@ -96,3 +96,16 @@ def test_expired_run_keeps_resume_reference_for_next_scheduled_run(session_facto
         assert session.get(TaskRun, old).state == "deferred"
         assert session.get(TaskRun, newer).cursor["resume_run_id"] == old
         assert session.get(TaskRun, newer).cursor["remaining_ids"] == [10, 11]
+
+
+def test_claim_rotates_tasks_instead_of_draining_one_backlog(session_factory):
+    first, second = task(session_factory), task(session_factory)
+    store = ExecutionStore(session_factory)
+    a, b = store.submit(first.id), store.submit(second.id)
+    for i in range(4):
+        store.enqueue(a, Stage.DETAIL, str(i), {})
+    store.enqueue(b, Stage.DETAIL, "other", {})
+    now = datetime.now(timezone.utc)
+    one = store.claim(Stage.DETAIL, now)
+    two = store.claim(Stage.DETAIL, now)
+    assert [one.token.task_id, two.token.task_id] == [first.id, second.id]
