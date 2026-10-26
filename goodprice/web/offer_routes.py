@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -9,6 +10,7 @@ from goodprice.offers.pricing import parse_money_cents
 from goodprice.offers.service import OfferService
 from goodprice.offers.types import QuoteInput
 from goodprice.services.offer_pipeline import OfferPipeline
+from goodprice.web.list_context import safe_return_to
 
 router = APIRouter()
 
@@ -45,7 +47,7 @@ async def confirm_quote(request: Request, offer_id: int):
         raise HTTPException(422, "报价无效或价格证据已变化，请刷新后确认") from exc
     if json_request:
         return {"id": row_id}
-    return RedirectResponse(f"/listings/{listing_id}", status_code=303)
+    return RedirectResponse(f"/listings/{listing_id}?" + urlencode({"return_to": safe_return_to(request.query_params.get("return_to"))}), status_code=303)
 
 
 @router.post("/quotes/{quote_id}/revoke")
@@ -61,4 +63,4 @@ async def revoke_quote(request: Request, quote_id: int):
     OfferService(factory).revoke_quote(quote_id)
     if "application/json" in request.headers.get("content-type", ""):
         return {"revoked": True}
-    return RedirectResponse(f"/listings/{listing_id}", status_code=303)
+    return RedirectResponse(f"/listings/{listing_id}?" + urlencode({"return_to": safe_return_to(request.query_params.get("return_to"))}), status_code=303)

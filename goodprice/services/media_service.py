@@ -23,6 +23,7 @@ class MediaService:
                     row = MediaAsset(listing_id=listing_id, key=candidate.key, kind=candidate.kind)
                     session.add(row)
                 row.source_url, row.source_locator = candidate.url, candidate.source_locator
+                row.relative_path, row.content_hash = None, None
                 row.offer_key, row.status = candidate.offer_key, candidate.status
                 row.observed_at = datetime.now()
             session.commit()

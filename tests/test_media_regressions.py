@@ -129,3 +129,15 @@ def test_scoreless_evidence_and_pending_image_gallery_visible(session_factory, b
     assert f'src="/media/{asset.id}"' in html
     assert "token=private" not in html
     assert "屏幕有划痕" in html and "描述与画面冲突" in html and "frame1" in html
+
+
+def test_legacy_images_never_expose_signed_urls_in_pages_or_api(session_factory, base_settings):
+    app = build_app(base_settings, session_factory, with_scheduler=False)
+    with session_factory() as session:
+        row = Listing(platform="xianyu", external_id="legacy", title="legacy", price=1, url="x",
+            image_urls=["https://cdn.example/a.jpg?token=private-legacy"])
+        session.add(row)
+        session.commit()
+    client = TestClient(app)
+    for path in ["/", "/listings", f"/listings/{row.id}", "/api/listings"]:
+        assert "private-legacy" not in client.get(path).text, path

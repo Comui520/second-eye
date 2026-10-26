@@ -19,6 +19,7 @@ SECRET_FIELDS: frozenset[str] = frozenset(
         "feishu_secret",
         "gotify_token",
         "jev_api_key",
+        "xianyu_cookie",
     }
 )
 
@@ -49,8 +50,8 @@ class Settings(BaseSettings):
     llm_api_format: str = "chat_completions"
     serverchan_sendkey: str = ""
     proxy: str = ""
-    default_crawl_interval_minutes: int = 20
-    default_crawl_jitter_minutes: int = 10
+    default_crawl_interval_minutes: int = Field(20, ge=1)
+    default_crawl_jitter_minutes: int = Field(10, ge=0)
     vision_base_url: str = ""
     vision_api_key: str = ""
     vision_model: str = "glm-4.6v-flash"
@@ -61,7 +62,7 @@ class Settings(BaseSettings):
     feishu_enabled: bool = True
     gotify_url: str = ""
     gotify_token: str = ""
-    gotify_priority: int = 5
+    gotify_priority: int = Field(5, ge=0, le=10)
     gotify_enabled: bool = True
     serverchan_enabled: bool = True
     wecom_robot_enabled: bool = True
@@ -90,6 +91,17 @@ class Settings(BaseSettings):
     media_decode_timeout: int = Field(30, ge=10, le=120)
     media_request_max_mib: int = Field(16, ge=1, le=32)
     media_ffmpeg_threads: int = Field(1, ge=1, le=4)
+    execution_active_runs: int = Field(2, ge=1, le=4)
+    execution_crawler_workers: int = Field(1, ge=1, le=2)
+    execution_model_workers: int = Field(1, ge=1, le=8)
+    execution_media_workers: int = Field(1, ge=1, le=2)
+    execution_platform_interval_seconds: int = Field(10, ge=5, le=300)
+    execution_model_rpm: int = Field(10, ge=1, le=60)
+    execution_global_items: int = Field(200, ge=1, le=200)
+    execution_task_items: int = Field(60, ge=1, le=60)
+    execution_run_details: int = Field(30, ge=1, le=100)
+    execution_run_http_attempts: int = Field(60, ge=1, le=200)
+    execution_run_minutes: int = Field(15, ge=5, le=60)
 
     @model_validator(mode="after")
     def _media_budgets(self):

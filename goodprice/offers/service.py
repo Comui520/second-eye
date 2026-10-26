@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import datetime, timezone
 
 from goodprice.models import (
@@ -8,7 +9,7 @@ from goodprice.models import (
     OfferObservation,
     WatchTask,
 )
-from goodprice.offers.pricing import offer_fingerprint, utc
+from goodprice.offers.pricing import decide_price, offer_fingerprint, utc
 from goodprice.offers.types import OfferCandidate, PriceClaim, QuoteInput
 
 
@@ -28,10 +29,23 @@ class OfferService:
     def __init__(self, session_factory):
         self._session_factory = session_factory
 
-    def record_observation(self, listing_id: int, offer: OfferCandidate) -> int:
+    def _refresh_price_index(self, session, row, listing, candidate, quote=None):
+        task = session.get(WatchTask, listing.task_id) if listing.task_id else None
+        if quote is None:
+            quote = session.query(ManualQuote).filter_by(offer_id=row.id, revoked=False).order_by(ManualQuote.id.desc()).first()
+        value = None if quote is None else QuoteInput(row.offer_key, quote.amount_cents,
+            utc(quote.confirmed_at), utc(quote.expires_at), quote.evidence_fingerprint, quote.revoked)
+        ttl = task.interval_minutes * 60 if task and task.fetch_detail else 0
+        decision = decide_price(candidate, value, datetime.now(timezone.utc), ttl)
+        row.effective_price_state, row.effective_price_cents = decision.state, decision.amount_cents
+        row.price_valid_until = utc(decision.fresh_until).replace(tzinfo=None) if decision.fresh_until else None
+        row.price_task_version = task.version if task else None
+
+    def record_observation(self, listing_id: int, offer: OfferCandidate, *, session=None) -> int:
         if not offer.key or not offer.claims:
             raise ValueError("规格或证据不能为空")
-        with self._session_factory() as session:
+        own = session is None
+        with self._session_factory() if own else nullcontext(session) as session:
             listing = session.get(Listing, listing_id)
             if listing is None:
                 raise LookupError("商品不存在")
@@ -48,7 +62,10 @@ class OfferService:
             session.add(OfferObservation(offer_id=row.id, fingerprint=offer_fingerprint(offer),
                                          payload=encode_offer(offer),
                                          observed_at=min(utc(c.observed_at) for c in offer.claims)))
-            session.commit()
+            session.flush()
+            self._refresh_price_index(session, row, listing, offer)
+            if own:
+                session.commit()
             return row.id
 
     def confirm_quote(self, offer_id: int, quote: QuoteInput) -> int:
@@ -80,6 +97,7 @@ class OfferService:
                               evidence_fingerprint=quote.evidence_fingerprint, revoked=False)
             session.add(row)
             listing.offer_verified_until = None
+            self._refresh_price_index(session, offer, listing, candidate, quote=row)
             session.commit()
             return row.id
 
@@ -90,5 +108,10 @@ class OfferService:
                 raise LookupError("报价不存在")
             quote.revoked = True
             offer = session.get(ListingOffer, quote.offer_id)
-            session.get(Listing, offer.listing_id).offer_verified_until = None
+            listing = session.get(Listing, offer.listing_id)
+            listing.offer_verified_until = None
+            session.flush()
+            observation = session.query(OfferObservation).filter_by(offer_id=offer.id).order_by(OfferObservation.id.desc()).first()
+            if observation:
+                self._refresh_price_index(session, offer, listing, decode_offer(observation.payload))
             session.commit()

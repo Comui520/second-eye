@@ -81,7 +81,7 @@ class OfferCrawlRunner:
             changed = is_new or was_missing or len(candidates) > 1 or any(
                 offer_fingerprint(c) != old_fingerprint for c in candidates)
             # Freshness renews each observation; content identity does not.
-            ids = self.pipeline.evaluate_listing(listing_id, task_id, candidates, now)
+            ids = self.pipeline.evaluate_listing(listing_id, task_id, candidates, now, expected_version=task.version)
             with self.factory() as session:
                 records = [session.get(OfferEvaluationRecord, i) for i in ids]
                 potential = any(r.payload["state"] == "exact" and r.payload["match"] == "matched"
@@ -97,7 +97,7 @@ class OfferCrawlRunner:
                         changed = True
                 listing = session.get(Listing, listing_id)
                 settings = self.crawl.settings_service.get()
-                inputs = {"description": listing.description, "images": listing.image_urls,
+                inputs = {"title": listing.title, "description": listing.description, "images": listing.image_urls,
                           "requirement": task.condition_requirement, "target": task.target_variant,
                           "vision": self.crawl.vision.enabled, "model": settings.llm_model,
                           "vision_model": settings.vision_model, "prompt": "offer-v1",
@@ -105,7 +105,7 @@ class OfferCrawlRunner:
                           "llm_url": settings.llm_base_url, "vision_url": settings.vision_base_url}
                 analysis_fp = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
                 content_fp = hashlib.sha256(json.dumps(
-                    {"description": listing.description, "images": listing.image_urls}, sort_keys=True).encode()).hexdigest()
+                    {"title": listing.title, "description": listing.description, "images": listing.image_urls}, sort_keys=True).encode()).hexdigest()
                 unchanged_content = all((previous_evaluations.get(c.key) or {}).get("analysis_content_fingerprint") == content_fp
                                         for c in candidates)
                 needs_backfill = (not changed and unchanged_content and self.crawl.vision.enabled
@@ -130,8 +130,9 @@ class OfferCrawlRunner:
                     if self.crawl.media_service and (previous_media != (listing.condition_detail or {}).get("media_cache_key")
                                                     or previous_score != listing.condition_score):
                         changed = True
-                    session.commit()
-                ids = self.pipeline.evaluate_listing(listing_id, task_id, candidates, now)
+                    if not self.crawl._commit_if_current(session, task):
+                        return {**stats, "skipped": "superseded"}
+                ids = self.pipeline.evaluate_listing(listing_id, task_id, candidates, now, expected_version=task.version)
                 stats["reevaluated"] += int(not is_new and changed)
                 stats["backfilled"] += int(needs_backfill)
             for record_id in ids:
@@ -237,6 +238,9 @@ class OfferCrawlRunner:
 
     def _fetch(self, listing_id, task):
         detail = None
+        if not task.fetch_detail:
+            return [OfferCandidate("default", claims=(PriceClaim("dom", "unknown",
+                "详情抓取关闭，价格和规格待核验", datetime.now(timezone.utc), "detail:disabled"),))]
         if task.fetch_detail:
             with self.factory() as session:
                 listing = session.get(Listing, listing_id)
@@ -268,7 +272,7 @@ class OfferCrawlRunner:
                 raise RuntimeError("原监控任务已删除，无法按旧条件重新分析")
         candidates = self._fetch(listing_id, task)
         now = datetime.now(timezone.utc)
-        ids = self.pipeline.evaluate_listing(listing_id, task.id, candidates, now)
+        ids = self.pipeline.evaluate_listing(listing_id, task.id, candidates, now, expected_version=task.version)
         with self.factory() as session:
             listing = session.get(Listing, listing_id)
             potential = any(session.get(OfferEvaluationRecord, i).payload["state"] == "exact" for i in ids)
@@ -283,8 +287,9 @@ class OfferCrawlRunner:
                 self.crawl._seller_check(session, listing, task)
             if not potential:
                 listing.value_score, listing.best_of_batch = None, False
-            session.commit()
-        ids = self.pipeline.evaluate_listing(listing_id, task.id, candidates, datetime.now(timezone.utc))
+            if not self.crawl._commit_if_current(session, task):
+                return {"updated": 0, "skipped": "superseded"}
+        ids = self.pipeline.evaluate_listing(listing_id, task.id, candidates, datetime.now(timezone.utc), expected_version=task.version)
         pending = []
         with self.factory() as session:
             listing = session.get(Listing, listing_id)

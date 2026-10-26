@@ -1,0 +1,22 @@
+<section id="resources" class="bg-white border rounded p-5 space-y-3">
+  <h2 class="font-semibold">运行资源与设备建议</h2>
+  <p class="text-sm">建议：{{ '均衡' if resource_recommendation.name == 'balanced' else '低占用' }}。{{ resource_recommendation.reason }}。
+    {% if resource_snapshot.effective_cpu is not none %}有效 CPU {{ resource_snapshot.effective_cpu|round(2) }} 核；{% endif %}
+    {% if resource_snapshot.available_memory_bytes is not none %}可用内存约 {{ (resource_snapshot.available_memory_bytes / 1073741824)|round(1) }} GiB。{% endif %}
+  </p>
+  {% for warning in resource_snapshot.warnings %}<p class="text-sm text-amber-700">{{ warning }}</p>{% endfor %}
+  <p class="text-sm text-gray-600">增加并发会提高浏览器内存、视频 CPU、模型费用消耗速度与数据库压力，不保证线性提速。设备建议不会增加图片数、启用视频、提高模型 RPM 或缩短平台间隔。低占用和均衡默认均允许两个任务分阶段推进；设为1会退化为跨任务串行。</p>
+  <form data-settings-form method="post" action="/settings/resources/apply-profile" class="flex flex-wrap gap-3 items-center">
+    <label>配置 <select name="name" class="border rounded px-2 py-1"><option value="low">低占用</option><option value="balanced">均衡</option></select></label>
+    <label class="text-sm"><input type="checkbox" name="confirm" value="1" required> 确认应用所选资源配置</label>
+    <button class="btn btn-outline-blue">应用配置</button>
+  </form>
+  <form data-settings-form method="post" action="/settings/sections/resources" class="space-y-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {% for name, label in resource_labels.items() %}<label class="text-sm">{{ label }}<input type="number" required name="{{ name }}" value="{{ settings[name] }}" class="border rounded px-2 py-1 w-full"></label>{% endfor %}
+    </div>
+    <p class="text-xs text-gray-500">每个账号同时只导航一个页面。缩短间隔可能增加平台风控风险；重试也计入 RPM 和每轮 HTTP 预算。正在执行的工作先完成，新限制作用于后续派发。</p>
+    <label class="block text-sm"><input type="checkbox" name="confirm_resources" value="1"> 我了解提高并发／访问频率的资源、费用和账号风险</label>
+    <button class="btn btn-primary">保存运行资源</button>
+  </form>
+</section>

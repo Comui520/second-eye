@@ -1,3 +1,4 @@
+import hashlib
 import shutil
 
 from fastapi import APIRouter, HTTPException, Request
@@ -6,7 +7,7 @@ from pydantic import ValidationError
 
 from goodprice.config import Settings
 from goodprice.media.budget import MediaBudget
-from goodprice.models import MediaAsset
+from goodprice.models import Listing, MediaAsset
 
 router = APIRouter()
 MEDIA_FIELDS = {name for name in Settings.model_fields if name.startswith("media_")} | {"video_analysis_enabled"}
@@ -96,6 +97,33 @@ def media_file(asset_id: int, request: Request):
                         session.commit()
                 return response
     raise HTTPException(404, "证据文件不可用或已清理")
+
+
+@router.get("/media/legacy-listing/{listing_id}/image/{index}")
+def legacy_listing_image(listing_id: int, index: int, request: Request):
+    # An internal listing/index reference migrates a legacy image lazily on view;
+    # neither pages nor APIs publish expiring source URLs or take caller URLs.
+    with request.app.state.session_factory() as session:
+        listing = session.get(Listing, listing_id)
+        if listing is None or not 0 <= index < min(32, len(listing.image_urls or [])):
+            raise HTTPException(404, "图片不存在")
+        source = listing.image_urls[index]
+        key = "legacy:" + hashlib.sha256(source.encode()).hexdigest()[:32]
+        row = session.query(MediaAsset).filter(MediaAsset.listing_id == listing_id,
+            MediaAsset.source_url == source, MediaAsset.kind == "image",
+            MediaAsset.status != "superseded").order_by(MediaAsset.id.desc()).first()
+        if row is None:
+            row = session.query(MediaAsset).filter_by(listing_id=listing_id, key=key).first()
+            if row:
+                row.status, row.relative_path, row.content_hash = "pending", None, None
+                session.commit()
+        if row is None:
+            row = MediaAsset(listing_id=listing_id, key=key, kind="image", source_url=source,
+                             source_locator=f"legacy-image:{index}")
+            session.add(row)
+            session.commit()
+        asset_id = row.id
+    return media_file(asset_id, request)
 
 
 @router.post("/settings/media")

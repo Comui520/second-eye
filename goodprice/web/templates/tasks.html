@@ -4,13 +4,13 @@
 <p class="text-sm text-gray-500 mb-3">创建后可在任务详情设置目标型号／容量与待询价提醒。页面标价不代表具体规格的实际售价。</p>
 {% if just_ran %}
 <div class="bg-green-100 text-green-800 rounded shadow px-4 py-3 mb-6">
-  已开始执行任务 #{{ just_ran }}，页面将自动刷新显示进度；完成后可查看「上次运行」与「命中列表」。
+  已提交执行请求 #{{ just_ran }}，排队和运行状态见下方；完成后可查看「上次运行」与「命中列表」。
 </div>
 {% endif %}
 <div id="progress-area">{% include "progress.html" %}</div>
 <div class="bg-white rounded shadow p-4 mb-6">
   <h2 class="text-lg font-semibold mb-3">新建监控任务</h2>
-  <form method="post" action="/tasks" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+  <form method="post" action="/tasks" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
     <div>
       <label class="block text-sm text-gray-600 mb-1">关键词:</label>
       <input name="keyword" required placeholder="如 iPhone 13" class="w-full border rounded px-3 py-2">
@@ -43,7 +43,7 @@
       <label class="block text-sm text-gray-600 mb-1">需求:</label>
       <textarea name="condition_requirement" rows="2" data-autosize placeholder="如 屏幕完好、电池健康" class="w-full border rounded px-3 py-2 resize-y"></textarea>
     </div>
-    <div class="md:col-span-3 flex items-center gap-6">
+    <div class="md:col-span-3 flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1" checked> 立即启用</label>
       <label class="flex items-center gap-2"><input type="checkbox" name="fetch_detail" value="1" checked> 抓详情描述</label>
       <button class="btn btn-primary">添加</button>
@@ -52,8 +52,8 @@
 </div>
 <div class="bg-white rounded shadow divide-y">
   {% for task in tasks %}
-  <div class="p-4 flex items-center gap-4">
-    <div class="flex-1">
+  <div class="p-4 flex flex-wrap items-center gap-2">
+    <div class="flex-1 min-w-0 basis-full md:basis-auto break-words">
       <div class="font-medium"><a href="/tasks/{{ task.id }}" class="hover:text-blue-600">{{ task.keyword }}</a> <span class="text-gray-400 text-sm">{{ task.name }}</span></div>
       <div class="text-sm text-gray-500">
         需求：{{ task.condition_requirement or '无' }} · 价格 {{ task.min_price or '不限' }}-{{ task.max_price or '不限' }} · 品相分 ≥ {{ task.min_condition_score }} · 间隔 {{ task.interval_minutes }} 分钟{% if task.exclude_words %} · 排除 {{ task.exclude_words }}{% endif %}{% if task.fetch_detail %} · 抓详情{% endif %}
@@ -70,7 +70,8 @@
     <a href="/listings?task_id={{ task.id }}" class="btn btn-sm btn-outline">命中</a>
     <form method="post" action="/tasks/{{ task.id }}/toggle" class="inline"><button class="btn btn-sm btn-outline">{{ '停用' if task.enabled else '启用' }}</button></form>
     <form method="post" action="/tasks/{{ task.id }}/run" class="inline">
-      {% if task.id in running_ids %}<button disabled class="btn btn-sm btn-outline opacity-50">执行中...</button>
+      {% if not task.enabled %}<button disabled class="btn btn-sm btn-outline opacity-50">请先启用</button>
+      {% elif task.id in running_ids %}<button disabled class="btn btn-sm btn-outline opacity-50">执行中...</button>
       {% else %}<button class="btn btn-sm btn-outline-blue">立即执行</button>{% endif %}
     </form>
     <form method="post" action="/tasks/{{ task.id }}/delete" class="inline" onsubmit="return confirm('确认删除该任务？')"><button class="btn btn-sm btn-outline-red">删除</button></form>

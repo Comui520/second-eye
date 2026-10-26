@@ -7,9 +7,12 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from goodprice.config import Settings, get_settings
 from goodprice.db import init_db, migrate_schema
+from goodprice.media.budget import BudgetExceeded
 from goodprice.scheduler import _sync_tasks, build_scheduler
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
 from goodprice.services.seller_service import SellerService
@@ -18,7 +21,9 @@ from goodprice.services.task_queue import DEFAULT_GAP_SECONDS, TaskQueue
 from goodprice.services.task_service import TaskService
 from goodprice.web.media_routes import router as media_router
 from goodprice.web.offer_routes import router as offer_router
+from goodprice.web.resource_routes import router as resource_router
 from goodprice.web.routes import router
+from goodprice.web.settings_sections import router as settings_sections_router
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "data" / "logs"
 
@@ -167,6 +172,11 @@ def build_app(
         task_queue.stop()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    @app.exception_handler(BudgetExceeded)
+    async def media_busy_handler(request, exc):
+        return JSONResponse({"detail": "媒体处理繁忙或磁盘预算不足，请稍后重试"},
+                            status_code=503, headers={"Retry-After": "5"})
+    app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "web" / "static")), name="static")
     app.state.session_factory = session_factory
     app.state.settings_service = settings_service
     app.state.task_service = task_service
@@ -179,6 +189,8 @@ def build_app(
     app.include_router(router)
     app.include_router(offer_router)
     app.include_router(media_router)
+    app.include_router(settings_sections_router)
+    app.include_router(resource_router)
     return app
 
 

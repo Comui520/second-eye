@@ -72,7 +72,7 @@ def test_tasks_page_shows_run_banner(base_settings, session_factory):
     client.post("/api/tasks", json={"keyword": "k"})
     response = client.get("/tasks?run=1")
     assert response.status_code == 200
-    assert "已开始执行" in response.text
+    assert "已提交执行请求" in response.text
 
 
 def test_task_change_triggers_scheduler_sync(base_settings, session_factory):

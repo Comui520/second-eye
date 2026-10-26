@@ -66,8 +66,12 @@ class CrawlService:
             return {"found": 0, "new": 0, "notified": 0, "skipped": "already_running"}
         try:
             from goodprice.services.offer_crawl import OfferCrawlRunner
+            from goodprice.services.offer_pipeline import StaleEvaluation
 
-            return OfferCrawlRunner(self).run(task_id)
+            try:
+                return OfferCrawlRunner(self).run(task_id)
+            except StaleEvaluation:
+                return {"found": 0, "new": 0, "notified": 0, "skipped": "superseded"}
         except Exception as exc:
             self._record_error(task_id, f"处理商品时出错: {exc}"[:1000])
             raise
@@ -105,7 +109,21 @@ class CrawlService:
             listing.price = data.price
             session.add(PriceSnapshot(listing_id=listing.id, price=data.price))
         listing.last_seen_at = datetime.now()
+        listing.title, listing.url = data.title, data.url
         return listing, False
+
+    def _commit_if_current(self, session, task) -> bool:
+        """Acquire the short write lock and gate all pending result mutations."""
+        from sqlalchemy import update
+
+        result = session.execute(update(WatchTask).where(WatchTask.id == task.id,
+            WatchTask.version == task.version, WatchTask.enabled.is_(True)).values(
+                version=WatchTask.version).execution_options(synchronize_session=False))
+        if result.rowcount != 1:
+            session.rollback()
+            return False
+        session.commit()
+        return True
 
     def _is_blocked(self, session, listing: Listing) -> bool:
         if listing.blocked:
@@ -157,8 +175,12 @@ class CrawlService:
     def reanalyze_listing(self, listing_id: int) -> dict[str, Any]:
         """Revalidate offer evidence before analysis, without sending notifications."""
         from goodprice.services.offer_crawl import OfferCrawlRunner
+        from goodprice.services.offer_pipeline import StaleEvaluation
 
-        return OfferCrawlRunner(self).reanalyze(listing_id)
+        try:
+            return OfferCrawlRunner(self).reanalyze(listing_id)
+        except StaleEvaluation:
+            return {"updated": 0, "skipped": "superseded"}
 
     def _seller_check(self, session, listing: Listing, task: WatchTask) -> None:
         if not listing.seller_uid or self.seller_service is None:

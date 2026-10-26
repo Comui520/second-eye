@@ -85,6 +85,12 @@ def init_db(database_url: str) -> None:
 def migrate_schema(session_factory) -> None:
     """幂等迁移：为已有数据库补齐新列。"""
     columns = {
+        "listing_offers": [
+            ("effective_price_state", "effective_price_state VARCHAR(20) DEFAULT 'unknown'"),
+            ("effective_price_cents", "effective_price_cents INTEGER"),
+            ("price_valid_until", "price_valid_until DATETIME"),
+            ("price_task_version", "price_task_version INTEGER"),
+        ],
         "watch_tasks": [
             ("fetch_detail", "fetch_detail BOOLEAN DEFAULT 1"),
             ("min_price", "min_price FLOAT DEFAULT 0"),

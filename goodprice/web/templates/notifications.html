@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}消息通知 - 闲鱼盯价助手{% endblock %}
 {% block content %}
-<div class="bg-white rounded shadow">
+<div class="bg-white rounded shadow overflow-x-auto">
   <div class="p-3 flex items-center gap-4">
     <label class="flex items-center gap-2"><input type="checkbox" id="select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
     <button type="button" class="btn btn-danger" onclick="batchDeleteNotifications()">批量删除</button>
@@ -42,7 +42,10 @@ function batchDeleteNotifications() {
   if (!confirm('确认删除选中的消息？')) return;
   var fd = new FormData();
   ids.forEach(function (id) { fd.append('ids', id); });
-  fetch('/notifications/delete-batch', { method: 'POST', body: fd }).then(function () { location.reload(); });
+  fetch('/notifications/delete-batch', { method: 'POST', body: fd }).then(function (response) {
+    if (!response.ok) throw new Error('删除失败，请重试');
+    location.reload();
+  }).catch(function(error) { alert(error.message); });
 }
 </script>
 {% endblock %}

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import and_, case, func, select, text
 
 from goodprice.constants import SCORE_MAX
+from goodprice.web.list_context import ListContext, safe_return_to
 from goodprice.web.media_routes import MEDIA_LABELS, capabilities, public_assets
 
 logger = logging.getLogger(__name__)
@@ -23,17 +24,17 @@ PAGE_SIZE = 100
 
 def _optional_int(value: str) -> Optional[int]:
     """把查询参数安全转成 int；非数字返回 None，避免非法输入导致 500。"""
-    return int(value) if str(value).isdigit() else None
+    return int(value) if str(value).isascii() and str(value).isdigit() else None
 
 
-def _apply_listing_filters(query, *, task_id, show, sort):
+def _apply_listing_filters(query, *, task_id, show, sort, price_state="all"):
     """列表页 / 加载更多 / API 共用的过滤与排序，避免三处 if/elif 语义分叉。
 
     show 的取值由模板下拉决定；未知值（含 "all"）不追加过滤条件。
     """
     from datetime import datetime, timezone
 
-    from goodprice.models import Listing, WatchTask
+    from goodprice.models import Listing, ListingOffer, WatchTask
 
     if task_id:
         query = query.filter(Listing.task_id == task_id)
@@ -43,7 +44,14 @@ def _apply_listing_filters(query, *, task_id, show, sort):
         query = query.filter(Listing.status == "gone")
     elif show == "blocked":
         query = query.filter(Listing.blocked.is_(True))
+    elif show == "unseen":
+        query = query.filter(Listing.status == "unseen")
     version = select(WatchTask.version).where(WatchTask.id == Listing.task_id).correlate(Listing).scalar_subquery()
+    if price_state in {"exact", "pending"}:
+        exact = select(ListingOffer.id).where(ListingOffer.listing_id == Listing.id,
+            ListingOffer.effective_price_state == "exact", ListingOffer.price_valid_until > datetime.now(timezone.utc),
+            ListingOffer.price_task_version == version).correlate(Listing).exists()
+        query = query.filter(exact if price_state == "exact" else ~exact)
     valid = and_(Listing.offer_verified_until > datetime.now(timezone.utc),
                  Listing.offer_price_cents.is_not(None), Listing.offer_task_version == version)
     query = query.order_by(case((valid, 0), else_=1))
@@ -146,8 +154,14 @@ def dashboard(request: Request):
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"stats": stats, "recent": recent, "active": "dashboard"},
+        {"stats": stats, "recent": _present_recent(request, recent), "active": "dashboard"},
     )
+
+
+def _present_recent(request, rows):
+    from goodprice.services.offer_pipeline import present_listings
+    return present_listings(rows, request.app.state.session_factory,
+        request.app.state.settings_service.get().vision_enabled)
 
 
 @router.get("/tasks", response_class=HTMLResponse)
@@ -422,9 +436,15 @@ def toggle_task(request: Request, task_id: int):
 
 @router.post("/tasks/{task_id}/run")
 def run_task(request: Request, task_id: int):
-    threading.Thread(
-        target=request.app.state.run_job, args=(task_id,), daemon=True
-    ).start()
+    from fastapi import HTTPException
+    task = request.app.state.task_service.get_task(task_id)
+    if task is None:
+        raise HTTPException(404, "任务不存在")
+    if not task.enabled:
+        raise HTTPException(409, "任务已停用，请先启用后执行")
+    queued = request.app.state.run_job(task_id)
+    if queued is False:
+        return RedirectResponse("/tasks?" + urlencode({"toast": "任务已在队列中，无需重复提交"}), status_code=303)
     return RedirectResponse(f"/tasks?run={task_id}", status_code=303)
 
 
@@ -445,27 +465,31 @@ def listings_page(
     sort: str = Query("satisfaction"),
     show: str = Query("active"),
 ):
+    context = ListContext.from_query(request.query_params)
+    task_id, sort, show = context.task_id, context.sort, context.show
+    offset = min(10000, max(0, offset))
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing, WatchTask
 
         query = session.query(Listing)
         tasks = session.query(WatchTask).order_by(WatchTask.id).all()
-        task_id_int = _optional_int(task_id)
-        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
+        task_id_int = task_id
+        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort, price_state=context.price_state)
         query = query.offset(offset)
-        listings = query.limit(PAGE_SIZE).all()
+        listings = query.limit(context.loaded).all()
         from goodprice.services.offer_pipeline import present_listings
 
         listings = present_listings(listings, request.app.state.session_factory,
                                     request.app.state.settings_service.get().vision_enabled)
         notify_counts = _notify_counts(session, listings)
-        more = len(listings) >= PAGE_SIZE
-    partial_url = f"/listings?partial=1&task_id={task_id or ''}&sort={sort}&show={show}"
+        more = len(listings) >= context.loaded and context.loaded < 1000
+    partial_url = context.url() + "&partial=1"
+    return_to = context.url()
     if partial:
         return templates.TemplateResponse(
             request,
             "listings_grid.html",
-            {"listings": listings, "notify_counts": notify_counts},
+            {"listings": listings, "notify_counts": notify_counts, "return_to": return_to},
         )
     running_ids = request.app.state.guard.running_ids()
     return templates.TemplateResponse(
@@ -478,13 +502,13 @@ def listings_page(
             "task_id": task_id,
             "sort": sort,
             "show": show,
+            "price_state": context.price_state,
             "partial_url": partial_url,
             "notify_counts": notify_counts,
             "more": more,
-            "load_more_url": (
-                f"/listings/more?offset={offset + len(listings)}"
-                f"&task_id={task_id or ''}&sort={sort}&show={show}"
-            ),
+            "return_to": return_to,
+            "load_more_url": context.url("/listings/more") + f"&offset={offset + len(listings)}",
+            "load_more_fallback": ListContext(context.task_id, show, sort, context.price_state, min(1000, context.loaded + PAGE_SIZE)).url(),
             "active": "listings",
         },
     )
@@ -515,21 +539,30 @@ def listings_more(
     sort: str = Query("satisfaction"),
     show: str = Query("active"),
 ):
+    context = ListContext.from_query(request.query_params)
+    task_id, sort, show = context.task_id, context.sort, context.show
+    offset = min(1000, max(0, offset))
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing
 
         query = session.query(Listing)
-        task_id_int = _optional_int(task_id)
-        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
-        listings = query.offset(offset).limit(PAGE_SIZE).all()
+        task_id_int = task_id
+        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort, price_state=context.price_state)
+        listings = query.offset(offset).limit(min(PAGE_SIZE, 1000-offset)).all()
         from goodprice.services.offer_pipeline import present_listings
 
         listings = present_listings(listings, request.app.state.session_factory,
                                     request.app.state.settings_service.get().vision_enabled)
         notify_counts = _notify_counts(session, listings)
-    return templates.TemplateResponse(
-        request, "listings_cards.html", {"listings": listings, "notify_counts": notify_counts}
-    )
+    loaded = min(1000, max(100, offset + len(listings)))
+    current = ListContext(task_id, show, sort, context.price_state, loaded)
+    response = templates.TemplateResponse(request, "listings_more.html", {
+        "listings": listings, "notify_counts": notify_counts, "return_to": current.url(),
+        "more": len(listings) == PAGE_SIZE and loaded < 1000,
+        "load_more_url": current.url("/listings/more") + f"&offset={loaded}",
+        "load_more_fallback": ListContext(task_id, show, sort, context.price_state, min(1000, loaded + PAGE_SIZE)).url()})
+    response.headers["HX-Replace-Url"] = current.url()
+    return response
 
 
 @router.get("/listings/{listing_id}", response_class=HTMLResponse)
@@ -579,6 +612,7 @@ def listing_detail_page(request: Request, listing_id: int):
             "drop_pct_threshold": DROP_PCT_DISPLAY_THRESHOLD,
             "offers": OfferPipeline(request.app.state.session_factory).snapshot(listing_id, dt.now(timezone.utc)),
             "media_assets": public_assets(request, listing_id),
+            "return_to": safe_return_to(request.query_params.get("return_to"), "/listings"),
             "active": "listings",
         },
     )
@@ -589,7 +623,8 @@ def reanalyze_listing(request: Request, listing_id: int):
     threading.Thread(
         target=request.app.state.run_reanalyze, args=(listing_id,), daemon=True
     ).start()
-    return RedirectResponse(f"/listings/{listing_id}?toast=已提交重新分析", status_code=303)
+    return RedirectResponse(f"/listings/{listing_id}?" + urlencode({"toast": "已提交重新分析",
+        "return_to": safe_return_to(request.query_params.get("return_to"), "/listings")}), status_code=303)
 
 
 @router.post("/listings/delete-batch")
@@ -640,12 +675,18 @@ def unblock_seller(request: Request, listing_id: int):
 
 
 def _listings_back(request: Request, toast: str) -> str:
-    params = {}
-    ref = request.headers.get("referer", "")
-    if "?" in ref:
-        params = {
-            k: v for k, v in parse_qsl(ref.split("?", 1)[1]) if k in ("task_id", "sort", "show")
-        }
+    raw = request.query_params.get("return_to")
+    if raw is None:
+        # Legacy same-origin forms: reduce Referer to a whitelisted relative path.
+        from urllib.parse import urlsplit
+        try:
+            ref = urlsplit(request.headers.get("referer", ""))
+        except ValueError:
+            ref = urlsplit("")
+        if (not ref.netloc and not ref.scheme or ref.netloc == request.url.netloc and ref.scheme == request.url.scheme) and ref.path == "/listings":
+            raw = ref.path + ("?" + ref.query if ref.query else "")
+    target = safe_return_to(raw, "/listings")
+    params = dict(parse_qsl(target.split("?", 1)[1])) if "?" in target else {}
     params["toast"] = toast
     return "/listings?" + urlencode(params)
 
@@ -678,6 +719,13 @@ def _set_blocked(request: Request, listing_id: int, blocked: bool, seller: bool)
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
+    return render_settings(request)
+
+
+def render_settings(request, overrides=None, error=None, status_code=200):
+    from goodprice.resources import detect_resources, recommend_profile
+    from goodprice.web.resource_routes import RESOURCE_LABELS
+    resource_snapshot = detect_resources()
     _, settings_service = _services(request)
     settings = settings_service.get()
     login_session = getattr(request.app.state, "login_session", None)
@@ -688,7 +736,11 @@ def settings_page(request: Request):
         request,
         "settings.html",
         {
-            "settings": settings,
+            "settings": settings.model_dump() | (overrides or {}),
+            "settings_error": error,
+            "resource_snapshot": resource_snapshot,
+            "resource_recommendation": recommend_profile(resource_snapshot),
+            "resource_labels": RESOURCE_LABELS,
             "media_capabilities": capabilities(settings),
             "media_fields": [name for name in type(settings).model_fields if name.startswith("media_")],
             "media_labels": MEDIA_LABELS,
@@ -696,7 +748,7 @@ def settings_page(request: Request):
             "login_message": login_message,
             **_login_context(login_session, settings.novnc_port),
             "active": "settings",
-        },
+        }, status_code=status_code,
     )
 
 
@@ -1020,13 +1072,14 @@ def api_list_listings(
     task_id: str = Query(""),
     sort: str = Query("satisfaction"),
     show: str = Query("active"),
+    price_state: str = Query("all"),
 ):
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing
 
         query = session.query(Listing)
         task_id_int = _optional_int(task_id)
-        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
+        query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort, price_state=price_state)
         rows = query.offset(offset).limit(PAGE_SIZE).all()
         from goodprice.services.offer_pipeline import present_listings
 
@@ -1040,6 +1093,7 @@ def api_list_listings(
             "title": row.title,
             "price": row.price,
             "effective_price_cents": row.effective_price_cents,
+            "price_state": row.price_state,
             "price_confirmed": row.price_confirmed,
             "value_score": row.value_score,
             "url": row.url,

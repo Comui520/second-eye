@@ -50,3 +50,25 @@ def test_general_settings_cannot_override_media_or_deployment(session_factory, b
     client = TestClient(app)
     for field, value in [("media_total_limit", "16"), ("data_root", "outside"), ("database_url", "sqlite:///outside")]:
         assert client.post("/settings", data={field: value}).status_code == 422
+
+
+def test_busy_media_returns_retryable_response_without_model_or_network(session_factory, base_settings, monkeypatch):
+    from contextlib import contextmanager
+
+    from goodprice.media.budget import BudgetExceeded
+    @contextmanager
+    def busy(*args, **kwargs):
+        raise BudgetExceeded("busy")
+        yield
+    monkeypatch.setattr("goodprice.media.processing.MediaProcessor.session", busy)
+    app = build_app(base_settings, session_factory, with_scheduler=False)
+    with session_factory() as session:
+        row = Listing(platform="x", external_id="busy", title="busy", price=1, url="x")
+        session.add(row)
+        session.flush()
+        asset = MediaAsset(listing_id=row.id, key="busy", kind="image", source_url="https://cdn.example/a.jpg")
+        session.add(asset)
+        session.commit()
+    response = TestClient(app, raise_server_exceptions=False).get(f"/media/{asset.id}")
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"

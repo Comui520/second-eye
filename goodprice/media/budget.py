@@ -21,6 +21,10 @@ class _State:
     lock: threading.RLock = field(default_factory=threading.RLock)
     reservations: dict = field(default_factory=dict)
     pins: dict = field(default_factory=dict)
+    processing: int = 0
+
+    def __post_init__(self):
+        self.condition = threading.Condition(self.lock)
 
 
 _states = {}
@@ -126,6 +130,19 @@ class MediaBudget:
                 shutil.rmtree(reservation.directory)
 
     @contextmanager
+    def processing_slot(self, limit, timeout_seconds=5):
+        with self.state.condition:
+            if not self.state.condition.wait_for(lambda: self.state.processing < limit, timeout_seconds):
+                raise BudgetExceeded("媒体处理繁忙，请稍后重试")
+            self.state.processing += 1
+        try:
+            yield
+        finally:
+            with self.state.condition:
+                self.state.processing -= 1
+                self.state.condition.notify_all()
+
+    @contextmanager
     def pin(self, paths):
         with self.state.lock:
             checked = [self.checked(p) for p in paths]
@@ -137,3 +154,5 @@ class MediaBudget:
             with self.state.lock:
                 for p in checked:
                     self.state.pins[p] -= 1
+                    if not self.state.pins[p]:
+                        del self.state.pins[p]

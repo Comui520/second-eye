@@ -2,10 +2,14 @@
 {% block title %}设置 - 闲鱼盯价助手{% endblock %}
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-6">
-  {% include "media_settings.html" %}
+  <nav aria-label="设置分类" class="flex flex-wrap gap-3 text-sm">
+    <a href="#account">账号与抓取</a><a href="#models">模型与判断</a><a href="#notifications">通知渠道</a>
+    <a href="#resources">运行资源</a><a href="#media">媒体证据</a><a href="#deployment">部署信息</a>
+  </nav>
+  {% if settings_error %}<p role="alert" class="border border-red-300 text-red-700 rounded p-3">{{ settings_error }}</p>{% endif %}
 
   <!-- 顶部：闲鱼免 F12 一键扫码登录独立卡片 -->
-  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+  <div id="account" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
     <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
       <div>
         <h2 class="text-base font-semibold text-gray-800">闲鱼账号快捷登录</h2>
@@ -41,7 +45,7 @@
   </div>
 
   <!-- 主表单：包裹以下全部配置项 -->
-  <form id="settings-form" method="post" action="/settings" class="space-y-6">
+  <form data-settings-form method="post" action="/settings/sections/account" class="space-y-6">
 
     <!-- 卡片 1：抓取调度与基础设置 -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
@@ -59,7 +63,7 @@
             <span class="text-xs text-gray-400 group-open:rotate-180 transition-transform">▼</span>
           </summary>
           <div class="p-4 bg-white border-t border-gray-200">
-            <textarea name="xianyu_cookie" rows="3" class="w-full border rounded p-2 font-mono text-xs focus:ring-1 focus:ring-blue-500" placeholder="粘贴复制的完整 Cookie 字符串...">{{ settings.xianyu_cookie }}</textarea>
+            <textarea name="xianyu_cookie" rows="3" class="w-full border rounded p-2 font-mono text-xs focus:ring-1 focus:ring-blue-500" placeholder="留空保持已保存的 Cookie；需要替换时粘贴新值"></textarea>
             <p class="text-xs text-gray-400 mt-1">亦可在 PC 浏览器登录 https://www.goofish.com 后抓包获取整段 Cookie 粘贴于此。</p>
           </div>
         </details>
@@ -85,6 +89,10 @@
     </div>
 
     <!-- 卡片 2：核心大模型与视觉品相模型 -->
+    <button class="btn btn-primary">保存账号与抓取设置</button>
+    {% set clear_fields = ['xianyu_cookie'] %}{% include 'settings_clear.html' %}
+  </form>
+  <form id="models" data-settings-form method="post" action="/settings/sections/models" class="space-y-6">
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
       <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
         <div>
@@ -257,6 +265,10 @@
     </div>
 
     <!-- 卡片 4：消息推送渠道 -->
+    <button class="btn btn-primary">保存模型设置</button>
+    {% set clear_fields = ['llm_api_key', 'vision_api_key', 'jev_api_key'] %}{% include 'settings_clear.html' %}
+  </form>
+  <form id="notifications" data-settings-form method="post" action="/settings/sections/notifications" class="space-y-6">
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
       <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
         <div>
@@ -383,18 +395,35 @@
     <!-- 底部常驻保存条 -->
     <div class="sticky bottom-4 z-10 flex items-center justify-between bg-white/95 backdrop-blur border border-gray-200 rounded-lg p-4 shadow-md">
       <div class="text-xs text-gray-500">
-        所有变更点击保存即时生效（优先写入数据库）。密码及 Key 项留空即保持原值。
+        仅保存本分类，其他分类不受影响。凭据留空保持原值。
       </div>
       <button type="submit" class="btn btn-primary px-6 py-2 text-sm font-medium shadow-sm">
-        保存全部设置
+        保存通知设置
       </button>
     </div>
 
+    {% set clear_fields = ['serverchan_sendkey', 'wecom_webhook', 'feishu_webhook', 'feishu_secret', 'gotify_token'] %}{% include 'settings_clear.html' %}
   </form>
+
+  {% include "media_settings.html" %}
+  {% include "resource_settings.html" %}
+  <section id="deployment" class="bg-white border rounded p-5">
+    <h2 class="font-semibold">部署信息（只读）</h2>
+    <p class="text-sm">运行方式：{{ settings.runtime_mode }}。数据库、数据目录、端口与 noVNC 通过环境变量或 Compose 修改，网页不修改部署路径。</p>
+  </section>
 
 </div>
 
 <script>
+  const dirtySettingsForms = new Set();
+  document.querySelectorAll('[data-settings-form]').forEach(function(form) {
+    form.addEventListener('input', function() { dirtySettingsForms.add(form); });
+    form.addEventListener('change', function() { dirtySettingsForms.add(form); });
+    form.addEventListener('submit', function() { dirtySettingsForms.delete(form); });
+  });
+  window.addEventListener('beforeunload', function(event) {
+    if (dirtySettingsForms.size) { event.preventDefault(); event.returnValue = ''; }
+  });
   // 1. 快捷填入模型预设
   function applyPreset(type) {
     if (type === 'zhipu') {

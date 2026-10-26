@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}命中列表 - 闲鱼盯价助手{% endblock %}
 {% block content %}
-<form method="get" action="/listings" class="flex items-center gap-3 mb-4">
+<form method="get" action="/listings" class="flex flex-wrap items-center gap-3 mb-4">
   <select name="task_id" class="border rounded px-3 py-2" onchange="this.form.submit()">
     <option value="">全部任务</option>
     {% for t in tasks %}<option value="{{ t.id }}" {{ 'selected' if (task_id|string) == (t.id|string) }}>{{ t.keyword }}</option>{% endfor %}
@@ -15,22 +15,28 @@
   <select name="show" class="border rounded px-3 py-2" onchange="this.form.submit()">
     <option value="active" {{ 'selected' if show == 'active' }}>在售</option>
     <option value="gone" {{ 'selected' if show == 'gone' }}>已下架</option>
+    <option value="unseen" {{ 'selected' if show == 'unseen' }}>本轮未见</option>
     <option value="blocked" {{ 'selected' if show == 'blocked' }}>已拉黑</option>
     <option value="all" {{ 'selected' if show == 'all' }}>全部</option>
+  </select>
+  <select name="price_state" aria-label="价格状态" class="border rounded px-3 py-2" onchange="this.form.submit()">
+    <option value="all" {{ 'selected' if price_state == 'all' }}>全部价格状态</option>
+    <option value="exact" {{ 'selected' if price_state == 'exact' }}>已有核实规格价</option>
+    <option value="pending" {{ 'selected' if price_state == 'pending' }}>价格待确认</option>
   </select>
   <button class="btn btn-primary">筛选</button>
 </form>
 {% if running_ids %}
-<div hx-get="{{ partial_url }}" hx-trigger="every 2s" hx-target="#listings-grid" hx-swap="outerHTML"></div>
+<div id="list-poller" hx-get="{{ partial_url }}" hx-trigger="every 10s" hx-target="#listings-grid" hx-swap="outerHTML"></div>
 {% endif %}
+<a id="new-list-results" href="{{ return_to }}" hidden class="btn btn-outline-blue mb-3">有新结果，点击更新</a>
 <div class="flex items-center gap-4 mb-3">
   <label class="flex items-center gap-2"><input type="checkbox" id="listings-select-all" onchange="document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked)"> 全选</label>
   <button type="button" class="btn btn-danger" onclick="batchDeleteListings()">批量删除</button>
 </div>
 {% include "listings_grid.html" %}
 {% if more %}
-<button type="button" id="load-more" class="mt-4 w-full bg-white border rounded px-4 py-2 text-gray-600 hover:bg-gray-50"
-  hx-get="{{ load_more_url }}" hx-target="#listings-grid" hx-swap="beforeend">加载更多</button>
+{% include 'listings_more_button.html' %}
 {% endif %}
 <script>
 function batchDeleteListings() {
@@ -40,7 +46,10 @@ function batchDeleteListings() {
   if (!confirm('确认删除选中的商品？')) return;
   var fd = new FormData();
   ids.forEach(function (id) { fd.append('ids', id); });
-  fetch('/listings/delete-batch', { method: 'POST', body: fd }).then(function () { location.reload(); });
+  fetch('/listings/delete-batch?return_to=' + encodeURIComponent(location.pathname + location.search), { method: 'POST', body: fd }).then(function (response) {
+    if (!response.ok) throw new Error('删除失败，请重试');
+    location.reload();
+  }).catch(function(error) { alert(error.message); });
 }
 </script>
 {% endblock %}
