@@ -22,9 +22,10 @@ def session_factory(tmp_db):
 
 
 @pytest.fixture
-def base_settings(tmp_db):
+def base_settings(tmp_db, tmp_path):
     return Settings(
         database_url=tmp_db,
+        data_root=tmp_path / "data",
         _env_file=None,
         default_crawl_interval_minutes=20,
         default_crawl_jitter_minutes=0,

@@ -21,8 +21,7 @@ from goodprice.web.routes import router
 LOG_DIR = Path(__file__).resolve().parent.parent / "data" / "logs"
 
 
-def _setup_logging() -> None:
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+def _setup_logging(settings: Optional[Settings] = None) -> None:
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
@@ -32,8 +31,10 @@ def _setup_logging() -> None:
     console.setFormatter(formatter)
     root.addHandler(console)
     if not os.environ.get("PYTEST_CURRENT_TEST"):
+        log_dir = (settings.data_root / "logs") if settings else LOG_DIR
+        log_dir.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
-            LOG_DIR / "app.log",
+            log_dir / "app.log",
             maxBytes=5 * 1024 * 1024,
             backupCount=3,
             encoding="utf-8",
@@ -42,7 +43,6 @@ def _setup_logging() -> None:
         root.addHandler(file_handler)
 
 
-_setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -101,6 +101,7 @@ def build_app(
     with_scheduler: bool = True,
 ) -> FastAPI:
     settings = settings or get_settings()
+    _setup_logging(settings)
     if session_factory is None:
         init_db(settings.database_url)
         from goodprice.db import make_session_factory
@@ -171,8 +172,10 @@ def build_app(
     return app
 
 
-app = build_app()
+def create_app() -> FastAPI:
+    """ASGI factory: importing the module never opens a database or starts work."""
+    return build_app()
 
 
 def main() -> None:
-    uvicorn.run("goodprice.main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("goodprice.main:create_app", factory=True, host="0.0.0.0", port=8000, reload=False)

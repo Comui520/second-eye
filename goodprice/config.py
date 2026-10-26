@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "闲鱼盯价助手"
+    data_root: Path = PROJECT_ROOT / "data"
     database_url: str = f"sqlite:///{DEFAULT_DB.as_posix()}"
     xianyu_cookie: str = ""
     llm_base_url: str = ""
