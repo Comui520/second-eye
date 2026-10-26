@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -74,6 +74,34 @@ class Settings(BaseSettings):
     jev_auto_threshold: float = 0.85
     jev_backend: str = "adapter"
     jev_api_key: str = ""
+    video_analysis_enabled: bool = False
+    media_image_count: int = Field(8, ge=1, le=32)
+    media_video_count: int = Field(1, ge=1, le=3)
+    media_frames_per_video: int = Field(6, ge=1, le=24)
+    media_image_quota: int = Field(4, ge=0, le=16)
+    media_frame_quota: int = Field(4, ge=0, le=16)
+    media_total_limit: int = Field(8, ge=1, le=16)
+    media_model_limit: int = Field(8, ge=1, le=16)
+    media_video_max_mib: int = Field(100, ge=10, le=200)
+    media_video_max_seconds: int = Field(180, ge=15, le=300)
+    media_cache_mib: int = Field(1024, ge=256, le=10240)
+    media_retention_days: int = Field(7, ge=1, le=30)
+    media_download_timeout: int = Field(60, ge=10, le=120)
+    media_decode_timeout: int = Field(30, ge=10, le=120)
+    media_request_max_mib: int = Field(16, ge=1, le=32)
+    media_ffmpeg_threads: int = Field(1, ge=1, le=4)
+
+    @model_validator(mode="after")
+    def _media_budgets(self):
+        if self.media_total_limit > self.media_model_limit:
+            raise ValueError("视觉输入总上限不能超过已确认的模型上限（未知时为8）")
+        # Serial assets share the same reservation; retained outputs from earlier
+        # assets remain charged. JPEG outputs are capped at 2 MiB per image/frame.
+        required = self.media_video_max_mib + 2 * (
+            self.media_image_count + self.media_video_count * self.media_frames_per_video)
+        if required > self.media_cache_mib:
+            raise ValueError("媒体缓存不足以容纳一次处理的下载和输出，请减少视频/采样预算")
+        return self
 
     @field_validator("jev_backend")
     @classmethod

@@ -208,3 +208,21 @@ class Seller(Base):
     positive_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     last_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     blocked: Mapped[bool] = mapped_column(default=False)
+
+
+class MediaAsset(Base):
+    __tablename__ = "media_assets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(10))
+    offer_key: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    source_locator: Mapped[str] = mapped_column(Text, default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    parent_video_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    timestamp_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    relative_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    failure: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
