@@ -52,6 +52,9 @@
       <input name="name" value="{{ task.name }}" class="w-full border rounded px-3 py-2">
     </div>
     <div class="md:col-span-2">
+      <label class="block text-sm text-gray-600 mb-1">目标型号／容量（可选）:</label>
+      <input name="target_variant" value="{{ task.target_variant }}" placeholder="如 iPhone 15 / 256GB" class="w-full border rounded px-3 py-2">
+      <label class="text-sm"><input type="checkbox" name="notify_pending_price" value="1" {{ 'checked' if task.notify_pending_price }}> 单独提醒价格待确认商品（不参与正常排名）</label>
        <label class="block text-sm text-gray-600 mb-1">需求:</label>
        <textarea name="condition_requirement" rows="2" data-autosize placeholder="如 屏幕完好、电池健康" class="w-full border rounded px-3 py-2 resize-y">{{ task.condition_requirement }}</textarea>
     </div>

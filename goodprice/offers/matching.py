@@ -29,7 +29,9 @@ def match_variant(target: str, attributes: Mapping[str, str], title: str) -> Mat
     if not values:
         return "uncertain"
     uncertain = False
-    for requirement in re.split(r"[/,，;；]+", target):
+    capacities = re.findall(r"\d+(?:\.\d+)?\s*(?:gb|tb)", target, re.I)
+    remainder = re.sub(r"\d+(?:\.\d+)?\s*(?:gb|tb)", "/", target, flags=re.I)
+    for requirement in [*re.split(r"[/,，;；]+", remainder), *capacities]:
         term = _normal(requirement)
         if not term:
             continue

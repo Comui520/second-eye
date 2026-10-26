@@ -1,19 +1,11 @@
 import logging
-import random
 import threading
-import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
-from goodprice.crawler.base import ListingData
+from goodprice.crawler.base import ListingData, ListingDetail
 from goodprice.crawler.parser import is_product_image
-from goodprice.models import Listing, Notification, PriceSnapshot, WatchTask
-from goodprice.notify.base import NotificationMessage
-from goodprice.services.satisfaction import (
-    DROP_PCT_DISPLAY_THRESHOLD,
-    compute_satisfaction,
-    drop_pct_from_snapshots,
-)
+from goodprice.models import Listing, PriceSnapshot, WatchTask
 
 logger = logging.getLogger(__name__)
 
@@ -71,164 +63,14 @@ class CrawlService:
             logger.info("任务 %s 已在运行，忽略重复触发", task_id)
             return {"found": 0, "new": 0, "notified": 0, "skipped": "already_running"}
         try:
-            return self._run_impl(task_id)
+            from goodprice.services.offer_crawl import OfferCrawlRunner
+
+            return OfferCrawlRunner(self).run(task_id)
+        except Exception as exc:
+            self._record_error(task_id, f"处理商品时出错: {exc}"[:1000])
+            raise
         finally:
             self.guard.finish(task_id)
-
-    def _run_impl(self, task_id: int) -> dict[str, Any]:
-        stats = {
-            "found": 0,
-            "new": 0,
-            "notified": 0,
-            "backfilled": 0,
-            "reevaluated": 0,
-            "gone": 0,
-        }
-        settings = self.settings_service.get()
-        self._judger = self._build_judger(settings)
-        jitter = int(settings.default_crawl_jitter_minutes)
-        if jitter:
-            time.sleep(random.uniform(0, jitter * 60))
-        with self._session_factory() as session:
-            task = session.get(WatchTask, task_id)
-            if task is None:
-                raise RuntimeError(f"任务 {task_id} 不存在")
-            task.last_run_at = datetime.now()
-            task.last_error = None
-            task.last_run_count = (task.last_run_count or 0) + 1
-            session.commit()
-        try:
-            items = self.adapter.search(task.keyword)
-        except Exception as exc:
-            self._record_error(task_id, f"抓取失败: {exc}")
-            raise
-        stats["found"] = len(items)
-        logger.info("任务 %s 搜索命中 %s 条", task_id, len(items))
-        batch_rows: list[dict] = []
-        pending: list[tuple] = []  # (task, listing, old_price, is_renotify)
-        seen_ids: set[int] = set()
-        with self._session_factory() as session:
-            task = session.get(WatchTask, task_id)
-            try:
-                for data in items:
-                    if task.max_price and data.price > task.max_price:
-                        logger.info("任务 %s 跳过（超最高价 %s）: %s ¥%s", task_id, task.max_price, data.title[:30], data.price)
-                        continue
-                    if task.min_price and data.price < task.min_price:
-                        logger.info("任务 %s 跳过（低于价格下限 %s）: %s ¥%s", task_id, task.min_price, data.title[:30], data.price)
-                        continue
-                    if self._excluded(task, data.title):
-                        logger.info("任务 %s 跳过（命中排除词）: %s", task_id, data.title[:40])
-                        continue
-                    old_price: Optional[float] = None
-                    existing = (
-                        session.query(Listing)
-                        .filter(
-                            Listing.platform == task.platform,
-                            Listing.external_id == data.external_id,
-                            Listing.task_id == task.id,
-                        )
-                        .first()
-                    )
-                    if existing is not None and abs(existing.price - data.price) > 0.001:
-                        old_price = existing.price
-                    listing, is_new = self._upsert_listing(session, task, data)
-                    seen_ids.add(listing.id)
-                    if self._is_blocked(session, listing):
-                        session.commit()
-                        continue
-                    listing.status = "active"
-                    listing.missed_count = 0
-                    if is_new:
-                        stats["new"] += 1
-                        logger.info("任务 %s 新品 %s：%s ¥%s", task_id, data.external_id, data.title[:30], data.price)
-                        if task.fetch_detail:
-                            self._fetch_detail(session, listing)
-                        reason = self._evaluate_and_queue(
-                            session, task, listing, old_price, batch_rows, pending, False
-                        )
-                        if reason:
-                            logger.info("任务 %s %s，不收录：%s", task_id, reason, listing.title[:30])
-                            session.commit()
-                            continue
-                    else:
-                        changed = old_price is not None or listing.status == "gone"
-                        if changed:
-                            stats["reevaluated"] += 1
-                            logger.info("任务 %s 重评 %s：%s（价格变化或重新上架）", task_id, data.external_id, data.title[:30])
-                            reason = self._evaluate_and_queue(
-                                session, task, listing, old_price, batch_rows, pending, True
-                            )
-                            if reason:
-                                session.commit()
-                                continue
-                        else:
-                            if self._backfill(session, listing, task):
-                                stats["backfilled"] += 1
-                    session.commit()
-                # 下架软标记：本轮未出现的该任务商品
-                for other in (
-                    session.query(Listing)
-                    .filter(Listing.task_id == task.id)
-                    .filter(~Listing.id.in_(seen_ids))
-                ):
-                    other.missed_count = (other.missed_count or 0) + 1
-                    if other.missed_count >= GONE_THRESHOLD and other.status != "gone":
-                        other.status = "gone"
-                        stats["gone"] += 1
-                        logger.info("任务 %s 商品 %s 标记为已下架", task_id, other.title[:30])
-                session.commit()
-                # 批性价比：本批通过筛选的商品统一横向对比
-                if batch_rows and self._value_client() is not None:
-                    self._batch_value(session, batch_rows)
-                    session.commit()
-                # 通知：新品在批性价比后统一发出；重评仅满意度提高时发出
-                for task, listing, old_price, is_renotify in pending:
-                    satisfaction = self._satisfaction(listing)
-                    listing.satisfaction = satisfaction
-                    if (
-                        is_renotify
-                        and listing.last_notified_satisfaction is not None
-                        and satisfaction <= listing.last_notified_satisfaction
-                    ):
-                        continue
-                    self._notify(
-                        session,
-                        task,
-                        listing,
-                        satisfaction,
-                        old_price=old_price,
-                        is_renotify=is_renotify,
-                    )
-                    stats["notified"] += 1
-                session.commit()
-            except Exception as exc:
-                task.last_error = f"处理商品时出错: {exc}"[:1000]
-                session.commit()
-                raise
-            session.commit()
-        return stats
-
-    def _evaluate_and_queue(
-        self,
-        session,
-        task: WatchTask,
-        listing: Listing,
-        old_price: Optional[float],
-        batch_rows: list[dict],
-        pending: list[tuple],
-        is_renotify: bool,
-    ) -> Optional[str]:
-        """需求→品相→门槛→卖家评估并入队；不通过时返回原因（调用方需 commit 后跳过）。"""
-        if not self._requirement_pass(session, listing, task):
-            return "需求不匹配"
-        self._condition_analysis(session, listing, task)
-        if self._condition_gate_fails(task, listing):
-            return "品相分低于门槛"
-        self._seller_check(session, listing, task)
-        batch_rows.append(self._batch_row(listing, task.condition_requirement or ""))
-        pending.append((task, listing, old_price, is_renotify))
-        return None
 
     def _upsert_listing(self, session, task: WatchTask, data: ListingData):
         listing = (
@@ -280,7 +122,7 @@ class CrawlService:
             return True
         return False
 
-    def _fetch_detail(self, session, listing: Listing, force: bool = False) -> None:
+    def _fetch_detail(self, session, listing: Listing, force: bool = False) -> ListingDetail | None:
         if not listing.url:
             return
         if not force and listing.description:
@@ -292,48 +134,28 @@ class CrawlService:
             return
         if detail.description:
             listing.description = detail.description
-        merged = [u for u in (listing.image_urls or []) if is_product_image(u)]
+        merged = []
         for url in detail.image_urls:
             if url not in merged and is_product_image(url):
                 merged.append(url)
         listing.image_urls = merged[:8]
-        if detail.variants:
-            listing.variants = detail.variants[:6]
+        listing.variants = detail.variants[:6]
         if detail.seller_uid:
             listing.seller_uid = detail.seller_uid
             listing.seller_name = detail.seller_name or listing.seller_name
             listing.seller_risk = {
+                **(listing.seller_risk or {}),
                 "credit_label": detail.credit_label,
                 "positive_rate": detail.positive_rate,
                 "sold_count": detail.sold_count,
             }
+        return detail
 
     def reanalyze_listing(self, listing_id: int) -> dict[str, Any]:
-        """手动重新分析单个商品：重抓详情并重跑需求/品相/性价比/卖家，不发送通知。"""
-        stats = {"updated": 0}
-        self._judger = self._build_judger(self.settings_service.get())
-        with self._session_factory() as session:
-            listing = session.get(Listing, listing_id)
-            if listing is None:
-                raise RuntimeError(f"商品 {listing_id} 不存在")
-            task = (
-                session.get(WatchTask, listing.task_id)
-                if listing.task_id is not None
-                else WatchTask(keyword="", condition_requirement="", min_condition_score=0)
-            )
-            if listing.url:
-                self._fetch_detail(session, listing, force=True)
-            self._requirement_pass(session, listing, task)
-            self._condition_analysis(session, listing, task)
-            self._seller_check(session, listing, task)
-            if self._value_client() is not None:
-                self._batch_value(
-                    session, [self._batch_row(listing, task.condition_requirement or "")]
-                )
-            listing.satisfaction = self._satisfaction(listing)
-            session.commit()
-            stats["updated"] = 1
-        return stats
+        """Revalidate offer evidence before analysis, without sending notifications."""
+        from goodprice.services.offer_crawl import OfferCrawlRunner
+
+        return OfferCrawlRunner(self).reanalyze(listing_id)
 
     def _seller_check(self, session, listing: Listing, task: WatchTask) -> None:
         if not listing.seller_uid or self.seller_service is None:
@@ -430,9 +252,11 @@ class CrawlService:
             )
         return judger
 
-    def _condition_analysis(self, session, listing: Listing, task: WatchTask) -> None:
+    def _condition_analysis(self, session, listing: Listing, task: WatchTask,
+                            price: float | None = None) -> None:
         if not self.vision.enabled:
             return
+        listing.condition_score = None
         valid = [u for u in (listing.image_urls or []) if is_product_image(u)]
         if not valid:
             listing.condition_detail = {"error": "无有效商品图"}
@@ -442,7 +266,7 @@ class CrawlService:
             try:
                 verdict = self.vision.analyze_condition(
                     title=listing.title,
-                    price=listing.price,
+                    price=price if price is not None else listing.price,
                     description=listing.description or "",
                     requirement=task.condition_requirement or "",
                     image_urls=valid,
@@ -454,13 +278,6 @@ class CrawlService:
             listing.condition_detail = verdict
             return
         listing.condition_detail = {"error": str(last_exc)[:200]}
-
-    def _condition_gate_fails(self, task: WatchTask, listing: Listing) -> bool:
-        return bool(
-            task.min_condition_score
-            and listing.condition_score is not None
-            and listing.condition_score < task.min_condition_score
-        )
 
     def _excluded(self, task: WatchTask, title: str) -> bool:
         """排除词按空白/中英文逗号拆分，标题命中任一即跳过。"""
@@ -496,190 +313,6 @@ class CrawlService:
             if getattr(client, "enabled", False):
                 return client
         return None
-
-    def _drop_pct(self, listing: Listing) -> float:
-        return drop_pct_from_snapshots(listing)
-
-    def _satisfaction(self, listing: Listing) -> float:
-        return compute_satisfaction(
-            listing,
-            vision_enabled=self.vision.enabled,
-            price_drop_pct=self._drop_pct(listing),
-        )
-
-    def _batch_value(self, session, rows: list[dict]) -> None:
-        now = datetime.now()
-        judger = self._judger
-        if judger is not None and judger.enabled:
-            try:
-                result = judger.analyze_batch_value(rows[:MAX_BATCH_VALUE_ITEMS])
-            except Exception as exc:
-                logger.warning("Jev 批量性价比失败，回落原路径: %s", exc)
-                result = None
-            if result is not None:
-                scores = result.get("scores") or {}
-                best = result.get("best")
-                logger.info(
-                    "Jev 批量性价比完成：%s 个商品，本批最优 %s", len(rows), best
-                )
-                for row in rows:
-                    listing = session.get(Listing, row["listing_id"])
-                    if listing is None:
-                        continue
-                    score = scores.get(row["external_id"])
-                    if score is not None:
-                        listing.value_score = score
-                        listing.value_batch_at = now
-                        listing.best_of_batch = best == row["external_id"]
-                return
-        client = self._value_client()
-        if client is None:
-            return
-        try:
-            result = client.analyze_batch_value(rows[:MAX_BATCH_VALUE_ITEMS])
-        except Exception as exc:
-            logger.warning("批量性价比分析失败，跳过: %s", exc)
-            return
-        scores = result.get("scores") or {}
-        best = result.get("best")
-        logger.info("批量性价比完成：%s 个商品，本批最优 %s", len(rows), best)
-        for row in rows:
-            listing = session.get(Listing, row["listing_id"])
-            if listing is None:
-                continue
-            score = scores.get(row["external_id"])
-            if score is not None:
-                listing.value_score = score
-                listing.value_batch_at = now
-                listing.best_of_batch = best == row["external_id"]
-
-    def _backfill(self, session, listing: Listing, task: WatchTask) -> bool:
-        changed = False
-        requirement = (task.condition_requirement or "").strip()
-        if requirement and self.llm.enabled and listing.requirement_match is None:
-            verdict = self._requirement_verdict(listing, requirement)
-            if verdict is not None:
-                listing.requirement_match, listing.requirement_reason = verdict
-                changed = True
-            else:
-                try:
-                    result = self.llm.analyze_requirement(
-                        title=listing.title,
-                        description=listing.description or "",
-                        requirement=requirement,
-                    )
-                    listing.requirement_match = result["matched"]
-                    listing.requirement_reason = result["reason"]
-                    changed = True
-                except Exception as exc:
-                    logger.warning("回填需求分析失败: %s", exc)
-        if self.vision.enabled and listing.condition_score is None:
-            try:
-                verdict = self.vision.analyze_condition(
-                    title=listing.title,
-                    price=listing.price,
-                    description=listing.description or "",
-                    requirement=requirement,
-                    image_urls=listing.image_urls,
-                )
-                listing.condition_score = verdict["condition_score"]
-                listing.condition_detail = verdict
-                changed = True
-            except Exception as exc:
-                logger.warning("回填品相分析失败: %s", exc)
-        return changed
-
-    def _notify(
-        self,
-        session,
-        task: WatchTask,
-        listing: Listing,
-        satisfaction: float,
-        old_price: Optional[float] = None,
-        is_renotify: bool = False,
-    ) -> None:
-        def _fmt(value: float) -> str:
-            return format(value, "g")
-
-        lines = [f"价格：{_fmt(listing.price)} 元"]
-        drop_pct = self._drop_pct(listing)
-        if drop_pct >= DROP_PCT_DISPLAY_THRESHOLD:
-            lines.append(f"较首见降价 {drop_pct:.0%}")
-        if is_renotify and old_price is not None:
-            lines.append(f"价格更新重推：{_fmt(old_price)} → {_fmt(listing.price)} 元")
-        if listing.requirement_match is not None:
-            status = "是" if listing.requirement_match else "否"
-            reason = listing.requirement_reason or ""
-            line = f"需求匹配：{status}"
-            if reason:
-                line += f"（{reason}）"
-            lines.append(line)
-        if listing.condition_score is not None:
-            lines.append(f"品相分：{listing.condition_score}")
-        elif self.vision.enabled:
-            err = ""
-            if isinstance(listing.condition_detail, dict):
-                err = listing.condition_detail.get("error") or ""
-            lines.append(f"品相分：未评估（{err or '分析失败'}）")
-        else:
-            lines.append("品相分：视觉模型未启用，未评估")
-        if listing.value_score is not None:
-            lines.append(f"性价比：{listing.value_score}/10")
-        else:
-            lines.append("性价比：未评估")
-        if listing.best_of_batch:
-            lines.append("本批最优")
-        if listing.variants:
-            parts = " · ".join(
-                f"{v.get('name')} {_fmt(v.get('price'))} 元" for v in listing.variants[:6]
-            )
-            lines.append(f"规格：{parts}")
-        if listing.seller_risk:
-            risk = listing.seller_risk
-            name = risk.get("nickname") or "卖家"
-            level = risk.get("risk_level")
-            reason = risk.get("risk_reason") or ""
-            rate = risk.get("positive_rate")
-            rate_txt = f"好评率 {rate * 100:.0f}%" if isinstance(rate, (int, float)) else ""
-            lines.append(f"卖家：{name} {rate_txt} · 风险{level}（{reason}）")
-        if isinstance(listing.condition_detail, dict):
-            extra = listing.condition_detail.get("reason", "")
-            if extra:
-                lines.append(extra)
-        message = NotificationMessage(
-            title=f"[{task.keyword}] {listing.title}",
-            content="\n".join(lines),
-            url=listing.url,
-        )
-        for channel, notifier in self.notifiers:
-            try:
-                notifier.send(message)
-                logger.info("通知[%s] 已发送：%s", channel, listing.title[:30])
-                session.add(
-                    Notification(
-                        listing_id=listing.id,
-                        task_id=task.id,
-                        channel=channel,
-                        status="sent",
-                        title=message.title,
-                        content=message.content,
-                    )
-                )
-            except Exception as exc:
-                logger.warning("通知[%s]失败: %s", channel, exc)
-                session.add(
-                    Notification(
-                        listing_id=listing.id,
-                        task_id=task.id,
-                        channel=channel,
-                        status="failed",
-                        detail=str(exc),
-                        title=message.title,
-                        content=message.content,
-                    )
-                )
-        listing.notified_at = datetime.now()
-        listing.last_notified_satisfaction = satisfaction
 
     def _record_error(self, task_id: int, message: str) -> None:
         with self._session_factory() as session:

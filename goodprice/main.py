@@ -16,6 +16,7 @@ from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
 from goodprice.services.task_queue import DEFAULT_GAP_SECONDS, TaskQueue
 from goodprice.services.task_service import TaskService
+from goodprice.web.offer_routes import router as offer_router
 from goodprice.web.routes import router
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "data" / "logs"
@@ -169,6 +170,7 @@ def build_app(
     app.state.task_queue = task_queue
     app.state.login_session = login_session
     app.include_router(router)
+    app.include_router(offer_router)
     return app
 
 

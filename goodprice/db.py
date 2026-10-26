@@ -9,6 +9,9 @@ _LISTINGS_DDL = """
     external_id VARCHAR(200) NOT NULL,
     title VARCHAR(500) NOT NULL,
     price FLOAT NOT NULL,
+    offer_price_cents INTEGER,
+    offer_verified_until DATETIME,
+    offer_task_version INTEGER,
     url TEXT NOT NULL,
     image_urls JSON,
     seller VARCHAR(200),
@@ -91,6 +94,9 @@ def migrate_schema(session_factory) -> None:
             ("version", "version INTEGER DEFAULT 1"),
         ],
         "listings": [
+            ("offer_price_cents", "offer_price_cents INTEGER"),
+            ("offer_verified_until", "offer_verified_until DATETIME"),
+            ("offer_task_version", "offer_task_version INTEGER"),
             ("description", "description TEXT"),
             ("requirement_match", "requirement_match BOOLEAN"),
             ("requirement_reason", "requirement_reason TEXT"),
@@ -113,6 +119,7 @@ def migrate_schema(session_factory) -> None:
             ("blocked", "blocked BOOLEAN DEFAULT 0"),
         ],
         "notifications": [
+            ("event_context", "event_context JSON"),
             ("offer_id", "offer_id INTEGER"),
             ("event_key", "event_key VARCHAR(128)"),
             ("title", "title TEXT"),

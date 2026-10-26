@@ -22,3 +22,7 @@ def test_unknown_or_unproved_negative_is_not_matched():
 
 def test_empty_target_does_not_invent_restrictions():
     assert match_variant("", {"容量": "256GB"}, "") == "matched"
+
+
+def test_model_and_capacity_can_be_in_one_target_phrase():
+    assert match_variant("iPhone 15 256GB", {"型号": "iPhone 15", "容量": "256GB"}, "") == "matched"

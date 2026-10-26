@@ -9,9 +9,9 @@
   <div class="lg:col-span-2 bg-white rounded shadow p-4">
     <h2 class="text-lg font-semibold">{{ listing.title }}</h2>
     <div class="mt-2 flex items-center gap-2 flex-wrap">
-      <span class="text-2xl font-bold text-red-600">¥{{ listing.price }}</span>
+      <span class="text-2xl font-bold text-red-600">页面标价 ¥{{ listing.price }}</span>
       {% if listing.status == 'gone' %}<span class="px-2 py-0.5 rounded text-xs bg-gray-300 text-gray-700">已下架</span>{% endif %}
-      {% if listing.best_of_batch %}<span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">本批最优</span>{% endif %}
+      {% if listing.price_confirmed and listing.best_of_batch %}<span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">本批最优</span>{% endif %}
       {% if notify_count > 1 %}<span class="px-2 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700">已重推</span>{% endif %}
       {% if listing.blocked %}<span class="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-600">已拉黑</span>{% endif %}
       <span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">满足分 {{ listing.satisfaction|round(1) }}</span>
@@ -33,10 +33,29 @@
     <div class="text-xs text-gray-400 mt-1">点击图片可放大查看</div>
     {% endif %}
 
+    <h3 class="font-semibold mt-5 mb-1">规格与价格证据（实验性）</h3>
+    {% for offer in offers %}
+    <div class="border rounded p-3 mb-2 text-sm">
+      <strong>{{ offer.name or offer.key }}</strong> {{ offer.attributes }}
+      <p>{{ offer.reason }} · {{ offer.availability }}</p>
+      {% if offer.effective_price_cents is not none %}
+      <p>当前{{ '人工报价' if offer.source == 'manual' else '页面确价' }}：¥{{ offer.effective_price_cents / 100 }}</p>
+      {% else %}<p>价格待确认，不参与正常性价比排名。</p>{% endif %}
+      <form method="post" action="/offers/{{ offer.id }}/quotes" class="flex flex-wrap gap-2 mt-2">
+        <input type="hidden" name="fingerprint" value="{{ offer.fingerprint }}">
+        <input name="amount" required type="number" min="0.01" step="0.01" placeholder="该规格询价结果（元）" class="border rounded px-2">
+        <label>有效天数 <input name="valid_days" type="number" value="7" min="1" max="30" class="border rounded w-16"></label>
+        <button class="btn btn-sm btn-primary">确认报价</button>
+      </form>
+      <p class="text-xs text-gray-500 mt-1">人工报价优先于页面价；页面证据变化或报价到期后需复核，不会自动联系卖家。</p>
+      {% if offer.quote_id %}<form method="post" action="/quotes/{{ offer.quote_id }}/revoke" class="mt-1"><button class="btn btn-sm btn-outline">撤销人工报价</button></form>{% endif %}
+    </div>
+    {% else %}<p class="text-sm text-gray-500">尚无已核验的规格价格，旧页面标价不代表实际成交价。</p>{% endfor %}
+
     <h3 class="font-semibold mt-5 mb-1">描述原文</h3>
     <div class="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-3">{{ listing.description or '无描述' }}</div>
 
-    <h3 class="font-semibold mt-5 mb-1">价格走势</h3>
+    <h3 class="font-semibold mt-5 mb-1">页面标价走势（不是目标规格成交价）</h3>
     <div class="text-sm text-gray-600 mb-2">首见价 ¥{{ first_price }} · 当前价 ¥{{ listing.price }}{% if drop_pct > 0 %} · 降幅 {{ '%.1f'|format(drop_pct * 100) }}%{% endif %}</div>
     <table class="w-full text-sm">
       <thead><tr class="text-left text-gray-500"><th class="py-1">时间</th><th>价格</th></tr></thead>

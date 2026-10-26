@@ -81,3 +81,11 @@ def test_same_source_and_same_offer_required_for_drop():
     current = decide_price(candidate(cents=130000), None, NOW, 1200)
     assert is_comparable_drop(previous, current, same_offer=True)
     assert not is_comparable_drop(previous, current, same_offer=False)
+
+
+def test_incomplete_evidence_never_becomes_exact():
+    offer = candidate()
+    incomplete = PriceClaim("dom", "unknown", "规格获取不完整", NOW, "truncated")
+    result = decide_price(replace(offer, claims=(*offer.claims, incomplete)), None, NOW, 1200)
+    assert result.state == "unknown"
+    assert result.amount_cents is None

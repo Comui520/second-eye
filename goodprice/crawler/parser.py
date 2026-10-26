@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from goodprice.crawler import selectors as sel
 from goodprice.crawler.base import ListingData, ListingDetail, SellerData
 from goodprice.crawler.constants import GOOFISH_ORIGIN
+from goodprice.crawler.offers import parse_offer_candidates
 
 BASE_URL = GOOFISH_ORIGIN
 _PRICE_RE = re.compile(r"(\d+(?:\.\d+)?)")
@@ -113,6 +114,7 @@ def parse_detail_html(html: str) -> ListingDetail:
     credit_el = soup.select_one(sel.DETAIL_CREDIT_LABEL)
     credit_label = credit_el.get_text(strip=True) if credit_el else None
     return ListingDetail(
+        offers=parse_offer_candidates(html),
         description=desc[:2000],
         image_urls=images[:8],
         variants=variants,

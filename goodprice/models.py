@@ -56,6 +56,9 @@ class Listing(Base):
     external_id: Mapped[str] = mapped_column(String(200))
     title: Mapped[str] = mapped_column(String(500))
     price: Mapped[float] = mapped_column(Float)
+    offer_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    offer_verified_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    offer_task_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     url: Mapped[str] = mapped_column(Text)
     image_urls: Mapped[list[str]] = mapped_column(JSON, default=list)
     seller: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
@@ -111,6 +114,7 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     offer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     event_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    event_context: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     listing_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("listings.id", ondelete="SET NULL"), nullable=True
     )
@@ -150,6 +154,9 @@ class ListingOffer(Base):
     name: Mapped[str] = mapped_column(Text, default="")
     attributes: Mapped[dict] = mapped_column(JSON, default=dict)
     availability: Mapped[str] = mapped_column(String(20), default="unknown")
+    last_notified_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_notified_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    last_notified_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     observations: Mapped[list["OfferObservation"]] = relationship(cascade="all, delete-orphan")
     quotes: Mapped[list["ManualQuote"]] = relationship(cascade="all, delete-orphan")
     evaluations: Mapped[list["OfferEvaluationRecord"]] = relationship(cascade="all, delete-orphan")

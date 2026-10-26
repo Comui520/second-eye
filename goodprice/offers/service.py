@@ -1,6 +1,13 @@
 from datetime import datetime, timezone
 
-from goodprice.models import Listing, ListingOffer, ManualQuote, OfferObservation, WatchTask
+from goodprice.models import (
+    Listing,
+    ListingOffer,
+    ManualQuote,
+    Notification,
+    OfferObservation,
+    WatchTask,
+)
 from goodprice.offers.pricing import offer_fingerprint, utc
 from goodprice.offers.types import OfferCandidate, PriceClaim, QuoteInput
 
@@ -25,11 +32,16 @@ class OfferService:
         if not offer.key or not offer.claims:
             raise ValueError("规格或证据不能为空")
         with self._session_factory() as session:
-            if session.get(Listing, listing_id) is None:
+            listing = session.get(Listing, listing_id)
+            if listing is None:
                 raise LookupError("商品不存在")
             row = session.query(ListingOffer).filter_by(listing_id=listing_id, offer_key=offer.key).first()
             if row is None:
                 row = ListingOffer(listing_id=listing_id, offer_key=offer.key)
+                legacy_sent = session.query(Notification).filter_by(
+                    listing_id=listing_id, offer_id=None, status="sent").first()
+                if legacy_sent and offer.key == "default":
+                    row.last_notified_source = "legacy_baseline"
                 session.add(row)
                 session.flush()
             row.name, row.attributes, row.availability = offer.name, dict(offer.attributes), offer.availability
@@ -52,6 +64,9 @@ class OfferService:
             latest = session.query(OfferObservation).filter_by(offer_id=offer_id).order_by(
                 OfferObservation.observed_at.desc(), OfferObservation.id.desc()).first()
             listing = session.get(Listing, offer.listing_id)
+            candidate = decode_offer(latest.payload) if latest else None
+            if candidate and any(c.evidence_id in ("duplicate", "truncated") for c in candidate.claims):
+                raise ValueError("规格身份不明确或获取不完整，不能用报价代替核验")
             task = session.get(WatchTask, listing.task_id) if listing.task_id else None
             ttl = (task.interval_minutes if task else 20) * 60
             if (latest is None or latest.fingerprint != quote.evidence_fingerprint
@@ -64,6 +79,7 @@ class OfferService:
                               confirmed_at=utc(quote.confirmed_at), expires_at=utc(quote.expires_at),
                               evidence_fingerprint=quote.evidence_fingerprint, revoked=False)
             session.add(row)
+            listing.offer_verified_until = None
             session.commit()
             return row.id
 
@@ -73,4 +89,6 @@ class OfferService:
             if quote is None:
                 raise LookupError("报价不存在")
             quote.revoked = True
+            offer = session.get(ListingOffer, quote.offer_id)
+            session.get(Listing, offer.listing_id).offer_verified_until = None
             session.commit()

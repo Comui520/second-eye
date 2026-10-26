@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, text
+from sqlalchemy import and_, case, func, select, text
 
 from goodprice.constants import SCORE_MAX
 
@@ -30,7 +30,9 @@ def _apply_listing_filters(query, *, task_id, show, sort):
 
     show 的取值由模板下拉决定；未知值（含 "all"）不追加过滤条件。
     """
-    from goodprice.models import Listing
+    from datetime import datetime, timezone
+
+    from goodprice.models import Listing, WatchTask
 
     if task_id:
         query = query.filter(Listing.task_id == task_id)
@@ -40,13 +42,18 @@ def _apply_listing_filters(query, *, task_id, show, sort):
         query = query.filter(Listing.status == "gone")
     elif show == "blocked":
         query = query.filter(Listing.blocked.is_(True))
+    version = select(WatchTask.version).where(WatchTask.id == Listing.task_id).correlate(Listing).scalar_subquery()
+    valid = and_(Listing.offer_verified_until > datetime.now(timezone.utc),
+                 Listing.offer_price_cents.is_not(None), Listing.offer_task_version == version)
+    query = query.order_by(case((valid, 0), else_=1))
+    price = case((valid, Listing.offer_price_cents), else_=None)
     if sort == "price_asc":
-        return query.order_by(Listing.price.asc())
+        return query.order_by(price.asc(), Listing.id.desc())
     if sort == "price_desc":
-        return query.order_by(Listing.price.desc())
+        return query.order_by(price.desc(), Listing.id.desc())
     if sort == "newest":
         return query.order_by(Listing.first_seen_at.desc())
-    return query.order_by(Listing.satisfaction.desc(), Listing.first_seen_at.desc())
+    return query.order_by(case((valid, Listing.satisfaction), else_=0).desc(), Listing.first_seen_at.desc(), Listing.id.desc())
 
 
 @router.get("/healthz", include_in_schema=False)
@@ -278,6 +285,8 @@ def api_list_notifications(request: Request):
 @router.post("/tasks")
 def create_task_form(
     request: Request,
+    target_variant: str = Form(""),
+    notify_pending_price: Optional[int] = Form(None),
     keyword: str = Form(...),
     name: str = Form(""),
     max_price: float = Form(0),
@@ -293,6 +302,8 @@ def create_task_form(
     try:
         task_service.create_task(
             {
+                "target_variant": target_variant,
+                "notify_pending_price": bool(notify_pending_price),
                 "keyword": keyword,
                 "name": name,
                 "max_price": max_price,
@@ -360,6 +371,8 @@ def task_detail_page(request: Request, task_id: int):
 def edit_task_form(
     request: Request,
     task_id: int,
+    target_variant: str = Form(""),
+    notify_pending_price: Optional[int] = Form(None),
     keyword: str = Form(...),
     name: str = Form(""),
     max_price: float = Form(0),
@@ -376,6 +389,8 @@ def edit_task_form(
         task_service.update_task(
             task_id,
             {
+                "target_variant": target_variant,
+                "notify_pending_price": bool(notify_pending_price),
                 "keyword": keyword,
                 "name": name,
                 "max_price": max_price,
@@ -438,6 +453,10 @@ def listings_page(
         query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         query = query.offset(offset)
         listings = query.limit(PAGE_SIZE).all()
+        from goodprice.services.offer_pipeline import present_listings
+
+        listings = present_listings(listings, request.app.state.session_factory,
+                                    request.app.state.settings_service.get().vision_enabled)
         notify_counts = _notify_counts(session, listings)
         more = len(listings) >= PAGE_SIZE
     partial_url = f"/listings?partial=1&task_id={task_id or ''}&sort={sort}&show={show}"
@@ -502,6 +521,10 @@ def listings_more(
         task_id_int = _optional_int(task_id)
         query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         listings = query.offset(offset).limit(PAGE_SIZE).all()
+        from goodprice.services.offer_pipeline import present_listings
+
+        listings = present_listings(listings, request.app.state.session_factory,
+                                    request.app.state.settings_service.get().vision_enabled)
         notify_counts = _notify_counts(session, listings)
     return templates.TemplateResponse(
         request, "listings_cards.html", {"listings": listings, "notify_counts": notify_counts}
@@ -510,6 +533,11 @@ def listings_more(
 
 @router.get("/listings/{listing_id}", response_class=HTMLResponse)
 def listing_detail_page(request: Request, listing_id: int):
+    from datetime import datetime as dt
+    from datetime import timezone
+
+    from goodprice.services.offer_pipeline import OfferPipeline, present_listings
+
     with request.app.state.session_factory() as session:
         from goodprice.models import Listing, Notification, PriceSnapshot
 
@@ -540,13 +568,15 @@ def listing_detail_page(request: Request, listing_id: int):
         request,
         "listings_detail.html",
         {
-            "listing": listing,
+            "listing": present_listings([listing], request.app.state.session_factory,
+                                         request.app.state.settings_service.get().vision_enabled)[0],
             "snapshots": snapshots,
             "notifications": notifications,
             "notify_count": notify_count,
             "first_price": first_price,
             "drop_pct": drop_pct,
             "drop_pct_threshold": DROP_PCT_DISPLAY_THRESHOLD,
+            "offers": OfferPipeline(request.app.state.session_factory).snapshot(listing_id, dt.now(timezone.utc)),
             "active": "listings",
         },
     )
@@ -981,6 +1011,10 @@ def api_list_listings(
         task_id_int = _optional_int(task_id)
         query = _apply_listing_filters(query, task_id=task_id_int, show=show, sort=sort)
         rows = query.offset(offset).limit(PAGE_SIZE).all()
+        from goodprice.services.offer_pipeline import present_listings
+
+        rows = present_listings(rows, request.app.state.session_factory,
+                               request.app.state.settings_service.get().vision_enabled)
     return [
         {
             "id": row.id,
@@ -988,6 +1022,9 @@ def api_list_listings(
             "external_id": row.external_id,
             "title": row.title,
             "price": row.price,
+            "effective_price_cents": row.effective_price_cents,
+            "price_confirmed": row.price_confirmed,
+            "value_score": row.value_score,
             "url": row.url,
             "image_urls": row.image_urls,
             "condition_score": row.condition_score,

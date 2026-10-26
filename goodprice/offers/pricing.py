@@ -47,6 +47,10 @@ def decide_price(offer: OfferCandidate, quote: QuoteInput | None,
         return result("unknown", "无有效价格证据")
     if offer.availability == "unavailable":
         return result("unknown", "该规格不可购买")
+    if any(c.evidence_id == "duplicate" for c in claims):
+        return result("conflict", "规格身份存在歧义，人工价格不能代替身份核验")
+    if any(c.kind == "unknown" and c.evidence_id == "truncated" for c in claims):
+        return result("unknown", "价格或规格证据不完整")
     until = min(utc(c.observed_at) for c in claims) + timedelta(seconds=ttl_seconds)
     if any(utc(c.observed_at) > now + timedelta(seconds=5) for c in claims) or until <= now:
         return result("unknown", "价格或规格证据已过期，等待重新核验")
@@ -60,6 +64,8 @@ def decide_price(offer: OfferCandidate, quote: QuoteInput | None,
     for state in ("conflict", "inquiry"):
         if any(c.kind == state for c in claims):
             return result(state, "价格声明存在冲突" if state == "conflict" else "需联系卖家询价")
+    if any(c.kind == "unknown" for c in claims):
+        return result("unknown", "价格或规格证据不完整")
     exact = [c for c in claims if c.kind == "exact" and c.source in {"sku", "dom", "description"}
              and type(c.amount_cents) is int and 0 < c.amount_cents <= 10**12]
     amounts = {c.amount_cents for c in exact}

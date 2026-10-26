@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from goodprice.offers.types import OfferCandidate
+
 
 @dataclass
 class ListingData:
@@ -20,6 +22,7 @@ class ListingDetail:
     description: str = ""
     image_urls: list[str] = field(default_factory=list)
     variants: list[dict] = field(default_factory=list)
+    offers: list[OfferCandidate] = field(default_factory=list)
     seller_uid: Optional[str] = None
     seller_name: Optional[str] = None
     credit_label: Optional[str] = None
