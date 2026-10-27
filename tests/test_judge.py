@@ -256,8 +256,10 @@ class FakeAdapter:
 
     def fetch_detail(self, url):
         from goodprice.crawler.base import ListingDetail
+        from goodprice.crawler.offers import parse_offer_candidates
 
-        return ListingDetail(description="屏幕完好 电池健康", image_urls=["https://x/d.jpg"])
+        return ListingDetail(description="屏幕完好 电池健康", image_urls=["https://x/d.jpg"],
+                             offers=parse_offer_candidates('<main data-item-detail><span data-item-price>100</span></main>'))
 
 
 class FakeVision:

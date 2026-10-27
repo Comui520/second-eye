@@ -2,7 +2,7 @@ from typing import Optional
 
 import httpx
 
-from goodprice.notify.base import NotificationMessage, Notifier
+from goodprice.notify.base import DeliveryRejected, NotificationMessage, Notifier
 
 
 class WeComRobotNotifier(Notifier):
@@ -24,7 +24,7 @@ class WeComRobotNotifier(Notifier):
 
     def send(self, message: NotificationMessage) -> None:
         if not self.enabled:
-            raise RuntimeError("企业微信群机器人未配置 webhook")
+            raise DeliveryRejected("企业微信群机器人未配置 webhook")
         content = f"{message.title}\n{message.content}\n{message.url}"
         with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
             response = client.post(
@@ -34,8 +34,8 @@ class WeComRobotNotifier(Notifier):
             data = response.json()
         errcode = data.get("errcode", -1)
         if errcode == 93000:
-            raise RuntimeError("企业微信群机器人 webhook 无效或机器人已被移除，请重新添加")
+            raise DeliveryRejected("企业微信群机器人 webhook 无效或机器人已被移除，请重新添加")
         if errcode == 93004:
-            raise RuntimeError("企业微信群机器人发送太频繁（20 条/分钟），请稍后重试或降低频率")
+            raise DeliveryRejected("企业微信群机器人发送太频繁（20 条/分钟），请稍后重试或降低频率")
         if errcode != 0:
-            raise RuntimeError(f"企业微信群机器人发送失败: {data}")
+            raise DeliveryRejected(f"企业微信群机器人发送失败: {data}")

@@ -1,0 +1,6 @@
+<details class="text-sm border rounded p-3">
+  <summary class="cursor-pointer">清除本分类的已保存凭据</summary>
+  <p class="text-xs text-gray-500 mt-2">清除后将无法使用相应登录或接口，需重新配置。</p>
+  {% for name in clear_fields %}<label class="block mt-1"><input type="checkbox" name="clear_{{ name }}" value="1"> 清除 {{ name }}</label>{% endfor %}
+  <label class="block mt-2"><input type="checkbox" name="confirm_clear" value="1"> 确认清除已勾选的凭据</label>
+</details>

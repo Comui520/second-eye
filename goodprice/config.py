@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -19,6 +19,7 @@ SECRET_FIELDS: frozenset[str] = frozenset(
         "feishu_secret",
         "gotify_token",
         "jev_api_key",
+        "xianyu_cookie",
     }
 )
 
@@ -40,6 +41,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "闲鱼盯价助手"
+    data_root: Path = PROJECT_ROOT / "data"
     database_url: str = f"sqlite:///{DEFAULT_DB.as_posix()}"
     xianyu_cookie: str = ""
     llm_base_url: str = ""
@@ -48,8 +50,8 @@ class Settings(BaseSettings):
     llm_api_format: str = "chat_completions"
     serverchan_sendkey: str = ""
     proxy: str = ""
-    default_crawl_interval_minutes: int = 20
-    default_crawl_jitter_minutes: int = 10
+    default_crawl_interval_minutes: int = Field(20, ge=1)
+    default_crawl_jitter_minutes: int = Field(10, ge=0)
     vision_base_url: str = ""
     vision_api_key: str = ""
     vision_model: str = "glm-4.6v-flash"
@@ -60,7 +62,7 @@ class Settings(BaseSettings):
     feishu_enabled: bool = True
     gotify_url: str = ""
     gotify_token: str = ""
-    gotify_priority: int = 5
+    gotify_priority: int = Field(5, ge=0, le=10)
     gotify_enabled: bool = True
     serverchan_enabled: bool = True
     wecom_robot_enabled: bool = True
@@ -73,6 +75,45 @@ class Settings(BaseSettings):
     jev_auto_threshold: float = 0.85
     jev_backend: str = "adapter"
     jev_api_key: str = ""
+    video_analysis_enabled: bool = False
+    media_image_count: int = Field(8, ge=1, le=32)
+    media_video_count: int = Field(1, ge=1, le=3)
+    media_frames_per_video: int = Field(6, ge=1, le=24)
+    media_image_quota: int = Field(4, ge=0, le=16)
+    media_frame_quota: int = Field(4, ge=0, le=16)
+    media_total_limit: int = Field(8, ge=1, le=16)
+    media_model_limit: int = Field(8, ge=1, le=16)
+    media_video_max_mib: int = Field(100, ge=10, le=200)
+    media_video_max_seconds: int = Field(180, ge=15, le=300)
+    media_cache_mib: int = Field(1024, ge=256, le=10240)
+    media_retention_days: int = Field(7, ge=1, le=30)
+    media_download_timeout: int = Field(60, ge=10, le=120)
+    media_decode_timeout: int = Field(30, ge=10, le=120)
+    media_request_max_mib: int = Field(16, ge=1, le=32)
+    media_ffmpeg_threads: int = Field(1, ge=1, le=4)
+    execution_active_runs: int = Field(2, ge=1, le=4)
+    execution_crawler_workers: int = Field(1, ge=1, le=2)
+    execution_model_workers: int = Field(1, ge=1, le=8)
+    execution_media_workers: int = Field(1, ge=1, le=2)
+    execution_platform_interval_seconds: int = Field(10, ge=5, le=300)
+    execution_model_rpm: int = Field(10, ge=1, le=60)
+    execution_global_items: int = Field(200, ge=1, le=200)
+    execution_task_items: int = Field(60, ge=1, le=60)
+    execution_run_details: int = Field(30, ge=1, le=100)
+    execution_run_http_attempts: int = Field(60, ge=1, le=200)
+    execution_run_minutes: int = Field(15, ge=5, le=60)
+
+    @model_validator(mode="after")
+    def _media_budgets(self):
+        if self.media_total_limit > self.media_model_limit:
+            raise ValueError("视觉输入总上限不能超过已确认的模型上限（未知时为8）")
+        # Serial assets share the same reservation; retained outputs from earlier
+        # assets remain charged. JPEG outputs are capped at 2 MiB per image/frame.
+        required = self.media_video_max_mib + 2 * (
+            self.media_image_count + self.media_video_count * self.media_frames_per_video)
+        if required > self.media_cache_mib:
+            raise ValueError("媒体缓存不足以容纳一次处理的下载和输出，请减少视频/采样预算")
+        return self
 
     @field_validator("jev_backend")
     @classmethod

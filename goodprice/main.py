@@ -7,22 +7,27 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from goodprice.config import Settings, get_settings
 from goodprice.db import init_db, migrate_schema
+from goodprice.media.budget import BudgetExceeded
 from goodprice.scheduler import _sync_tasks, build_scheduler
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
 from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
-from goodprice.services.task_queue import DEFAULT_GAP_SECONDS, TaskQueue
 from goodprice.services.task_service import TaskService
+from goodprice.web.media_routes import router as media_router
+from goodprice.web.offer_routes import router as offer_router
+from goodprice.web.resource_routes import router as resource_router
 from goodprice.web.routes import router
+from goodprice.web.settings_sections import router as settings_sections_router
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "data" / "logs"
 
 
-def _setup_logging() -> None:
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+def _setup_logging(settings: Optional[Settings] = None) -> None:
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
@@ -32,8 +37,10 @@ def _setup_logging() -> None:
     console.setFormatter(formatter)
     root.addHandler(console)
     if not os.environ.get("PYTEST_CURRENT_TEST"):
+        log_dir = (settings.data_root / "logs") if settings else LOG_DIR
+        log_dir.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
-            LOG_DIR / "app.log",
+            log_dir / "app.log",
             maxBytes=5 * 1024 * 1024,
             backupCount=3,
             encoding="utf-8",
@@ -42,7 +49,6 @@ def _setup_logging() -> None:
         root.addHandler(file_handler)
 
 
-_setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -50,8 +56,11 @@ def _make_crawl_service(session_factory, settings_service, guard):
     runtime = settings_service.get()
     from goodprice.analysis.llm import LLMClient
     from goodprice.crawler.xianyu import XianyuAdapter
+    from goodprice.media.budget import MediaBudget
+    from goodprice.media.processing import MediaProcessor
     from goodprice.notify.log import LogNotifier
     from goodprice.notify.registry import build_enabled_notifiers
+    from goodprice.services.media_service import MediaService
 
     adapter = XianyuAdapter(cookie=runtime.xianyu_cookie, proxy=runtime.proxy)
     seller_service = SellerService(session_factory, adapter=adapter)
@@ -82,6 +91,9 @@ def _make_crawl_service(session_factory, settings_service, guard):
         settings_service=settings_service,
         guard=guard,
         seller_service=seller_service,
+        media_service=MediaService(session_factory, MediaProcessor(MediaBudget(
+            runtime.data_root / "media-cache", runtime.media_cache_mib * 1024**2,
+            runtime.media_retention_days * 86400))),
     )
 
 
@@ -99,8 +111,10 @@ def build_app(
     settings: Optional[Settings] = None,
     session_factory=None,
     with_scheduler: bool = True,
+    execution_factory=None,
 ) -> FastAPI:
     settings = settings or get_settings()
+    _setup_logging(settings)
     if session_factory is None:
         init_db(settings.database_url)
         from goodprice.db import make_session_factory
@@ -115,64 +129,67 @@ def build_app(
     settings_service = SettingsService(session_factory, base=settings)
     login_session = _make_login_session(settings_service, settings)
     task_service = TaskService(session_factory)
-    from goodprice.services.satisfaction import backfill_satisfaction
-
-    backfill_satisfaction(session_factory, vision_enabled=settings_service.get().vision_enabled)
     guard = TaskRunGuard()
 
-    def run_job(task_id: int) -> None:
-        logger.info("任务 %s 开始执行", task_id)
-        try:
-            stats = _make_crawl_service(session_factory, settings_service, guard).run_task(task_id)
-            logger.info("任务 %s 执行完成: %s", task_id, stats)
-        except Exception:
-            logger.exception("任务 %s 执行失败", task_id)
-
-    def run_reanalyze(listing_id: int) -> None:
-        logger.info("重新分析商品 %s", listing_id)
-        try:
-            _make_crawl_service(session_factory, settings_service, guard).reanalyze_listing(listing_id)
-        except Exception:
-            logger.exception("重新分析商品 %s 失败", listing_id)
-
-    task_queue = TaskQueue(run_job, gap_seconds=DEFAULT_GAP_SECONDS)
+    from goodprice.execution.pipeline import build_pipeline
+    task_queue = (execution_factory or build_pipeline)(session_factory, settings_service)
+    guard.provider = task_queue.running_ids
     scheduler = (
-        build_scheduler(session_factory, task_queue.submit, task_service)
+        build_scheduler(session_factory, task_queue.submit, task_service,
+                        jitter_seconds=lambda: settings_service.get().default_crawl_jitter_minutes * 60)
         if with_scheduler
         else None
     )
 
     def sync_scheduler() -> None:
         if scheduler is not None:
-            _sync_tasks(session_factory, task_queue.submit, task_service, scheduler)
+            _sync_tasks(session_factory, task_queue.submit, task_service, scheduler,
+                        jitter_seconds=lambda: settings_service.get().default_crawl_jitter_minutes * 60)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         task_queue.start()
-        if scheduler is not None:
-            app.state.scheduler = scheduler
-            app.state.scheduler.start()
-        yield
-        if scheduler is not None:
-            app.state.scheduler.shutdown(wait=False)
-        task_queue.stop()
+        try:
+            if scheduler is not None:
+                app.state.scheduler = scheduler
+                app.state.scheduler.start()
+            yield
+        finally:
+            try:
+                if scheduler is not None and scheduler.running:
+                    scheduler.shutdown(wait=False)
+            finally:
+                task_queue.stop()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    @app.exception_handler(BudgetExceeded)
+    async def media_busy_handler(request, exc):
+        return JSONResponse({"detail": "媒体处理繁忙或磁盘预算不足，请稍后重试"},
+                            status_code=503, headers={"Retry-After": "5"})
+    app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "web" / "static")), name="static")
     app.state.session_factory = session_factory
     app.state.settings_service = settings_service
     app.state.task_service = task_service
     app.state.run_job = task_queue.submit
-    app.state.run_reanalyze = run_reanalyze
+    app.state.run_reanalyze = task_queue.submit_reanalysis
+    app.state.coordinator = task_queue
+    app.state.resource_guard = getattr(getattr(task_queue, "pipeline", None), "guard", None)
     app.state.guard = guard
     app.state.sync_scheduler = sync_scheduler
     app.state.task_queue = task_queue
     app.state.login_session = login_session
     app.include_router(router)
+    app.include_router(offer_router)
+    app.include_router(media_router)
+    app.include_router(settings_sections_router)
+    app.include_router(resource_router)
     return app
 
 
-app = build_app()
+def create_app() -> FastAPI:
+    """ASGI factory: importing the module never opens a database or starts work."""
+    return build_app()
 
 
 def main() -> None:
-    uvicorn.run("goodprice.main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("goodprice.main:create_app", factory=True, host="0.0.0.0", port=8000, reload=False)

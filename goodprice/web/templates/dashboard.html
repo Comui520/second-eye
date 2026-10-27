@@ -12,9 +12,9 @@
   {% for item in recent %}
   <div class="p-3 flex items-center gap-3">
     {% if item.image_urls %}<img src="{{ item.image_urls[0] }}" class="w-14 h-14 object-cover rounded">{% endif %}
-    <div class="flex-1">
+    <div class="flex-1 min-w-0 break-words">
       <a href="{{ item.url }}" target="_blank" class="font-medium hover:text-blue-600">{{ item.title }}</a>
-      <div class="text-sm text-gray-500">{{ item.price }} 元 · 品相分 {{ item.condition_score or '未评估' }}</div>
+      <div class="text-sm text-gray-500">{{ item.price }} 元 · 品相分 {{ item.condition_score if item.condition_score is not none else '未评估' }}</div>
     </div>
   </div>
   {% else %}

@@ -14,3 +14,8 @@ htmlcov
 *.db
 browser_profile
 uv.lock
+.superpowers
+build
+dist
+output
+node_modules

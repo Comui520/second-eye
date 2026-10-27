@@ -2,7 +2,7 @@ from typing import Optional
 
 import httpx
 
-from goodprice.notify.base import NotificationMessage, Notifier
+from goodprice.notify.base import DeliveryRejected, NotificationMessage, Notifier
 
 
 class GotifyNotifier(Notifier):
@@ -30,7 +30,7 @@ class GotifyNotifier(Notifier):
 
     def send(self, message: NotificationMessage) -> None:
         if not self.enabled:
-            raise RuntimeError("Gotify 未配置 URL 或应用 Token")
+            raise DeliveryRejected("Gotify 未配置 URL 或应用 Token")
         endpoint = self.url if self.url.endswith("/message") else f"{self.url}/message"
         content = message.content
         if message.url:

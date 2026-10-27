@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 
 
+class DeliveryRejected(RuntimeError):
+    """The channel rejected the request or no transmission was attempted."""
+
+
 @dataclass
 class NotificationMessage:
     title: str

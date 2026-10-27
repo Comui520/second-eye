@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - release
 permissions:
   contents: read
 
@@ -14,8 +15,12 @@ concurrency:
 
 jobs:
   test:
-    name: Python tests
-    runs-on: ubuntu-latest
+    name: Python and browser tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -38,6 +43,9 @@ jobs:
 
       - name: Check whitespace errors
         run: git diff --check
+
+      - name: Install test browser
+        run: uv run --locked playwright install --with-deps chromium
 
       - name: Lint (ruff)
         run: uv run --locked ruff check .

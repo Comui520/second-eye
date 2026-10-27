@@ -1,0 +1,4 @@
+{% if more %}
+<a href="{{ load_more_fallback }}" id="load-more" {% if more_oob %}hx-swap-oob="true"{% endif %} class="mt-4 block w-full text-center bg-white border rounded px-4 py-2 text-gray-600"
+  hx-get="{{ load_more_url }}" hx-target="#listings-grid" hx-swap="beforeend">加载更多</a>
+{% elif more_oob %}<p id="load-more" hx-swap-oob="true" class="text-sm text-gray-500">已加载当前范围的结果。</p>{% endif %}

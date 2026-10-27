@@ -1,3 +1,4 @@
+import threading
 from contextlib import contextmanager
 from typing import Callable, Optional
 from urllib.parse import quote
@@ -36,6 +37,9 @@ class XianyuAdapter:
         self.proxy = proxy
         self.headless = headless
         self._playwright_factory = playwright_factory or sync_playwright
+        self._browser = None
+        self._owner = None
+        self._session_lock = threading.Lock()
 
     def _cookies(self) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -49,24 +53,49 @@ class XianyuAdapter:
         return result
 
     @contextmanager
-    def _open_page(self):
-        """统一的浏览器/上下文/Cookie 装配，三处抓取复用。"""
+    def session(self):
+        if not self._session_lock.acquire(blocking=False):
+            raise RuntimeError("Browser session already has an owning thread")
+        try:
+            with self._session():
+                yield self
+        finally:
+            self._session_lock.release()
+
+    @contextmanager
+    def _session(self):
+        if self._owner is not None:
+            raise RuntimeError("Browser session already has an owning thread")
         with self._playwright_factory() as playwright:
-            browser = playwright.chromium.launch(
+            self._browser = playwright.chromium.launch(
                 headless=self.headless,
                 proxy={"server": self.proxy} if self.proxy else None,
             )
+            self._owner = threading.get_ident()
             try:
-                context = browser.new_context(user_agent=USER_AGENT)
-                context.add_cookies(
-                    [
-                        {"name": k, "value": v, "domain": ".goofish.com", "path": "/"}
-                        for k, v in self._cookies().items()
-                    ]
-                )
-                yield context.new_page()
+                yield self
             finally:
-                browser.close()
+                try:
+                    self._browser.close()
+                finally:
+                    self._browser, self._owner = None, None
+
+    @contextmanager
+    def _open_page(self):
+        if self._browser is None:
+            with self.session(), self._open_page() as page:
+                yield page
+            return
+        if self._owner != threading.get_ident():
+            raise RuntimeError("Browser must be used by its owning thread")
+        context = self._browser.new_context(user_agent=USER_AGENT)
+        try:
+            context.add_cookies([
+                {"name": k, "value": v, "domain": ".goofish.com", "path": "/"}
+                for k, v in self._cookies().items()])
+            yield context.new_page()
+        finally:
+            context.close()
 
     def search(
         self, keyword: str, max_items: int = 30, attempts: int = SEARCH_ATTEMPTS

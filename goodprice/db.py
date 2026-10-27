@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 _LISTINGS_DDL = """
@@ -9,6 +9,9 @@ _LISTINGS_DDL = """
     external_id VARCHAR(200) NOT NULL,
     title VARCHAR(500) NOT NULL,
     price FLOAT NOT NULL,
+    offer_price_cents INTEGER,
+    offer_verified_until DATETIME,
+    offer_task_version INTEGER,
     url TEXT NOT NULL,
     image_urls JSON,
     seller VARCHAR(200),
@@ -66,18 +69,48 @@ def init_db(database_url: str) -> None:
     from goodprice import models  # noqa: F401  确保模型注册
 
     factory = make_session_factory(database_url)
-    Base.metadata.create_all(factory().get_bind())
+    engine = factory.kw["bind"]
+    legacy = inspect(engine).has_table("watch_tasks")
+    Base.metadata.create_all(engine)
+    # Record installation type before additive table creation hides its provenance.
+    from goodprice.models import SchemaVersion
+
+    with factory() as session:
+        if session.get(SchemaVersion, 1) is None:
+            session.add(SchemaVersion(id=1, version=0, legacy_install=legacy))
+            session.commit()
+    engine.dispose()
 
 
 def migrate_schema(session_factory) -> None:
     """幂等迁移：为已有数据库补齐新列。"""
     columns = {
+        "work_items": [
+            ("started_at", "started_at DATETIME"),
+            ("finished_at", "finished_at DATETIME"),
+        ],
+        "listing_offers": [
+            ("seen_in_latest_detail", "seen_in_latest_detail BOOLEAN DEFAULT 1"),
+            ("last_notified_task_version", "last_notified_task_version INTEGER"),
+            ("effective_price_state", "effective_price_state VARCHAR(20) DEFAULT 'unknown'"),
+            ("effective_price_cents", "effective_price_cents INTEGER"),
+            ("effective_price_source", "effective_price_source VARCHAR(30)"),
+            ("price_evidence_fingerprint", "price_evidence_fingerprint VARCHAR(64)"),
+            ("price_valid_until", "price_valid_until DATETIME"),
+            ("price_task_version", "price_task_version INTEGER"),
+        ],
         "watch_tasks": [
             ("fetch_detail", "fetch_detail BOOLEAN DEFAULT 1"),
             ("min_price", "min_price FLOAT DEFAULT 0"),
             ("exclude_words", "exclude_words TEXT"),
+            ("target_variant", "target_variant TEXT DEFAULT ''"),
+            ("notify_pending_price", "notify_pending_price BOOLEAN DEFAULT 0"),
+            ("version", "version INTEGER DEFAULT 1"),
         ],
         "listings": [
+            ("offer_price_cents", "offer_price_cents INTEGER"),
+            ("offer_verified_until", "offer_verified_until DATETIME"),
+            ("offer_task_version", "offer_task_version INTEGER"),
             ("description", "description TEXT"),
             ("requirement_match", "requirement_match BOOLEAN"),
             ("requirement_reason", "requirement_reason TEXT"),
@@ -100,6 +133,9 @@ def migrate_schema(session_factory) -> None:
             ("blocked", "blocked BOOLEAN DEFAULT 0"),
         ],
         "notifications": [
+            ("event_context", "event_context JSON"),
+            ("offer_id", "offer_id INTEGER"),
+            ("event_key", "event_key VARCHAR(128)"),
             ("title", "title TEXT"),
             ("content", "content TEXT"),
         ],
@@ -120,6 +156,9 @@ def migrate_schema(session_factory) -> None:
                     session.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
         if "listings" in existing_tables and _listing_unique_columns(session) != _NEW_LISTING_UNIQUE:
             _rebuild_listings(session)
+        from goodprice.migrations import migrate_offer_schema
+
+        migrate_offer_schema(session)
         session.commit()
 
 

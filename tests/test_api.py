@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 
 from goodprice.main import build_app
-from goodprice.models import Listing
+from goodprice.models import Listing, WatchTask
 
 
 def _client(base_settings, session_factory):
@@ -72,7 +72,7 @@ def test_tasks_page_shows_run_banner(base_settings, session_factory):
     client.post("/api/tasks", json={"keyword": "k"})
     response = client.get("/tasks?run=1")
     assert response.status_code == 200
-    assert "已开始执行" in response.text
+    assert "已提交执行请求" in response.text
 
 
 def test_task_change_triggers_scheduler_sync(base_settings, session_factory):
@@ -211,12 +211,21 @@ def test_listings_filter_by_task(base_settings, session_factory):
 
 
 def test_listings_sort(base_settings, session_factory):
+    from test_crawl_service import FakeAdapter, _item, _service
+
+    from goodprice.services.task_service import TaskService
+
     client = _client(base_settings, session_factory)
+    task = TaskService(session_factory).create_task({"keyword": "sort"})
+    a, b = _item("1", 100), _item("2", 10)
+    a.title, b.title = "a", "b"
+    crawl, _, _ = _service(session_factory, base_settings, adapter=FakeAdapter([a, b]))
+    crawl.run_task(task.id)
     with session_factory() as session:
         from goodprice.models import Listing
 
-        session.add(Listing(platform="xianyu", external_id="1", title="a", price=100, url="u", satisfaction=20))
-        session.add(Listing(platform="xianyu", external_id="2", title="b", price=10, url="v", satisfaction=90))
+        session.query(Listing).filter_by(title="a").one().satisfaction = 20
+        session.query(Listing).filter_by(title="b").one().satisfaction = 90
         session.commit()
     assert [d["title"] for d in client.get("/api/listings?sort=satisfaction").json()] == ["b", "a"]
     assert [d["title"] for d in client.get("/api/listings?sort=price_asc").json()] == ["b", "a"]
@@ -339,7 +348,7 @@ def test_listing_detail_page_shows_analysis_blocks(base_settings, session_factor
     assert "需求匹配" in page.text and "符合买家要求" in page.text
     assert "品相" in page.text and "轻微使用痕迹" in page.text
     assert "性价比" in page.text and "8/10" in page.text
-    assert "本批最优" in page.text
+    assert "本批最优" not in page.text  # 旧分析缺少规格/确价证据，不继续冒充当前推荐。
     assert "兵哥哥" in page.text and "风险低" in page.text
     assert "规格" in page.text and "最低价" in page.text and "580.0" in page.text
     assert "首见价" in page.text and "降幅" in page.text
@@ -374,7 +383,10 @@ def test_listing_detail_shows_missing_analysis_reasons(base_settings, session_fa
 def test_reanalyze_runs_in_background(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     with session_factory() as session:
-        listing = Listing(platform="xianyu", external_id="3", title="t", price=1, url="u")
+        task = WatchTask(keyword="offline")
+        session.add(task)
+        session.flush()
+        listing = Listing(platform="xianyu", external_id="3", title="t", price=1, url="u", task_id=task.id)
         session.add(listing)
         session.commit()
         listing_id = listing.id

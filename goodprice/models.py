@@ -36,6 +36,9 @@ class WatchTask(Base):
     interval_minutes: Mapped[int] = mapped_column(Integer, default=20)
     enabled: Mapped[bool] = mapped_column(default=True)
     fetch_detail: Mapped[bool] = mapped_column(default=True)
+    target_variant: Mapped[str] = mapped_column(Text, default="")
+    notify_pending_price: Mapped[bool] = mapped_column(default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -53,6 +56,9 @@ class Listing(Base):
     external_id: Mapped[str] = mapped_column(String(200))
     title: Mapped[str] = mapped_column(String(500))
     price: Mapped[float] = mapped_column(Float)
+    offer_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    offer_verified_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    offer_task_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     url: Mapped[str] = mapped_column(Text)
     image_urls: Mapped[list[str]] = mapped_column(JSON, default=list)
     seller: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
@@ -88,6 +94,8 @@ class Listing(Base):
     notifications: Mapped[list["Notification"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
+    offers: Mapped[list["ListingOffer"]] = relationship(cascade="all, delete-orphan")
+    media_assets: Mapped[list["MediaAsset"]] = relationship(cascade="all, delete-orphan")
 
 
 class PriceSnapshot(Base):
@@ -105,6 +113,9 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    event_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    event_context: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     listing_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("listings.id", ondelete="SET NULL"), nullable=True
     )
@@ -128,6 +139,67 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text, default="")
 
 
+class SchemaVersion(Base):
+    __tablename__ = "schema_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    legacy_install: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ListingOffer(Base):
+    __tablename__ = "listing_offers"
+    __table_args__ = (UniqueConstraint("listing_id", "offer_key", name="uq_listing_offer"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    offer_key: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(Text, default="")
+    attributes: Mapped[dict] = mapped_column(JSON, default=dict)
+    availability: Mapped[str] = mapped_column(String(20), default="unknown")
+    seen_in_latest_detail: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_notified_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_notified_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    last_notified_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    last_notified_task_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    effective_price_state: Mapped[str] = mapped_column(String(20), default="unknown")
+    effective_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    effective_price_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    price_evidence_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    price_valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    price_task_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    observations: Mapped[list["OfferObservation"]] = relationship(cascade="all, delete-orphan")
+    quotes: Mapped[list["ManualQuote"]] = relationship(cascade="all, delete-orphan")
+    evaluations: Mapped[list["OfferEvaluationRecord"]] = relationship(cascade="all, delete-orphan")
+
+
+class OfferObservation(Base):
+    __tablename__ = "offer_observations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("listing_offers.id"), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class ManualQuote(Base):
+    __tablename__ = "manual_quotes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("listing_offers.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    evidence_fingerprint: Mapped[str] = mapped_column(String(64))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class OfferEvaluationRecord(Base):
+    __tablename__ = "offer_evaluations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("listing_offers.id"), index=True)
+    task_version: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Seller(Base):
     __tablename__ = "sellers"
     __table_args__ = (
@@ -145,3 +217,88 @@ class Seller(Base):
     positive_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     last_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     blocked: Mapped[bool] = mapped_column(default=False)
+
+
+class MediaAsset(Base):
+    __tablename__ = "media_assets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(10))
+    offer_key: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    source_locator: Mapped[str] = mapped_column(Text, default="")
+    source_url: Mapped[str] = mapped_column(Text, default="")
+    parent_video_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    timestamp_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    relative_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    failure: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TaskRun(Base):
+    __tablename__ = "task_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(Integer, index=True)
+    task_version: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(30), default="crawl")
+    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    state: Mapped[str] = mapped_column(String(30), default="queued", index=True)
+    followup: Mapped[bool] = mapped_column(default=False)
+    cursor: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deadline_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class WorkItem(Base):
+    __tablename__ = "work_items"
+    __table_args__ = (UniqueConstraint("run_id", "stage", "input_fingerprint", name="uq_work_input"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("task_runs.id"), index=True)
+    task_id: Mapped[int] = mapped_column(Integer, index=True)
+    stage: Mapped[str] = mapped_column(String(20), index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    output: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    state: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    lease_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    not_before: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class AnalysisCache(Base):
+    __tablename__ = "analysis_cache"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class NotificationEvent(Base):
+    __tablename__ = "notification_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_key: Mapped[str] = mapped_column(String(128), unique=True)
+    task_id: Mapped[int] = mapped_column(Integer, index=True)
+    task_version: Mapped[int] = mapped_column(Integer)
+    offer_id: Mapped[int] = mapped_column(Integer)
+    listing_id: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    state: Mapped[str] = mapped_column(String(30), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (UniqueConstraint("event_id", "channel", name="uq_delivery_channel"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("notification_events.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(50))
+    state: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    lease_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    not_before: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

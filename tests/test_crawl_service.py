@@ -21,9 +21,16 @@ class FakeAdapter:
 
     def fetch_detail(self, url):
         self.fetch_calls.append(url)
-        from goodprice.crawler.base import ListingDetail
+        from datetime import datetime, timezone
 
-        return ListingDetail(description="屏幕完好 电池健康", image_urls=["https://x/d.jpg"])
+        from goodprice.crawler.base import ListingDetail
+        from goodprice.offers.types import OfferCandidate, PriceClaim
+
+        item = next((i for i in self.items if i.url == url), None)
+        offers = [] if item is None else [OfferCandidate("default", claims=(PriceClaim(
+            "dom", "exact", f"{item.price:g}", datetime.now(timezone.utc), "fixture:price",
+            amount_cents=round(item.price * 100)),))]
+        return ListingDetail(description="屏幕完好 电池健康", image_urls=["https://img.alicdn.com/bao/uploaded/d.jpg"], offers=offers)
 
 
 class FakeLLM:
@@ -131,6 +138,7 @@ class SellerFakeAdapter(FakeAdapter):
         from goodprice.crawler.base import ListingDetail
 
         return ListingDetail(
+            offers=super().fetch_detail(url).offers,
             description="屏幕完好",
             image_urls=["https://img.alicdn.com/bao/uploaded/d.jpg"],
             seller_uid="2672367114",
@@ -266,7 +274,7 @@ def test_gone_after_three_misses_and_reappear_reevaluates(session_factory, base_
         crawl_empty.run_task(task.id)
     with session_factory() as session:
         listing = session.query(Listing).one()
-        assert listing.status == "gone"
+        assert listing.status == "unseen"  # 有限搜索未见，不是详情证实下架。
         assert listing.missed_count == 3
 
     improved = FakeVision(
@@ -355,8 +363,7 @@ def test_detail_variants_stored_and_shown(session_factory, base_settings):
             {"name": "最低价", "price": 850.0},
             {"name": "最高价", "price": 1299.0},
         ]
-    assert "最低价 850" in notifier.messages[0].content
-    assert "最高价 1299" in notifier.messages[0].content
+    assert not notifier.messages  # 区间不是可购买 SKU 的确价。
 
 
 def test_batch_row_carries_requirement(session_factory, base_settings):
@@ -477,6 +484,7 @@ def test_no_valid_image_skips_vision(session_factory, base_settings):
             from goodprice.crawler.base import ListingDetail
 
             return ListingDetail(
+                offers=super().fetch_detail(url).offers,
                 description="无图",
                 image_urls=["https://img.alicdn.com/imgextra/xx-2-tps-2-2.png"],
             )
@@ -569,20 +577,20 @@ def test_price_filter(session_factory, base_settings):
     task = TaskService(session_factory).create_task({"keyword": "k", "max_price": "50"})
     crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item(price=100.0)]))
     stats = crawl.run_task(task.id)
-    assert stats["new"] == 0
+    assert stats["new"] == 1  # 已抓取证据保留，预算不匹配不推送。
     assert stats["notified"] == 0
     with session_factory() as session:
-        assert session.query(Listing).count() == 0
+        assert session.query(Listing).count() == 1
 
 
 def test_min_price_filter(session_factory, base_settings):
     task = TaskService(session_factory).create_task({"keyword": "k", "min_price": "50"})
     crawl, notifier, _ = _service(session_factory, base_settings, adapter=FakeAdapter([_item(price=30.0)]))
     stats = crawl.run_task(task.id)
-    assert stats["new"] == 0
+    assert stats["new"] == 1
     assert stats["notified"] == 0
     with session_factory() as session:
-        assert session.query(Listing).count() == 0
+        assert session.query(Listing).count() == 1
 
 
 def test_exclude_words_filter(session_factory, base_settings):
@@ -678,7 +686,7 @@ def test_fetch_detail_failure_falls_back(session_factory, base_settings):
 
     crawl, notifier, _ = _service(session_factory, base_settings, adapter=BrokenAdapter([_item()]))
     stats = crawl.run_task(task.id)
-    assert stats["notified"] == 1
+    assert stats["notified"] == 0  # 失败标价不冒充已核验价格。
 
 
 def test_backfill_fills_missing_analysis_without_renotify(session_factory, base_settings):
