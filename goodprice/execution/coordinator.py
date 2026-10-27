@@ -3,18 +3,21 @@ import threading
 import time
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import OperationalError
+
 from goodprice.execution.types import Stage
 
 logger = logging.getLogger(__name__)
 
 
 class Coordinator:
-    def __init__(self, store, limits, workers, clock=time.time):
+    def __init__(self, store, limits, workers, clock=time.time, apply=None):
         self.store, self.limits, self.workers, self.clock = store, limits, workers, clock
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread = None
         self._futures = {}
+        self.apply = apply
 
     def submit(self, task_id):
         result = self.store.submit(task_id, "crawl")
@@ -60,17 +63,27 @@ class Coordinator:
         for future, item in list(self._futures.items()):
             if not future.done():
                 continue
-            del self._futures[future]
             try:
                 result = future.result()
-                self.store.complete(result, now)
-                self.store.materialize(now)
-                self.store.finish_run(item.token.run_id, now)
             except Exception as exc:
+                del self._futures[future]
                 # Never log worker response bodies, URLs or credentials.
                 logger.warning("阶段 %s 失败 (%s)", item.stage.value, type(exc).__name__)
                 self.store.fail(item, now)
                 self.store.finish_run(item.token.run_id, now)
+                continue
+            try:
+                self.store.complete(result, now, apply=self.apply)
+            except OperationalError:
+                # Keep the completed response in the bounded in-flight set.
+                # A transient SQLite lock must not repeat the paid HTTP call.
+                return
+            except Exception as exc:
+                logger.warning("结果写入失败 (%s)", type(exc).__name__)
+                self.store.fail(item, now, terminal=True)
+            del self._futures[future]
+            self.store.materialize(now)
+            self.store.finish_run(item.token.run_id, now)
         self.store.recover(now)
         self.store.materialize(now)
         for stage in Stage:
@@ -80,11 +93,17 @@ class Coordinator:
                     break
                 future = self.workers.dispatch_item(item)
                 self._futures[future] = item
+                future.add_done_callback(lambda _: self._wake.set())
 
     def _loop(self):
         while not self._stop.is_set():
-            self.tick()
-            self._wake.wait(.05)
+            delay = 1
+            try:
+                self.tick()
+                delay = 1 if self._futures or self.store.has_open_work() else 10
+            except Exception as exc:
+                logger.warning("协调器暂未推进 (%s)", type(exc).__name__)
+            self._wake.wait(delay)
             self._wake.clear()
 
     def stop(self, timeout=10):

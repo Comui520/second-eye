@@ -38,19 +38,43 @@ class ExecutionStore:
         query = session.query(WorkItem).filter(WorkItem.state.in_(OPEN_WORK))
         return query.count() < self.global_limit and query.filter_by(task_id=task_id).count() < self.task_limit
 
-    def _submit(self, session, task, kind, target_id):
-        if not self._room(session, task.id):
+    def _submit(self, session, task, kind, target_id, *, accepted_followup=False):
+        room = self._room(session, task.id)
+        if not room and not accepted_followup:
             return None
         run = TaskRun(task_id=task.id, task_version=task.version, kind=kind, target_id=target_id)
-        previous = session.query(TaskRun).filter_by(task_id=task.id, task_version=task.version,
-            state="deferred", kind=kind, target_id=target_id).order_by(TaskRun.id.desc()).first()
+        used = session.query(TaskRun.cursor["resume_run_id"].as_integer()).filter(
+            TaskRun.task_id == task.id, TaskRun.cursor["resume_run_id"].as_integer().is_not(None))
+        previous = session.query(TaskRun).filter(TaskRun.task_id == task.id, TaskRun.task_version == task.version,
+            TaskRun.state.in_(("deferred", "failed")), TaskRun.kind == kind, TaskRun.target_id == target_id,
+            TaskRun.id.not_in(used)).order_by(TaskRun.id.desc()).first()
         if previous:
             run.cursor = {**previous.cursor, "resume_run_id": previous.id}
         session.add(run)
         session.flush()
-        session.add(WorkItem(run_id=run.id, task_id=task.id, stage=Stage.SEARCH.value,
-                             payload={"target_id": target_id} if target_id else {}))
+        if room:
+            self._add_root(session, run)
+        else:
+            run.cursor = {**(run.cursor or {}), "_root_pending": True}
         return run.id
+
+    def _add_root(self, session, run):
+        session.add(WorkItem(run_id=run.id, task_id=run.task_id, stage=Stage.SEARCH.value,
+                             payload={"target_id": run.target_id} if run.target_id else {}))
+
+    def _promote_followup(self, session, run):
+        cursor = dict(run.cursor or {})
+        manual = cursor.pop("_manual_followup", None)
+        due = run.followup
+        run.cursor, run.followup = cursor, False
+        task = session.get(WatchTask, run.task_id)
+        if task is None or not task.enabled or task.version != run.task_version:
+            return
+        if manual:
+            next_id = self._submit(session, task, "reanalyze", manual["target_id"], accepted_followup=True)
+            session.get(TaskRun, next_id).followup = due
+        elif due:
+            self._submit(session, task, "crawl", None, accepted_followup=True)
 
     def submit(self, task_id: int, kind: str = "crawl", target_id=None):
         with self.lock, self.factory() as session:
@@ -59,7 +83,14 @@ class ExecutionStore:
                 return None
             existing = session.query(TaskRun).filter(TaskRun.task_id == task_id, TaskRun.state.in_(OPEN_RUN)).first()
             if existing and existing.task_version == task.version:
-                if existing.state == "active":
+                if kind == "reanalyze":
+                    if existing.kind == kind and existing.target_id == target_id:
+                        return existing.id
+                    pending = (existing.cursor or {}).get("_manual_followup")
+                    if pending and pending["target_id"] != target_id:
+                        return None
+                    existing.cursor = {**(existing.cursor or {}), "_manual_followup": {"target_id": target_id}}
+                elif existing.state == "active" or existing.kind == "reanalyze":
                     existing.followup = True
                 session.commit()
                 return existing.id
@@ -86,7 +117,8 @@ class ExecutionStore:
             run = session.get(TaskRun, run_id)
             if run is None or run.state not in OPEN_RUN:
                 return False
-            run.cursor = thaw(cursor)
+            protected = {k: v for k, v in (run.cursor or {}).items() if k.startswith("_") or k == "resume_run_id"}
+            run.cursor = {**thaw(cursor), **protected}
             session.commit()
             return True
 
@@ -130,17 +162,28 @@ class ExecutionStore:
             session.commit()
             return None
 
-    def complete(self, result, now: datetime):
+    def complete(self, result, now: datetime, *, apply=None):
         now = naive(now)
         with self.lock, self.factory() as session:
             run = session.get(TaskRun, result.token.run_id)
             if run is None or not self._valid(session, run, now) or run.task_version != result.token.task_version:
                 return False
+            from sqlalchemy import update
+            gate = session.execute(update(WatchTask).where(WatchTask.id == run.task_id,
+                WatchTask.version == run.task_version, WatchTask.enabled.is_(True)).values(
+                    version=WatchTask.version).execution_options(synchronize_session=False))
+            if gate.rowcount != 1:
+                return False
             item = session.query(WorkItem).filter_by(run_id=run.id, lease_id=result.token.lease_id,
                 state="running", stage=result.stage.value, input_fingerprint=result.input_fingerprint).first()
             if item is None or item.lease_until <= now:
                 return False
-            item.state, item.output, item.lease_id = "done", thaw(result.output), None
+            output = thaw(result.output)
+            if apply:
+                applied = apply(result, session)
+                if applied:
+                    output.update(thaw(applied))
+            item.state, item.output, item.lease_id = "done", output, None
             session.commit()
             return True
 
@@ -154,11 +197,8 @@ class ExecutionStore:
             if any((item.output or {}).get("next") for item in session.query(WorkItem).filter_by(run_id=run_id, state="done")):
                 return False
             run.state = "failed" if session.query(WorkItem).filter_by(run_id=run_id, state="failed").first() else "completed"
-            followup = run.followup
-            run.followup = False
             session.flush()
-            if followup:
-                self._submit(session, session.get(WatchTask, run.task_id), run.kind, run.target_id)
+            self._promote_followup(session, run)
             session.commit()
             return True
 
@@ -170,7 +210,7 @@ class ExecutionStore:
                 if item.lease_until and item.lease_until <= now:
                     item.state, item.lease_id = "pending", None
                     count += 1
-            for run in session.query(TaskRun).filter(TaskRun.state.in_(OPEN_RUN)):
+            for run in session.query(TaskRun).filter(TaskRun.state.in_(OPEN_RUN)).all():
                 task = session.get(WatchTask, run.task_id)
                 if task is None or not task.enabled or task.version != run.task_version:
                     invalidate_in_session(session, run.task_id)
@@ -178,6 +218,8 @@ class ExecutionStore:
                     run.state = "deferred"
                     session.query(WorkItem).filter(WorkItem.run_id == run.id,
                         WorkItem.state.in_(OPEN_WORK)).update({"state": "deferred", "lease_id": None})
+                    session.flush()
+                    self._promote_followup(session, run)
             session.query(NotificationDelivery).filter(NotificationDelivery.state == "sending",
                 NotificationDelivery.lease_until <= now).update({"state": "uncertain"})
             session.commit()
@@ -191,7 +233,19 @@ class ExecutionStore:
     def materialize(self, now):
         """Durably drain bounded fan-out; unexpanded outputs survive a restart."""
         with self.lock, self.factory() as session:
-            rows = session.query(WorkItem).filter_by(state="done").order_by(WorkItem.id).all()
+            from sqlalchemy import func
+            for run in session.query(TaskRun).filter(TaskRun.state == "queued",
+                    TaskRun.cursor["_root_pending"].as_boolean().is_(True)).order_by(TaskRun.id).all():
+                if not self._room(session, run.task_id):
+                    break
+                cursor = dict(run.cursor)
+                cursor.pop("_root_pending", None)
+                run.cursor = cursor
+                self._add_root(session, run)
+                session.flush()
+            active_runs = session.query(TaskRun.id).filter(TaskRun.state.in_(OPEN_RUN))
+            rows = session.query(WorkItem).filter(WorkItem.state == "done", WorkItem.run_id.in_(active_runs),
+                func.json_array_length(WorkItem.output["next"]) > 0).order_by(WorkItem.id).all()
             for item in rows:
                 pending = list((item.output or {}).get("next", []))
                 if not pending:
@@ -213,12 +267,16 @@ class ExecutionStore:
                 item.output = {**item.output, "next": pending[expanded:]}
             session.commit()
 
-    def fail(self, item, now):
+    def fail(self, item, now, *, terminal=False):
         with self.lock, self.factory() as session:
             row = session.get(WorkItem, item.id)
             if row is None or row.state != "running" or row.lease_id != item.token.lease_id:
                 return
-            row.state = "retry" if row.attempt < 3 else "failed"
+            row.state = "retry" if row.attempt < 3 and not terminal else "failed"
             row.lease_id = None
             row.not_before = naive(now) + timedelta(seconds=2 ** row.attempt)
             session.commit()
+
+    def has_open_work(self):
+        with self.factory() as session:
+            return session.query(WorkItem.id).filter(WorkItem.state.in_(OPEN_WORK)).first() is not None

@@ -75,6 +75,9 @@ class FakeContext:
     def new_page(self):
         return self._page
 
+    def close(self):
+        pass
+
 
 class FakeBrowser:
     def __init__(self, page):

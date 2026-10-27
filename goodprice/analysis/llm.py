@@ -82,6 +82,7 @@ class LLMClient:
         allow_image_fallback: bool = True,
         retry_delay: float = 5.0,
         api_format: str = "chat_completions",
+        max_attempts: int = 3,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -91,6 +92,9 @@ class LLMClient:
         self.allow_image_fallback = allow_image_fallback
         self.retry_delay = retry_delay
         self.api_format = api_format.strip().lower()
+        if not 1 <= max_attempts <= 3:
+            raise ValueError("Model attempts must be between 1 and 3")
+        self.max_attempts = max_attempts
 
     @property
     def enabled(self) -> bool:
@@ -203,11 +207,11 @@ class LLMClient:
             return self._complete_responses(payload, parser)
         headers = {"Authorization": f"Bearer {self.api_key}"}
         with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
-            for attempt in range(3):
+            for attempt in range(self.max_attempts):
                 response = client.post(
                     f"{self.base_url}/chat/completions", json=payload, headers=headers
                 )
-                if response.status_code == 429 and attempt < 2:
+                if response.status_code == 429 and attempt < self.max_attempts - 1:
                     if self.retry_delay:
                         time.sleep(self.retry_delay)
                     continue
@@ -256,11 +260,11 @@ class LLMClient:
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
         with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
-            for attempt in range(3):
+            for attempt in range(self.max_attempts):
                 with client.stream(
                     "POST", f"{self.base_url}/responses", json=response_payload, headers=headers
                 ) as response:
-                    if response.status_code == 429 and attempt < 2:
+                    if response.status_code == 429 and attempt < self.max_attempts - 1:
                         if self.retry_delay:
                             time.sleep(self.retry_delay)
                         continue

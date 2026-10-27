@@ -116,3 +116,21 @@ def test_limit_changes_drain_active_workers_and_allow_confirmed_increase():
     finally:
         release.set()
         pools.stop()
+
+
+def test_idle_coordinator_does_not_spin_on_database(session_factory):
+    from sqlalchemy import event
+    queries = []
+    engine = session_factory.kw["bind"]
+    def count(*args): queries.append(1)
+    event.listen(engine, "before_cursor_execute", count)
+    limits = ResourceLimits()
+    controller = Coordinator(ExecutionStore(session_factory), limits,
+        WorkerPools(limits, {Stage.SEARCH: lambda item: {}}))
+    try:
+        controller.start()
+        time.sleep(1)
+    finally:
+        controller.stop(2)
+        event.remove(engine, "before_cursor_execute", count)
+    assert len(queries) <= 40, f"idle controller made {len(queries)} SQL requests in one second"

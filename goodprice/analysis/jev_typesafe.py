@@ -1,7 +1,6 @@
 # 官方 TypeSafe Jev 后端：通过 typesafe-sdk 直连 api.typesafe.ai，
 # 返回与 adapter 后端（judge.JevJudger）同构的结论，供 crawl_service 统一裁决。
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -23,6 +22,8 @@ class TypeSafeJudger:
     auto_threshold: float = 0.85
     # 测试注入用：接收 api_key，返回实现 system_one(state, questions) 的客户端
     client_factory: Optional[Callable[[str], Any]] = None
+    single_attempt: bool = False
+    timeout: float = 60
 
     @property
     def enabled(self) -> bool:
@@ -86,15 +87,19 @@ class TypeSafeJudger:
             return self.client_factory(self.api_key)
         from typesafe_sdk import TypeSafeClient
 
-        try:
-            return TypeSafeClient(api_key=self.api_key)
-        except TypeError:
-            os.environ["TYPESAFE_API_KEY"] = self.api_key
-            return TypeSafeClient()
+        if self.single_attempt:
+            from typesafe_sdk import RetryPolicy
+            return TypeSafeClient(api_key=self.api_key, retry=RetryPolicy(max_retries=0), timeout=self.timeout)
+        return TypeSafeClient(api_key=self.api_key, timeout=self.timeout)
 
     def _ask(self, state: str, questions: dict[str, Any]) -> dict[str, Any]:
-        response = self._make_client().system_one(state=state, questions=questions)
-        return response.answers
+        client = self._make_client()
+        try:
+            return client.system_one(state=state, questions=questions).answers
+        finally:
+            close = getattr(client, "close", None)
+            if close:
+                close()
 
 
 def _noul_question() -> dict[str, Any]:
