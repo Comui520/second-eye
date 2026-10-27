@@ -10,10 +10,10 @@
     <span class="text-xl font-bold text-red-600">页面标价 ¥{{ item.price }}</span>
     {% if item.status == 'gone' %}<span class="px-2 py-0.5 rounded text-xs bg-gray-300 text-gray-700">已下架</span>{% endif %}
     {% if item.price_confirmed and item.best_of_batch %}<span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">本批最优</span>{% endif %}
-    {% if item.condition_score %}
+    {% if item.condition_score is not none %}
     <span class="px-2 py-0.5 rounded text-xs {{ 'bg-green-100 text-green-700' if item.condition_score >= 7 else 'bg-yellow-100 text-yellow-700' }}">品相 {{ item.condition_score }}/10</span>
     {% endif %}
-    {% if item.value_score %}<span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">性价比 {{ item.value_score }}/10</span>{% endif %}
+    {% if item.value_score is not none %}<span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">性价比 {{ item.value_score }}/10</span>{% endif %}
     {% if item.notified_at %}<span class="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">已通知</span>{% endif %}
     {% if notify_counts.get(item.id, 0) > 1 %}<span class="px-2 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700">已重推</span>{% endif %}
     {% if item.seller_risk and item.seller_risk.risk_level %}

@@ -15,8 +15,13 @@
         <tr class="border-b">
           <td class="p-2"><input type="checkbox" class="row-check" name="ids" value="{{ n.id }}"></td>
           <td class="p-2">{{ n.channel }}</td>
-          <td class="p-2">{{ n.status }}</td>
+          <td class="p-2">{{ {'pending':'等待投递', 'retry_requested':'等待重试', 'sending':'正在投递', 'sent':'已发送', 'failed':'投递失败', 'uncertain':'结果未知（可能重复）', 'awaiting_revalidation':'等待证据核验', 'cancelled':'已取消', 'cancelled_manual':'用户已取消', 'superseded':'证据已更新'}.get(n.status, n.status) }}{% if n.detail %}<div class="text-xs text-gray-500">{{ n.detail }}</div>{% endif %}</td>
           <td class="p-2">
+            {% if n.event_context and n.event_context.delivery_id and n.status in ['failed', 'uncertain', 'awaiting_revalidation', 'cancelled', 'superseded'] %}
+            <form method="post" action="/notifications/deliveries/{{ n.event_context.delivery_id }}/retry" class="inline" onsubmit="return confirm('确认核验证据后重试？结果未知的通知可能重复发送。')">
+              <input type="hidden" name="confirm" value="1"><button class="btn btn-sm btn-outline-blue">核验后重试</button>
+            </form>
+            {% endif %}
             {% if listing %}<a href="{{ listing.url }}" target="_blank" class="hover:text-blue-600">{{ n.title }}</a>
             {% else %}{{ n.title }}{% endif %}
             <div class="text-gray-500 text-xs">{{ n.content }}</div>

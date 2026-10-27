@@ -35,7 +35,7 @@ def prepare(factory, settings):
 
 def test_event_survives_run_completion_and_successful_channels_never_resend(session_factory, base_settings):
     task, listing, offer, payload = prepare(session_factory, base_settings)
-    ok, flaky = Notifier(), Notifier(OSError("failure"))
+    ok, flaky = Notifier(), Notifier(httpx.ConnectError("connection not established"))
     service = DeliveryService(session_factory, {"ok": ok, "flaky": flaky})
     event = service.enqueue(task.id, task.version, listing, offer, "same-business-event", payload)
     assert event == service.enqueue(task.id, task.version, listing, offer, "same-business-event", payload)

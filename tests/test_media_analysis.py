@@ -60,3 +60,18 @@ def test_empty_or_oversized_input_does_not_send(tmp_path):
     path.write_bytes(b"x" * 1000)
     with pytest.raises(ValueError, match="预算"):
         analyze_media(offer, MediaSelection((MediaEvidence("one", "image", "h", path),)), Client(), "", 100)
+
+
+def test_storage_timeout_and_thread_changes_do_not_recharge_identical_visual_input(tmp_path):
+    from types import SimpleNamespace
+
+    from goodprice.analysis.media_analysis import analysis_key
+    from goodprice.config import Settings
+    offer = OfferCandidate("default", {})
+    selection = MediaSelection((MediaEvidence("one", "image", "same-content", tmp_path / "a.jpg"),))
+    client = SimpleNamespace(model="vision", base_url="https://model.example", api_format="chat_completions")
+    settings = Settings(_env_file=None)
+    before = analysis_key(offer, selection, client, "screen", settings)
+    after = analysis_key(offer, selection, client, "screen", settings.model_copy(update={
+        "media_cache_mib": 2048, "media_retention_days": 30, "media_ffmpeg_threads": 2, "media_download_timeout": 120}))
+    assert before == after

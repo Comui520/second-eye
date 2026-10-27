@@ -3,6 +3,13 @@
 REQUIREMENT_CRITERION = "商品是否满足买家的硬性需求"
 VALUE_CRITERION = "按当前价格是否划算"
 
+INDEPENDENT_VALUE_SYSTEM = """根据每件商品自身的规格、已核验的价格、品相、需求和卖家风险，独立判断性价比。
+同一商品的评分不得随本次列表包含哪些其他商品而变化；缺少市场依据时保守评分，不编造行情。
+不能推断未核验的实际售价。每件只使用自己的输入，不借用其他商品的信息。
+返回JSON: {"items":[{"id":"输入external_id","value_score":1到10整数,"reason":"简短依据"}],"best":"其中一个id"}。
+items必须逐一覆盖输入且不能添加其他id；best仅为格式兼容，实际比较由程序按当前有效商品完成。
+"""
+
 # 需求判断系统提示前缀：adapter 与 typesafe 两个后端共用。
 REQUIREMENT_SYSTEM_PREFIX = "你是二手商品筛选助手。用户给出商品标题、卖家描述和买家需求，"
 

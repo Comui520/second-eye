@@ -6,7 +6,7 @@ from typing import Optional
 
 import httpx
 
-from goodprice.notify.base import NotificationMessage, Notifier
+from goodprice.notify.base import DeliveryRejected, NotificationMessage, Notifier
 
 
 class FeishuNotifier(Notifier):
@@ -32,7 +32,7 @@ class FeishuNotifier(Notifier):
 
     def send(self, message: NotificationMessage) -> None:
         if not self.enabled:
-            raise RuntimeError("飞书机器人未配置 webhook")
+            raise DeliveryRejected("飞书机器人未配置 webhook")
         content = f"{message.title}\n{message.content}"
         if message.url:
             content += f"\n{message.url}"
@@ -59,4 +59,4 @@ class FeishuNotifier(Notifier):
             result = response.json()
         code = result.get("code", result.get("StatusCode", -1))
         if code != 0:
-            raise RuntimeError(f"飞书机器人发送失败: code={code}, msg={result.get('msg', '')}")
+            raise DeliveryRejected(f"飞书机器人发送失败: code={code}, msg={result.get('msg', '')}")

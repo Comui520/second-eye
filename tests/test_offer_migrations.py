@@ -22,7 +22,7 @@ def test_old_database_migration_is_idempotent_and_preserves_legacy_values(tmp_db
         assert session.query(ListingOffer).count() == 0
         marker = session.get(SchemaVersion, 1)
         assert marker.legacy_install is True
-        assert marker.version == 1
+        assert marker.version == 3
 
 
 def test_task_version_changes_only_with_meaningful_updates(session_factory):
@@ -71,3 +71,18 @@ def test_listing_delete_cascades_offer_observations(session_factory):
         session.commit()
         assert session.query(ListingOffer).count() == 0
         assert session.query(OfferObservation).count() == 0
+
+def test_migration_advances_schema_marker_without_downgrading_future_version(session_factory):
+    from goodprice.models import SchemaVersion
+    with session_factory() as session:
+        session.add(SchemaVersion(id=1, version=1, legacy_install=True))
+        session.commit()
+    migrate_schema(session_factory)
+    with session_factory() as session:
+        marker = session.get(SchemaVersion, 1)
+        assert marker.version == 3 and marker.legacy_install
+        marker.version = 99
+        session.commit()
+    migrate_schema(session_factory)
+    with session_factory() as session:
+        assert session.get(SchemaVersion, 1).version == 99

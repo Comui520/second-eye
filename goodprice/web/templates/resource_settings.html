@@ -1,5 +1,8 @@
 <section id="resources" class="bg-white border rounded p-5 space-y-3">
   <h2 class="font-semibold">运行资源与设备建议</h2>
+  <p class="text-sm">当前工作并发：抓取 {{ resource_effective.effective.crawler_workers }}、模型 {{ resource_effective.effective.model_workers }}、媒体 {{ resource_effective.effective.media_workers }}；正在推进 {{ resource_effective.running_tasks }} 个任务，等待 {{ resource_effective.queued_tasks }} 个任务。资源保护仅临时降低实际并发，保留你保存的配置。</p>
+  {% for reason in resource_effective.reasons %}<p class="text-sm text-amber-700">{{ reason }}</p>{% endfor %}
+  {% if resource_effective.paused %}<p class="text-sm text-amber-700">暂缓派发：{{ resource_effective.paused|join('、') }}。内存恢复后自动继续。</p>{% endif %}
   <p class="text-sm">建议：{{ '均衡' if resource_recommendation.name == 'balanced' else '低占用' }}。{{ resource_recommendation.reason }}。
     {% if resource_snapshot.effective_cpu is not none %}有效 CPU {{ resource_snapshot.effective_cpu|round(2) }} 核；{% endif %}
     {% if resource_snapshot.available_memory_bytes is not none %}可用内存约 {{ (resource_snapshot.available_memory_bytes / 1073741824)|round(1) }} GiB。{% endif %}

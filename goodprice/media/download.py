@@ -2,6 +2,7 @@
 import ipaddress
 import logging
 import socket
+import threading
 import time
 import uuid
 from contextvars import ContextVar
@@ -36,6 +37,34 @@ logging.getLogger("httpx").addFilter(_log_filter)
 
 def resolve_public(host, port):
     return list({row[4][0] for row in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
+
+
+_dns_slots = threading.BoundedSemaphore(2)
+
+
+def bounded_resolve(resolver, host, port, deadline):
+    # OS DNS cannot be safely interrupted on every supported platform. Limit
+    # outstanding daemon lookups, and never keep the media worker waiting past
+    # its deadline or create an unbounded resolver backlog.
+    if not _dns_slots.acquire(timeout=max(0, deadline-time.monotonic())):
+        raise MediaDownloadError("媒体域名解析繁忙或超时")
+    done, result = threading.Event(), []
+    def lookup():
+        try:
+            result.append((True, resolver(host, port)))
+        except Exception:
+            result.append((False, None))
+        finally:
+            _dns_slots.release()
+            done.set()
+    try:
+        threading.Thread(target=lookup, name="media-dns", daemon=True).start()
+    except Exception:
+        _dns_slots.release()
+        raise
+    if not done.wait(max(0, deadline-time.monotonic())) or not result[0][0]:
+        raise MediaDownloadError("媒体域名解析失败或超时")
+    return result[0][1]
 
 
 def public_addresses(url, resolver):
@@ -125,7 +154,7 @@ class MediaDownloader:
         try:
             url = candidate.url
             for _ in range(6):
-                host, port, addr = public_addresses(url, self.resolver)
+                host, port, addr = public_addresses(url, lambda host, port: bounded_resolve(self.resolver, host, port, deadline))
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise MediaDownloadError("媒体下载超时")

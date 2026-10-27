@@ -2,6 +2,7 @@
 # 与默认路径的区别：每次判断独立成请求并附带置信度，单件失败不拖累整批；
 # 置信度低于阈值的判断由调用方回落到原 LLMClient 路径（宁多勿漏）。
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -69,7 +70,8 @@ def parse_value_typed(raw: str) -> dict[str, Any]:
 
 def _clamp01(value: Any) -> float:
     try:
-        return max(0.0, min(1.0, float(value)))
+        number = float(value)
+        return max(0.0, min(1.0, number)) if math.isfinite(number) else 0.5
     except (TypeError, ValueError):
         return 0.5
 
@@ -152,6 +154,15 @@ class JevJudger:
             "reasons": reasons,
             "confidences": confidences,
         }
+
+    def analyze_value(self, item: dict[str, Any]) -> dict[str, Any]:
+        """One request, with errors intact for the execution retry policy."""
+        text = VALUE_TYPED_USER_TEMPLATE.format(requirement=item.get("requirement") or "无",
+            external_id=item.get("external_id"), title=item.get("title"), price=item.get("price"),
+            condition_score=item.get("condition_score") or "未评估",
+            defects="、".join(str(d) for d in (item.get("defects") or [])[:5]) or "无",
+            seller_risk=item.get("seller_risk") or RISK_UNKNOWN)
+        return self._ask(VALUE_TYPED_SYSTEM_PROMPT, text, parse_value_typed)
 
     def _ask(self, system: str, text: str, parser) -> dict[str, Any]:
         payload = self.llm.payload([{"type": "text", "text": text}], system=system)

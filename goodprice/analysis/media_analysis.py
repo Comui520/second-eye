@@ -42,9 +42,11 @@ def validate_evidence_references(verdict: dict, allowed_ids: set[str]) -> dict:
 
 
 def analysis_key(offer, selection, client, requirement, settings, seller_text="") -> str:
-    values = [PROMPT_VERSION, offer.key, dict(offer.attributes), requirement, seller_text,
+    input_fields = {"media_image_count", "media_video_count", "media_frames_per_video",
+                    "media_image_quota", "media_frame_quota", "media_total_limit", "video_analysis_enabled"}
+    values = [PROMPT_VERSION, SYSTEM, offer.key, dict(offer.attributes), requirement, seller_text,
         [(e.content_hash, e.offer_key, e.timestamp_ms) for e in selection.items], selection.limitations,
-        {k: v for k, v in settings.model_dump(mode="json").items() if k.startswith("media_") or k == "video_analysis_enabled"},
+        {k: v for k, v in settings.model_dump(mode="json").items() if k in input_fields},
         client.model, client.base_url, client.api_format]
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 

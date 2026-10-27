@@ -64,13 +64,16 @@
       {% if offer.effective_price_cents is not none %}
       <p>当前{{ '人工报价' if offer.source == 'manual' else '页面确价' }}：¥{{ offer.effective_price_cents / 100 }}</p>
       {% else %}<p>价格待确认，不参与正常性价比排名。</p>{% endif %}
+      {% if offer.scope_current and offer.observation_fresh %}
       <form method="post" action="/offers/{{ offer.id }}/quotes?return_to={{ (return_to or '/listings')|urlencode }}" class="flex flex-wrap gap-2 mt-2">
         <input type="hidden" name="fingerprint" value="{{ offer.fingerprint }}">
         <input name="amount" required type="number" min="0.01" step="0.01" placeholder="该规格询价结果（元）" class="border rounded px-2">
         <label>有效天数 <input name="valid_days" type="number" value="7" min="1" max="30" class="border rounded w-16"></label>
         <button class="btn btn-sm btn-primary">确认报价</button>
       </form>
+      {% else %}<p class="text-xs text-amber-700">规格未被本次详情核验或证据已过期，请先刷新商品再确认报价。</p>{% endif %}
       <p class="text-xs text-gray-500 mt-1">人工报价优先于页面价；页面证据变化或报价到期后需复核，不会自动联系卖家。</p>
+      {% if offer.quote_id %}<p class="text-xs text-gray-500">报价确认于 {{ offer.quote_confirmed_at }}，到期于 {{ offer.quote_expires_at }}；证据过期可能更早暂停使用。</p>{% endif %}
       {% if offer.quote_id %}<form method="post" action="/quotes/{{ offer.quote_id }}/revoke?return_to={{ (return_to or '/listings')|urlencode }}" class="mt-1"><button class="btn btn-sm btn-outline">撤销人工报价</button></form>{% endif %}
     </div>
     {% else %}<p class="text-sm text-gray-500">尚无已核验的规格价格，旧页面标价不代表实际成交价。</p>{% endfor %}
@@ -140,7 +143,7 @@
 
     {% if listing.variants %}
     <div class="bg-white rounded shadow p-4">
-      <h3 class="font-semibold mb-2">规格 / 价格区间</h3>
+      <h3 class="font-semibold mb-2">页面价格区间（仅供参考，不代表具体规格售价）</h3>
       <div class="text-sm text-gray-600">{% for v in listing.variants %}{{ v.name }} ¥{{ v.price }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
     </div>
     {% endif %}

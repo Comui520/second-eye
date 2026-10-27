@@ -52,6 +52,25 @@ class WorkerPools:
                     self._busy[lane] -= 1
         return actor.submit(execute) if actor else self.pools[lane].submit(execute)
 
+    def side_available(self, lane):
+        with self._lock:
+            return self._busy[lane] < self.capacities[lane]
+
+    def dispatch_side(self, lane, fn):
+        if lane == "crawler":
+            raise ValueError("Browser operations require an owning actor")
+        with self._lock:
+            if self._busy[lane] >= self.capacities[lane]:
+                raise RuntimeError("Resource lane full")
+            self._busy[lane] += 1
+        def execute():
+            try:
+                return fn()
+            finally:
+                with self._lock:
+                    self._busy[lane] -= 1
+        return self.pools[lane].submit(execute)
+
     def stop(self):
         for actor in self.browsers:
             actor.stop()

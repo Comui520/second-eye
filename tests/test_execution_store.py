@@ -201,3 +201,37 @@ def test_domain_writes_and_step_completion_commit_or_rollback_together(session_f
     with session_factory() as session:
         assert session.get(AppSetting, "atomic").value == "committed"
         assert session.get(WorkItem, work.id).output["applied"] is True
+
+
+def test_backpressure_does_not_deadlock_active_run_behind_queued_roots(session_factory):
+    first, other = task(session_factory), task(session_factory)
+    store = ExecutionStore(session_factory, global_limit=1, active_limit=1)
+    run = store.submit(first.id)
+    now = datetime.now(timezone.utc)
+    work = store.claim(Stage.SEARCH, now)
+    store.complete(WorkResult(work.token, Stage.SEARCH, "", {"next": [
+        {"stage": "detail", "fingerprint": "one", "payload": {}}]}), now)
+    other_run = store.submit(other.id)
+    store.materialize(now)
+    work = store.claim(Stage.SEARCH, now)
+    assert work is not None and work.token.task_id == other.id
+    store.complete(WorkResult(work.token, Stage.SEARCH, "", {}), now)
+    store.finish_run(other_run, now)
+    store.materialize(now)
+    assert store.claim(Stage.DETAIL, now).token.run_id == run
+
+
+def test_waiting_for_identical_model_call_does_not_activate_extra_runs(session_factory):
+    tasks = [task(session_factory) for _ in range(3)]
+    store = ExecutionStore(session_factory, active_limit=2)
+    runs = [store.submit(t.id) for t in tasks]
+    now = datetime.now(timezone.utc)
+    store.claim(Stage.SEARCH, now)
+    store.enqueue(runs[0], Stage.ANALYZE, "first", {"cache_key": "same"})
+    store.claim(Stage.ANALYZE, now)
+    store.enqueue(runs[1], Stage.ANALYZE, "waiting", {"cache_key": "same"})
+    store.enqueue(runs[2], Stage.ANALYZE, "other", {"cache_key": "different"})
+    assert store.claim(Stage.ANALYZE, now).token.run_id == runs[2]
+    with session_factory() as session:
+        assert session.get(TaskRun, runs[1]).state == "queued"
+        assert session.query(TaskRun).filter_by(state="active").count() == 2

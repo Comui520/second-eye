@@ -95,6 +95,7 @@ class Listing(Base):
         back_populates="listing", cascade="all, delete-orphan"
     )
     offers: Mapped[list["ListingOffer"]] = relationship(cascade="all, delete-orphan")
+    media_assets: Mapped[list["MediaAsset"]] = relationship(cascade="all, delete-orphan")
 
 
 class PriceSnapshot(Base):
@@ -154,11 +155,15 @@ class ListingOffer(Base):
     name: Mapped[str] = mapped_column(Text, default="")
     attributes: Mapped[dict] = mapped_column(JSON, default=dict)
     availability: Mapped[str] = mapped_column(String(20), default="unknown")
+    seen_in_latest_detail: Mapped[bool] = mapped_column(Boolean, default=True)
     last_notified_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     last_notified_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_notified_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    last_notified_task_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     effective_price_state: Mapped[str] = mapped_column(String(20), default="unknown")
     effective_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    effective_price_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    price_evidence_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     price_valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     price_task_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     observations: Mapped[list["OfferObservation"]] = relationship(cascade="all, delete-orphan")
@@ -262,6 +267,15 @@ class WorkItem(Base):
     lease_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     not_before: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class AnalysisCache(Base):
+    __tablename__ = "analysis_cache"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class NotificationEvent(Base):

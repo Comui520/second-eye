@@ -17,7 +17,6 @@ from goodprice.scheduler import _sync_tasks, build_scheduler
 from goodprice.services.crawl_service import CrawlService, TaskRunGuard
 from goodprice.services.seller_service import SellerService
 from goodprice.services.settings_service import SettingsService
-from goodprice.services.task_queue import DEFAULT_GAP_SECONDS, TaskQueue
 from goodprice.services.task_service import TaskService
 from goodprice.web.media_routes import router as media_router
 from goodprice.web.offer_routes import router as offer_router
@@ -112,6 +111,7 @@ def build_app(
     settings: Optional[Settings] = None,
     session_factory=None,
     with_scheduler: bool = True,
+    execution_factory=None,
 ) -> FastAPI:
     settings = settings or get_settings()
     _setup_logging(settings)
@@ -129,47 +129,37 @@ def build_app(
     settings_service = SettingsService(session_factory, base=settings)
     login_session = _make_login_session(settings_service, settings)
     task_service = TaskService(session_factory)
-    from goodprice.services.satisfaction import backfill_satisfaction
-
-    backfill_satisfaction(session_factory, vision_enabled=settings_service.get().vision_enabled)
     guard = TaskRunGuard()
 
-    def run_job(task_id: int) -> None:
-        logger.info("任务 %s 开始执行", task_id)
-        try:
-            stats = _make_crawl_service(session_factory, settings_service, guard).run_task(task_id)
-            logger.info("任务 %s 执行完成: %s", task_id, stats)
-        except Exception:
-            logger.exception("任务 %s 执行失败", task_id)
-
-    def run_reanalyze(listing_id: int) -> None:
-        logger.info("重新分析商品 %s", listing_id)
-        try:
-            _make_crawl_service(session_factory, settings_service, guard).reanalyze_listing(listing_id)
-        except Exception:
-            logger.exception("重新分析商品 %s 失败", listing_id)
-
-    task_queue = TaskQueue(run_job, gap_seconds=DEFAULT_GAP_SECONDS)
+    from goodprice.execution.pipeline import build_pipeline
+    task_queue = (execution_factory or build_pipeline)(session_factory, settings_service)
+    guard.provider = task_queue.running_ids
     scheduler = (
-        build_scheduler(session_factory, task_queue.submit, task_service)
+        build_scheduler(session_factory, task_queue.submit, task_service,
+                        jitter_seconds=lambda: settings_service.get().default_crawl_jitter_minutes * 60)
         if with_scheduler
         else None
     )
 
     def sync_scheduler() -> None:
         if scheduler is not None:
-            _sync_tasks(session_factory, task_queue.submit, task_service, scheduler)
+            _sync_tasks(session_factory, task_queue.submit, task_service, scheduler,
+                        jitter_seconds=lambda: settings_service.get().default_crawl_jitter_minutes * 60)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         task_queue.start()
-        if scheduler is not None:
-            app.state.scheduler = scheduler
-            app.state.scheduler.start()
-        yield
-        if scheduler is not None:
-            app.state.scheduler.shutdown(wait=False)
-        task_queue.stop()
+        try:
+            if scheduler is not None:
+                app.state.scheduler = scheduler
+                app.state.scheduler.start()
+            yield
+        finally:
+            try:
+                if scheduler is not None and scheduler.running:
+                    scheduler.shutdown(wait=False)
+            finally:
+                task_queue.stop()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     @app.exception_handler(BudgetExceeded)
@@ -181,7 +171,9 @@ def build_app(
     app.state.settings_service = settings_service
     app.state.task_service = task_service
     app.state.run_job = task_queue.submit
-    app.state.run_reanalyze = run_reanalyze
+    app.state.run_reanalyze = task_queue.submit_reanalysis
+    app.state.coordinator = task_queue
+    app.state.resource_guard = getattr(getattr(task_queue, "pipeline", None), "guard", None)
     app.state.guard = guard
     app.state.sync_scheduler = sync_scheduler
     app.state.task_queue = task_queue

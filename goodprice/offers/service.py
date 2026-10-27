@@ -29,19 +29,20 @@ class OfferService:
     def __init__(self, session_factory):
         self._session_factory = session_factory
 
-    def _refresh_price_index(self, session, row, listing, candidate, quote=None):
+    def _refresh_price_index(self, session, row, listing, candidate, quote=None, now=None):
         task = session.get(WatchTask, listing.task_id) if listing.task_id else None
         if quote is None:
             quote = session.query(ManualQuote).filter_by(offer_id=row.id, revoked=False).order_by(ManualQuote.id.desc()).first()
         value = None if quote is None else QuoteInput(row.offer_key, quote.amount_cents,
             utc(quote.confirmed_at), utc(quote.expires_at), quote.evidence_fingerprint, quote.revoked)
         ttl = task.interval_minutes * 60 if task and task.fetch_detail else 0
-        decision = decide_price(candidate, value, datetime.now(timezone.utc), ttl)
+        decision = decide_price(candidate, value, now or datetime.now(timezone.utc), ttl)
         row.effective_price_state, row.effective_price_cents = decision.state, decision.amount_cents
+        row.effective_price_source, row.price_evidence_fingerprint = decision.source, offer_fingerprint(candidate)
         row.price_valid_until = utc(decision.fresh_until).replace(tzinfo=None) if decision.fresh_until else None
         row.price_task_version = task.version if task else None
 
-    def record_observation(self, listing_id: int, offer: OfferCandidate, *, session=None) -> int:
+    def record_observation(self, listing_id: int, offer: OfferCandidate, *, session=None, now=None) -> int:
         if not offer.key or not offer.claims:
             raise ValueError("规格或证据不能为空")
         own = session is None
@@ -59,11 +60,12 @@ class OfferService:
                 session.add(row)
                 session.flush()
             row.name, row.attributes, row.availability = offer.name, dict(offer.attributes), offer.availability
+            row.seen_in_latest_detail = True
             session.add(OfferObservation(offer_id=row.id, fingerprint=offer_fingerprint(offer),
                                          payload=encode_offer(offer),
                                          observed_at=min(utc(c.observed_at) for c in offer.claims)))
             session.flush()
-            self._refresh_price_index(session, row, listing, offer)
+            self._refresh_price_index(session, row, listing, offer, now=now)
             if own:
                 session.commit()
             return row.id
@@ -86,7 +88,7 @@ class OfferService:
                 raise ValueError("规格身份不明确或获取不完整，不能用报价代替核验")
             task = session.get(WatchTask, listing.task_id) if listing.task_id else None
             ttl = (task.interval_minutes if task else 20) * 60
-            if (latest is None or latest.fingerprint != quote.evidence_fingerprint
+            if (not offer.seen_in_latest_detail or latest is None or latest.fingerprint != quote.evidence_fingerprint
                     or offer.offer_key != quote.offer_key or offer.availability == "unavailable"
                     or (now - utc(latest.observed_at)).total_seconds() >= ttl):
                 raise ValueError("证据已变化或过期，请刷新后重新确认")

@@ -1,0 +1,279 @@
+{
+  "dataset": "synthetic-30",
+  "external_network_requests": 0,
+  "limits": "Same 30 exact offers, requirement/value inputs and disabled vision. Admission intervals use compressed logical time. No actual browser/model/video latency; stage timings are logical time. RSS sampled for this Python process, not subprocesses.",
+  "serial": {
+    "cold": {
+      "results": [
+        {
+          "seconds": 7.8073082999999315,
+          "sql_count": 1387,
+          "python_peak_bytes": 1525549,
+          "process_peak_rss_bytes": 75296768,
+          "detail_calls": 30,
+          "model_attempts": 31,
+          "verified_offers": 30,
+          "stage_logical_seconds": {}
+        },
+        {
+          "seconds": 6.28916819999904,
+          "sql_count": 1387,
+          "python_peak_bytes": 991453,
+          "process_peak_rss_bytes": 79220736,
+          "detail_calls": 30,
+          "model_attempts": 31,
+          "verified_offers": 30,
+          "stage_logical_seconds": {}
+        },
+        {
+          "seconds": 4.674092200000814,
+          "sql_count": 1387,
+          "python_peak_bytes": 1053696,
+          "process_peak_rss_bytes": 79728640,
+          "detail_calls": 30,
+          "model_attempts": 31,
+          "verified_offers": 30,
+          "stage_logical_seconds": {}
+        }
+      ],
+      "median_seconds": 6.28916819999904,
+      "p95_seconds": 7.8073082999999315
+    },
+    "warm": {
+      "results": [
+        {
+          "seconds": 6.999146799998925,
+          "sql_count": 757,
+          "python_peak_bytes": 240448,
+          "process_peak_rss_bytes": 80195584,
+          "detail_calls": 30,
+          "model_attempts": 0,
+          "verified_offers": 30,
+          "stage_logical_seconds": {}
+        },
+        {
+          "seconds": 2.8926522999990993,
+          "sql_count": 757,
+          "python_peak_bytes": 279019,
+          "process_peak_rss_bytes": 81117184,
+          "detail_calls": 30,
+          "model_attempts": 0,
+          "verified_offers": 30,
+          "stage_logical_seconds": {}
+        },
+        {
+          "seconds": 2.601198700000168,
+          "sql_count": 757,
+          "python_peak_bytes": 230785,
+          "process_peak_rss_bytes": 81944576,
+          "detail_calls": 30,
+          "model_attempts": 0,
+          "verified_offers": 30,
+          "stage_logical_seconds": {}
+        }
+      ],
+      "median_seconds": 2.8926522999990993,
+      "p95_seconds": 6.999146799998925
+    }
+  },
+  "staged": {
+    "cold": {
+      "results": [
+        {
+          "seconds": 30.939778800000568,
+          "sql_count": 9388,
+          "python_peak_bytes": 3720124,
+          "process_peak_rss_bytes": 92418048,
+          "detail_calls": 30,
+          "model_attempts": 38,
+          "verified_offers": 30,
+          "stage_logical_seconds": {
+            "search": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "detail": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "parse": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "analyze": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "aggregate": {
+              "median": 5.0,
+              "p95": 10.0
+            }
+          }
+        },
+        {
+          "seconds": 34.40631290000056,
+          "sql_count": 9335,
+          "python_peak_bytes": 3371834,
+          "process_peak_rss_bytes": 94257152,
+          "detail_calls": 30,
+          "model_attempts": 38,
+          "verified_offers": 30,
+          "stage_logical_seconds": {
+            "search": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "detail": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "parse": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "analyze": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "aggregate": {
+              "median": 5.0,
+              "p95": 5.0
+            }
+          }
+        },
+        {
+          "seconds": 31.622776399999566,
+          "sql_count": 9308,
+          "python_peak_bytes": 3306201,
+          "process_peak_rss_bytes": 95559680,
+          "detail_calls": 30,
+          "model_attempts": 38,
+          "verified_offers": 30,
+          "stage_logical_seconds": {
+            "search": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "detail": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "parse": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "analyze": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "aggregate": {
+              "median": 5.0,
+              "p95": 5.0
+            }
+          }
+        }
+      ],
+      "median_seconds": 31.622776399999566,
+      "p95_seconds": 34.40631290000056
+    },
+    "warm": {
+      "results": [
+        {
+          "seconds": 28.582909599999766,
+          "sql_count": 8769,
+          "python_peak_bytes": 952933,
+          "process_peak_rss_bytes": 92221440,
+          "detail_calls": 30,
+          "model_attempts": 0,
+          "verified_offers": 30,
+          "stage_logical_seconds": {
+            "search": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "detail": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "parse": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "analyze": {
+              "median": 0.0,
+              "p95": 0
+            },
+            "aggregate": {
+              "median": 5.0,
+              "p95": 5.0
+            }
+          }
+        },
+        {
+          "seconds": 31.885272199999235,
+          "sql_count": 8785,
+          "python_peak_bytes": 949210,
+          "process_peak_rss_bytes": 94892032,
+          "detail_calls": 30,
+          "model_attempts": 0,
+          "verified_offers": 30,
+          "stage_logical_seconds": {
+            "search": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "detail": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "parse": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "analyze": {
+              "median": 0.0,
+              "p95": 0
+            },
+            "aggregate": {
+              "median": 5.0,
+              "p95": 5.0
+            }
+          }
+        },
+        {
+          "seconds": 33.539933300000484,
+          "sql_count": 8846,
+          "python_peak_bytes": 914595,
+          "process_peak_rss_bytes": 96477184,
+          "detail_calls": 30,
+          "model_attempts": 0,
+          "verified_offers": 30,
+          "stage_logical_seconds": {
+            "search": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "detail": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "parse": {
+              "median": 5.0,
+              "p95": 5.0
+            },
+            "analyze": {
+              "median": 0.0,
+              "p95": 0
+            },
+            "aggregate": {
+              "median": 5.0,
+              "p95": 10.0
+            }
+          }
+        }
+      ],
+      "median_seconds": 31.885272199999235,
+      "p95_seconds": 33.539933300000484
+    }
+  }
+}

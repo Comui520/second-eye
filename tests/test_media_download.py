@@ -65,3 +65,20 @@ def test_connection_uses_pinned_numeric_ip_without_second_dns(monkeypatch):
     assert calls == [("93.184.216.34", 443)]
     with pytest.raises(MediaDownloadError):
         backend.connect_tcp("other.example", 443)
+
+def test_blocked_dns_obeys_download_deadline_and_releases_disk_reservation(tmp_path):
+    import threading
+    import time
+    release = threading.Event()
+    def blocked(host, port):
+        release.wait(3)
+        return ["93.184.216.34"]
+    service = downloader(tmp_path, lambda r: httpx.Response(200, content=b"image"), blocked)
+    started = time.monotonic()
+    try:
+        with pytest.raises(MediaDownloadError):
+            service.download(MediaCandidate("blocked", "image", "https://cdn.example/a"), 20, .05)
+        assert time.monotonic()-started < .75
+        assert service.budget.usage_bytes == 0
+    finally:
+        release.set()

@@ -2,7 +2,7 @@ from typing import Optional
 
 import httpx
 
-from goodprice.notify.base import NotificationMessage, Notifier
+from goodprice.notify.base import DeliveryRejected, NotificationMessage, Notifier
 
 SERVERCHAN_URL = "https://sctapi.ftqq.com/{key}.send"
 
@@ -26,7 +26,7 @@ class ServerChanNotifier(Notifier):
 
     def send(self, message: NotificationMessage) -> None:
         if not self.enabled:
-            raise RuntimeError("Server酱未配置 sendkey")
+            raise DeliveryRejected("Server酱未配置 sendkey")
         with httpx.Client(transport=self._transport, timeout=self.timeout) as client:
             response = client.post(
                 SERVERCHAN_URL.format(key=self.sendkey),
@@ -35,4 +35,4 @@ class ServerChanNotifier(Notifier):
             response.raise_for_status()
             data = response.json()
         if data.get("code") != 0:
-            raise RuntimeError(f"Server酱返回错误: {data}")
+            raise DeliveryRejected(f"Server酱返回错误: {data}")

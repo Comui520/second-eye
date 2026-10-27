@@ -46,3 +46,18 @@ def test_card_effective_price_belongs_to_current_target_not_cheapest_other_sku(s
     assert present_listings([row], session_factory)[0].effective_price_cents == 150000
     TaskService(session_factory).update_task(task.id, {"target_variant": "512GB"})
     assert present_listings([row], session_factory)[0].effective_price_cents is None
+
+
+def test_independent_media_is_visible_for_inquiry_price_without_parent_score(session_factory):
+    from goodprice.services.offer_pipeline import present_listings
+    task = TaskService(session_factory).create_task({"keyword": "fixture"})
+    with session_factory() as session:
+        listing = Listing(platform="x", external_id="inquiry", task_id=task.id, title="fixture", price=1, url="x")
+        session.add(listing)
+        session.commit()
+    now = datetime.now(timezone.utc)
+    candidate = OfferCandidate("default", {}, claims=(PriceClaim("description", "inquiry", "请询价", now, "description"),))
+    OfferPipeline(session_factory).evaluate_listing(listing.id, task.id, [candidate], now,
+        per_offer_results={"default": {"condition_score": 8, "visual_scope": "default"}})
+    view = present_listings([listing], session_factory)[0]
+    assert view.condition_score == 8 and not view.price_confirmed

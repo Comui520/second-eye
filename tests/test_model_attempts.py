@@ -54,3 +54,23 @@ def test_sdk_constructor_failure_never_changes_process_credentials(monkeypatch):
         TypeSafeJudger(api_key="replacement")._make_client()
     import os
     assert os.environ["TYPESAFE_API_KEY"] == "original"
+
+
+def test_single_sdk_value_preserves_rate_error_for_coordinator():
+    request = httpx.Request("POST", "https://model.example/value")
+    failure = httpx.HTTPStatusError("limited", request=request,
+        response=httpx.Response(429, headers={"Retry-After": "60"}, request=request))
+    class Client:
+        def system_one(self, **kwargs): raise failure
+    judger = TypeSafeJudger("fake", client_factory=lambda key: Client())
+    with pytest.raises(httpx.HTTPStatusError) as error:
+        judger.analyze_value({"external_id": "one", "title": "fixture", "price": 100})
+    assert error.value.response.headers["Retry-After"] == "60"
+
+
+def test_nonfinite_confidence_does_not_turn_into_a_certain_answer():
+    from goodprice.analysis.judge import JevJudger
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"matched":true,"probability":NaN,"reason":"unknown"}'}}]})
+    client = LLMClient("https://model.example", "fake", "model", transport=httpx.MockTransport(handler))
+    assert JevJudger(client).analyze_requirement("fixture").confidence <= .5

@@ -1,10 +1,9 @@
 import logging
-import threading
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, urlencode
 
-from fastapi import APIRouter, Form, Query, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -256,25 +255,52 @@ def notifications_page(request: Request):
 
 @router.post("/notifications/delete-batch")
 def delete_notifications_batch(request: Request, ids: list[int] = Form(...)):
-    with request.app.state.session_factory() as session:
-        from goodprice.models import Notification
-
-        session.query(Notification).filter(Notification.id.in_(ids)).delete(
-            synchronize_session=False
-        )
-        session.commit()
+    _delete_notification_history(request, ids)
     return RedirectResponse("/notifications", status_code=303)
 
 
 @router.post("/notifications/{notification_id}/delete")
 def delete_notification(request: Request, notification_id: int):
-    with request.app.state.session_factory() as session:
-        from goodprice.models import Notification
+    _delete_notification_history(request, [notification_id])
+    return RedirectResponse("/notifications", status_code=303)
 
-        row = session.get(Notification, notification_id)
-        if row:
-            session.delete(row)
-            session.commit()
+
+def _delete_notification_history(request, ids):
+    from goodprice.models import Notification, NotificationDelivery
+    delivery = request.app.state.coordinator.pipeline.delivery
+    with delivery.lock, request.app.state.session_factory() as session:
+        rows = session.query(Notification).filter(Notification.id.in_(ids[:200])).all()
+        pending = []
+        for history in rows:
+            delivery_id = (history.event_context or {}).get("delivery_id")
+            row = session.get(NotificationDelivery, delivery_id) if delivery_id else None
+            if row and row.state == "sending":
+                raise HTTPException(409, "该通知正在投递，无法撤回；请等待结果后操作")
+            if row and row.state != "sent":
+                pending.append(row)
+        for row in pending:
+            row.state = "cancelled_manual"
+        for history in rows:
+            session.delete(history)
+        session.commit()
+
+
+@router.post("/notifications/deliveries/{delivery_id}/retry")
+def retry_notification(request: Request, delivery_id: int, confirm: str = Form("")):
+    from datetime import datetime, timezone
+
+    from goodprice.models import NotificationDelivery
+    with request.app.state.session_factory() as session:
+        row = session.get(NotificationDelivery, delivery_id)
+        if row is None:
+            raise HTTPException(404, "通知投递不存在")
+        if row.state == "uncertain" and confirm != "1":
+            raise HTTPException(422, "投递结果未知，核验后重试可能重复，请明确确认")
+        if row.state in {"sent", "sending", "cancelled_manual"}:
+            raise HTTPException(409, "当前状态不能重试")
+    controller = request.app.state.coordinator
+    controller.pipeline.delivery.queue_retry(delivery_id, datetime.now(timezone.utc))
+    controller.wake()
     return RedirectResponse("/notifications", status_code=303)
 
 
@@ -620,9 +646,18 @@ def listing_detail_page(request: Request, listing_id: int):
 
 @router.post("/listings/{listing_id}/reanalyze")
 def reanalyze_listing(request: Request, listing_id: int):
-    threading.Thread(
-        target=request.app.state.run_reanalyze, args=(listing_id,), daemon=True
-    ).start()
+    from fastapi import HTTPException
+    with request.app.state.session_factory() as session:
+        from goodprice.models import Listing, WatchTask
+        listing = session.get(Listing, listing_id)
+        if listing is None:
+            raise HTTPException(404, "商品不存在")
+        task = session.get(WatchTask, listing.task_id) if listing.task_id else None
+        if task is None or not task.enabled:
+            raise HTTPException(409, "原任务已删除或停用，请先检查任务状态")
+    accepted = request.app.state.run_reanalyze(listing_id)
+    if accepted is False:
+        raise HTTPException(429, "重评队列暂满，请稍后重试")
     return RedirectResponse(f"/listings/{listing_id}?" + urlencode({"toast": "已提交重新分析",
         "return_to": safe_return_to(request.query_params.get("return_to"), "/listings")}), status_code=303)
 
@@ -724,7 +759,7 @@ def settings_page(request: Request):
 
 def render_settings(request, overrides=None, error=None, status_code=200):
     from goodprice.resources import detect_resources, recommend_profile
-    from goodprice.web.resource_routes import RESOURCE_LABELS
+    from goodprice.web.resource_routes import RESOURCE_LABELS, effective_resources
     resource_snapshot = detect_resources()
     _, settings_service = _services(request)
     settings = settings_service.get()
@@ -741,6 +776,7 @@ def render_settings(request, overrides=None, error=None, status_code=200):
             "resource_snapshot": resource_snapshot,
             "resource_recommendation": recommend_profile(resource_snapshot),
             "resource_labels": RESOURCE_LABELS,
+            "resource_effective": effective_resources(request),
             "media_capabilities": capabilities(settings),
             "media_fields": [name for name in type(settings).model_fields if name.startswith("media_")],
             "media_labels": MEDIA_LABELS,

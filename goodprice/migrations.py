@@ -2,6 +2,7 @@
 from sqlalchemy import inspect
 
 from goodprice.models import (
+    AnalysisCache,
     ListingOffer,
     ManualQuote,
     MediaAsset,
@@ -19,10 +20,11 @@ def migrate_offer_schema(session) -> None:
     connection = session.connection()
     tables = set(inspect(connection).get_table_names())
     legacy = "schema_versions" not in tables and "watch_tasks" in tables
-    for model in (SchemaVersion, ListingOffer, OfferObservation, ManualQuote, OfferEvaluationRecord, MediaAsset,
+    for model in (SchemaVersion, ListingOffer, OfferObservation, ManualQuote, OfferEvaluationRecord, MediaAsset, AnalysisCache,
                   TaskRun, WorkItem, NotificationEvent, NotificationDelivery):
         model.__table__.create(connection, checkfirst=True)
     if session.get(SchemaVersion, 1) is None:
-        session.add(SchemaVersion(id=1, version=1, legacy_install=legacy))
+        session.add(SchemaVersion(id=1, version=3, legacy_install=legacy))
     else:
-        session.get(SchemaVersion, 1).version = 1
+        marker = session.get(SchemaVersion, 1)
+        marker.version = max(marker.version, 3)

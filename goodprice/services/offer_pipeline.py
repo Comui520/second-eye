@@ -1,6 +1,6 @@
 """Offer decisions shared by serial execution and the future stage coordinator."""
-from dataclasses import asdict
-from datetime import datetime
+from contextlib import nullcontext
+from datetime import datetime, timedelta
 
 from goodprice.models import (
     Listing,
@@ -10,10 +10,11 @@ from goodprice.models import (
     OfferObservation,
     WatchTask,
 )
+from goodprice.offers.evaluation import assess_offer
 from goodprice.offers.matching import match_variant
 from goodprice.offers.pricing import decide_price, utc
 from goodprice.offers.service import OfferService
-from goodprice.offers.types import OfferCandidate, QuoteInput
+from goodprice.offers.types import OfferCandidate, PriceDecision, QuoteInput
 
 
 class StaleEvaluation(RuntimeError):
@@ -27,10 +28,13 @@ class OfferPipeline:
         self.offers = OfferService(session_factory)
 
     def evaluate_listing(self, listing_id: int, task_id: int,
-                         candidates: list[OfferCandidate], now: datetime, *, expected_version=None) -> list[int]:
+                         candidates: list[OfferCandidate], now: datetime, *, expected_version=None,
+                         session=None, per_offer_results=None, ready=True,
+                         record_observations=True) -> list[int]:
         # Network/AI callers must finish their work before this short write phase.
         result = []
-        with self._session_factory() as session:
+        own = session is None
+        with self._session_factory() if own else nullcontext(session) as session:
             listing, task = session.get(Listing, listing_id), session.get(WatchTask, task_id)
             if listing is None or task is None or listing.task_id != task.id:
                 raise LookupError("任务或商品不存在／关联不一致")
@@ -41,30 +45,23 @@ class OfferPipeline:
                         version=WatchTask.version).execution_options(synchronize_session=False))
                 if gate.rowcount != 1:
                     raise StaleEvaluation("任务已暂停或条件已变化")
-            ids = [self.offers.record_observation(listing_id, o, session=session) for o in candidates[:20]]
+            if record_observations:
+                ids = [self.offers.record_observation(listing_id, o, session=session, now=now) for o in candidates[:20]]
+            else:
+                existing = {o.offer_key: o.id for o in session.query(ListingOffer).filter_by(listing_id=listing_id)}
+                ids = [existing[o.key] for o in candidates[:20]]
             for candidate, offer_id in zip(candidates, ids, strict=False):
                 quote = session.query(ManualQuote).filter_by(offer_id=offer_id, revoked=False).order_by(
                     ManualQuote.id.desc()).first()
                 value = None if quote is None else QuoteInput(candidate.key, quote.amount_cents,
                     utc(quote.confirmed_at), utc(quote.expires_at), quote.evidence_fingerprint, quote.revoked)
-                decision = decide_price(candidate, value, now, task.interval_minutes * 60)
-                match = match_variant(task.target_variant, candidate.attributes, listing.title)
-                eligible = (match == "matched" and decision.state == "exact"
-                            and candidate.availability != "unavailable")
-                reason = decision.reason if not eligible else ""
-                if decision.amount_cents is not None:
-                    amount = decision.amount_cents
-                    if amount < round(task.min_price * 100) or (task.max_price and amount > round(task.max_price * 100)):
-                        eligible, reason = False, "该规格价格不在预算内"
-                if match != "matched":
-                    eligible, reason = False, "目标规格不匹配" if match == "mismatched" else "规格待核验"
-                if task.min_condition_score and (not self.vision_enabled or len(candidates) != 1 or listing.condition_score is None
-                                                 or listing.condition_score < task.min_condition_score):
-                    eligible, reason = False, "品相未核验或低于门槛"
-                if listing.requirement_match is False or listing.blocked:
-                    eligible, reason = False, "需求不匹配或商品已拉黑"
-                payload = {**asdict(decision), "match": match, "eligible": eligible, "reason": reason}
-                payload["fresh_until"] = decision.fresh_until.isoformat() if decision.fresh_until else None
+                scoped = (per_offer_results or {}).get(candidate.key, {})
+                condition_score = scoped.get("condition_score") if per_offer_results is not None else listing.condition_score
+                visual_valid = (scoped.get("visual_scope") == candidate.key if per_offer_results is not None else len(candidates) == 1)
+                requirement_match = scoped.get("requirement_match") if per_offer_results is not None else listing.requirement_match
+                payload = assess_offer(task, listing, candidate, value, now, vision_enabled=self.vision_enabled,
+                    condition_score=condition_score, requirement_match=requirement_match,
+                    visual_valid=visual_valid, ready=ready)
                 latest = session.query(OfferObservation).filter_by(offer_id=offer_id).order_by(
                     OfferObservation.id.desc()).first()
                 payload["fingerprint"] = latest.fingerprint
@@ -75,7 +72,10 @@ class OfferPipeline:
                 session.add(row)
                 session.flush()
                 result.append(row.id)
-            session.commit()
+            if own:
+                session.commit()
+            else:
+                session.flush()
         return result
 
     def latest(self, listing_id: int) -> list[dict]:
@@ -134,17 +134,29 @@ class OfferPipeline:
                     result[listing.id].append(item)
                     continue
                 candidate = decode_offer(observation.payload)
+                scoped_claims = [c for c in candidate.claims if c.scope_key in (None, "", candidate.key)]
+                expiry = min((utc(c.observed_at) for c in scoped_claims), default=utc(now)) + timedelta(minutes=task.interval_minutes if task else 20)
+                item["observation_fresh"] = bool(scoped_claims and expiry > utc(now) and
+                    all(utc(c.observed_at) <= utc(now) + timedelta(seconds=5) for c in scoped_claims))
                 item["target_match"] = match_variant(task.target_variant, candidate.attributes, listing.title) if task else "uncertain"
                 value = None if quote is None else QuoteInput(candidate.key, quote.amount_cents,
                     utc(quote.confirmed_at), utc(quote.expires_at), quote.evidence_fingerprint, quote.revoked)
                 ttl = (task.interval_minutes if task else 20) * 60
                 decision = decide_price(candidate, value, now, 0 if task and not task.fetch_detail else ttl)
+                item["scope_current"] = offer.seen_in_latest_detail
+                item["observed_price_cents"] = decision.amount_cents
+                if not offer.seen_in_latest_detail:
+                    decision = PriceDecision("unknown", None, None, (), "本次详情未核验此规格，旧观察仅供参考", None)
                 item.update(fingerprint=observation.fingerprint, price_state=decision.state,
                     effective_price_cents=decision.amount_cents, source=decision.source,
                     fresh_until=decision.fresh_until.isoformat() if decision.fresh_until else None,
                     reason=decision.reason, quote_id=quote.id if quote else None)
+                item.update(quote_confirmed_at=utc(quote.confirmed_at).isoformat() if quote else None,
+                            quote_expires_at=utc(quote.expires_at).isoformat() if quote else None)
                 evaluation = dict(record.payload or {}) if record else {}
-                valid = (task is not None and task.enabled and not listing.blocked
+                item["evaluation_current"] = (offer.seen_in_latest_detail and task is not None and evaluation.get("task_version") == task.version
+                    and evaluation.get("fingerprint") == observation.fingerprint)
+                valid = (offer.seen_in_latest_detail and task is not None and task.enabled and not listing.blocked
                     and decision.state == "exact" and evaluation.get("task_version") == task.version
                     and evaluation.get("fingerprint") == observation.fingerprint
                     and evaluation.get("source") == decision.source
@@ -176,7 +188,21 @@ def present_listings(listings, factory, vision_enabled=True):
         view.exact_offer_count = len(matched_exact)
         view.effective_price_cents = cheapest["effective_price_cents"] if cheapest else None
         view.effective_price_source = cheapest["source"] if cheapest else None
+        current_media = [o for o in offers if o.get("evaluation_current") and o.get("target_match") == "matched"]
+        if len(current_media) == 1:
+            assessment = current_media[0].get("evaluation") or {}
+            view.condition_score = assessment.get("condition_score")
+            view.requirement_match = assessment.get("requirement_match")
+            if assessment.get("media") is not None:
+                view.condition_detail = assessment["media"]
+        elif offers:
+            view.condition_score = None
+            view.condition_detail = {"reason": "请查看当前规格的媒体结果，历史分析不代表新条件"}
         if not eligible:
             view.value_score, view.best_of_batch, view.satisfaction = None, False, 0.0
+        elif any((o.get("evaluation") or {}).get("status") == "ready" for o in eligible):
+            chosen = max((o["evaluation"] for o in eligible), key=lambda e: e.get("satisfaction") or 0)
+            view.value_score, view.satisfaction = chosen.get("value_score"), chosen.get("satisfaction") or 0
+            view.best_of_batch = any(o["evaluation"].get("best_of_batch", False) for o in eligible)
         result.append(view)
     return result

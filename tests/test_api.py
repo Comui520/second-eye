@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 
 from goodprice.main import build_app
-from goodprice.models import Listing
+from goodprice.models import Listing, WatchTask
 
 
 def _client(base_settings, session_factory):
@@ -383,7 +383,10 @@ def test_listing_detail_shows_missing_analysis_reasons(base_settings, session_fa
 def test_reanalyze_runs_in_background(base_settings, session_factory):
     client = _client(base_settings, session_factory)
     with session_factory() as session:
-        listing = Listing(platform="xianyu", external_id="3", title="t", price=1, url="u")
+        task = WatchTask(keyword="offline")
+        session.add(task)
+        session.flush()
+        listing = Listing(platform="xianyu", external_id="3", title="t", price=1, url="u", task_id=task.id)
         session.add(listing)
         session.commit()
         listing_id = listing.id

@@ -7,6 +7,7 @@ from concurrent.futures import Future
 
 logger = logging.getLogger(__name__)
 _local = threading.local()
+_TRIM = object()
 
 
 def current_browser(key, factory):
@@ -66,9 +67,21 @@ class BrowserActor:
         _local.actor = self
         try:
             while True:
-                work = self.queue.get()
+                try:
+                    work = self.queue.get(timeout=5)
+                except queue.Empty:
+                    if self._context is not None and time.monotonic() - self._opened >= 600:
+                        self._close_browser()
+                    continue
                 if work is None:
                     break
+                if work is _TRIM:
+                    try:
+                        self._close_browser()
+                    finally:
+                        with self._lock:
+                            self._busy = False
+                    continue
                 fn, future = work
                 if self._stopped:
                     future.cancel()
@@ -107,3 +120,9 @@ class BrowserActor:
                 pass
         if self._thread:
             self._thread.join(timeout)
+
+    def trim_idle(self):
+        with self._lock:
+            if self._thread and not self._busy and not self._stopped:
+                self._busy = True
+                self.queue.put_nowait(_TRIM)

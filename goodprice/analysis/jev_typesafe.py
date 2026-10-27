@@ -1,6 +1,7 @@
 # 官方 TypeSafe Jev 后端：通过 typesafe-sdk 直连 api.typesafe.ai，
 # 返回与 adapter 后端（judge.JevJudger）同构的结论，供 crawl_service 统一裁决。
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -41,6 +42,8 @@ class TypeSafeJudger:
         )
         answer = self._ask(state, {"verdict": _noul_question()})["verdict"]
         noul = float(answer.noul)
+        if not math.isfinite(noul):
+            raise ValueError("判断概率无效")
         return RequirementVerdict(
             matched=noul >= 0.5,
             confidence=max(noul, 1.0 - noul),
@@ -91,6 +94,20 @@ class TypeSafeJudger:
             from typesafe_sdk import RetryPolicy
             return TypeSafeClient(api_key=self.api_key, retry=RetryPolicy(max_retries=0), timeout=self.timeout)
         return TypeSafeClient(api_key=self.api_key, timeout=self.timeout)
+
+    def analyze_value(self, item: dict[str, Any]) -> dict[str, Any]:
+        state = (f"买家品相要求：{item.get('requirement') or '无'}\n"
+                 f"商品：id={item.get('external_id')} 标题={item.get('title')} 价格={item.get('price')}元 "
+                 f"品相分={item.get('condition_score') or '未评估'} "
+                 f"瑕疵={'、'.join(str(d) for d in (item.get('defects') or [])[:5]) or '无'} "
+                 f"卖家风险={item.get('seller_risk') or '未知'}")
+        answer = self._ask(state, {"value": _score_question()})["value"]
+        raw, confidence = float(answer.score), float(getattr(answer, "confidence", .5))
+        if not math.isfinite(raw):
+            raise ValueError("评分无效")
+        return {"value_score": min(SCORE_MAX, max(SCORE_MIN, int(round(raw)) + 1)),
+                "probability": confidence if math.isfinite(confidence) else .5,
+                "reason": f"官方 Jev Score={raw:.1f}"}
 
     def _ask(self, state: str, questions: dict[str, Any]) -> dict[str, Any]:
         client = self._make_client()

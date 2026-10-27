@@ -23,9 +23,19 @@ RESOURCE_LABELS = {
 
 
 @router.get("/api/resources/recommendation")
-def resource_recommendation():
+def resource_recommendation(request: Request):
     snapshot = detect_resources()
-    return {"snapshot": asdict(snapshot), "recommendation": recommend_profile(snapshot)}
+    return {"snapshot": asdict(snapshot), "recommendation": recommend_profile(snapshot), **effective_resources(request)}
+
+
+def effective_resources(request):
+    configured = ResourceLimits.from_settings(request.app.state.settings_service.get())
+    guard = getattr(request.app.state, "resource_guard", None)
+    current = guard.evaluate(configured) if guard else None
+    controller = request.app.state.coordinator
+    return {"configured": asdict(configured), "effective": asdict(current.limits if current else configured),
+        "paused": sorted(current.paused) if current else [], "reasons": list(current.reasons) if current else [],
+        "running_tasks": len(controller.running_ids()), "queued_tasks": len(controller.queued_ids())}
 
 
 @router.post("/settings/resources/apply-profile")

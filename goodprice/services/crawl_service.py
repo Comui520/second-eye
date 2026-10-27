@@ -19,6 +19,7 @@ class TaskRunGuard:
     def __init__(self):
         self._running: set[int] = set()
         self._lock = threading.Lock()
+        self.provider = None
 
     def try_start(self, task_id: int) -> bool:
         with self._lock:
@@ -33,7 +34,8 @@ class TaskRunGuard:
 
     def running_ids(self) -> set[int]:
         with self._lock:
-            return set(self._running)
+            running = set(self._running)
+        return running | (set(self.provider()) if self.provider else set())
 
 
 class CrawlService:
@@ -109,6 +111,28 @@ class CrawlService:
             listing.price = data.price
             session.add(PriceSnapshot(listing_id=listing.id, price=data.price))
         listing.last_seen_at = datetime.now()
+        if listing.title != data.title:
+            from goodprice.models import (
+                ListingOffer,
+                NotificationDelivery,
+                NotificationEvent,
+                OfferEvaluationRecord,
+            )
+            listing.requirement_match, listing.requirement_reason = None, None
+            listing.condition_score, listing.condition_detail, listing.value_score = None, None, None
+            listing.satisfaction, listing.best_of_batch, listing.offer_verified_until = 0, False, None
+            for offer in session.query(ListingOffer).filter_by(listing_id=listing.id):
+                latest = session.query(OfferEvaluationRecord).filter_by(offer_id=offer.id).order_by(OfferEvaluationRecord.id.desc()).first()
+                if latest:
+                    old = {k: v for k, v in latest.payload.items() if k != "run_id"}
+                    session.add(OfferEvaluationRecord(offer_id=offer.id, task_version=task.version,
+                        payload={**old, "status": "source_changed", "eligible": False, "value_score": None,
+                                 "condition_score": None, "requirement_match": None, "media": None,
+                                 "reason": "标题已变化，等待重新核验"}))
+            events = session.query(NotificationEvent.id).filter_by(listing_id=listing.id)
+            session.query(NotificationDelivery).filter(NotificationDelivery.event_id.in_(events),
+                NotificationDelivery.state.in_(("pending", "failed", "retry_requested", "awaiting_revalidation"))).update(
+                    {"state": "superseded"}, synchronize_session=False)
         listing.title, listing.url = data.title, data.url
         return listing, False
 

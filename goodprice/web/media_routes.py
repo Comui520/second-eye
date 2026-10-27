@@ -83,6 +83,9 @@ def media_file(asset_id: int, request: Request):
         from goodprice.media.processing import MediaProcessor
         from goodprice.media.types import MediaCandidate
 
+        guard = getattr(request.app.state, "resource_guard", None)
+        if guard:
+            settings = guard.media_settings(settings)
         processor = MediaProcessor(budget)
         with processor.session([MediaCandidate(asset.key, "image", asset.source_url, asset.offer_key)], settings) as (evidence, _):
             if evidence:
