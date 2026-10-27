@@ -3,6 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://www.python.org/)
 [![CI](https://github.com/Comui520/second-eye/actions/workflows/ci.yml/badge.svg)](https://github.com/Comui520/second-eye/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Comui520/second-eye)](https://github.com/Comui520/second-eye/releases)
+
+版本更新见 [CHANGELOG](CHANGELOG.md)，正式版本与镜像说明见 [GitHub Releases](https://github.com/Comui520/second-eye/releases)。
 
 一个面向中文二手市场的本地开源工具：按关键词和价格区间监控闲鱼商品，使用 LLM 进行需求匹配、品相分析和批量性价比判断，并通过多种通知渠道推送结果。
 
@@ -30,8 +33,6 @@
 | Conda 本地运行 | 支持 | 理论上支持 | 理论上支持 | 已经使用 Conda 的环境 |
 
 Docker 是推荐的通用部署方式：应用、Python 依赖、Chromium 和 noVNC 都封装在镜像中，Windows、macOS、Linux 和 NAS 使用同一套 Compose 配置。
-
-本仓库不再把 Windows 双击启动器作为公共安装接口。仓库中曾经使用的 `.cmd`/PowerShell 启动器只适合作者自己的 Windows 工作流，已从 Git 追踪中排除；它们不会影响 Docker Compose 和跨平台手动启动方式。
 
 ## 快速开始：Docker Compose
 
@@ -210,7 +211,7 @@ Conda 不是运行本项目的必需条件；新用户优先选择 Docker 或 uv
 
 ## 配置
 
-### 开发分支：规格与价格证据（实验性）
+### 规格与价格证据（实验性）
 
 监控任务可在详情页填写目标型号／容量（例如 `iPhone 15 / 256GB`）。
 商品页面标价保留为原始观察，不代表目标规格的实际售价；仅明确规格价格才用于预算与性价比判断。
@@ -222,9 +223,9 @@ Conda 不是运行本项目的必需条件；新用户优先选择 Docker 或 uv
 设置最低品相分后，未核验的图片或多规格共享样品不会绕过门槛。
 
 当前支持可明确识别的商品范围 DOM 数据与 Schema.org Product/Offer，尚未取得真实多规格页面样本来验证所有闲鱼控件，
-不能识别时显示待核验而不是猜测。本开发分支已接入分阶段调度，并完成合成数据的Windows/Linux容器回归，尚未发布为稳定版本。
+不能识别时显示待核验而不是猜测。v0.2.0已接入分阶段调度，并完成合成数据的Windows/Linux容器回归；真实平台组件兼容性仍有上述限制。
 
-### 开发分支：图片与视频证据
+### 图片与视频证据
 
 设置页的“媒体证据与用量”可配置保留数量、每次原图/帧配额、总输入上限、超时、缓存和解码线程。
 视频默认关闭；新安装默认一次最多8张，混合媒体先分配4张原图+4帧，单一媒体可借用余量。
@@ -240,7 +241,7 @@ Docker镜像内置FFmpeg/ffprobe。本地uv/Conda运行须自行安装FFmpeg并�
 缓存被清理后保留证据摘要与时间位置，页面显示文件不可用；媒体文件通过内部编号访问，不公开签名下载地址或本地路径。
 相同内容的签名URL变化不会单独触发重复视觉收费，内容/需求/模型/选图设置变化才使分析缓存失效。
 
-### 开发分支：导航与设置整理
+### 导航与设置整理
 
 列表的任务、状态、价格状态、排序、已加载范围会带入详情及操作返回链接。加载更多不再反复请求同一页，
 页面返回与原生后退可恢复列表位置；选择商品或操作表单时不自动替换正在使用的列表。
@@ -251,7 +252,7 @@ Docker镜像内置FFmpeg/ffprobe。本地uv/Conda运行须自行安装FFmpeg并�
 设备建议只在本机检测 CPU、内存及容器限额，不上传机器标识或自动提高配置；低占用/均衡仅设置工作并发，
 不会增加视觉输入、开启视频或提高访问频率。设置页显示保存配置与内存保护后的实际并发；内存不足时暂缓派发，恢复后继续。
 
-### 开发分支：分阶段执行与恢复
+### 分阶段执行与恢复
 
 应用使用单进程协调器，把搜索、详情、解析、媒体、模型、聚合拆成持久化步骤。默认允许两个任务分阶段推进，
 抓取、媒体、模型工作并发各1；慢模型期间可继续抓取另一任务。取消原有整任务结束后的固定300秒等待，
@@ -271,7 +272,7 @@ Docker镜像内置FFmpeg/ffprobe。本地uv/Conda运行须自行安装FFmpeg并�
 持久化和恢复会增加SQLite读写开销，纯本地无网络工作不一定比串行实现快。离线对照可运行
 `uv run --locked python scripts/benchmark_stages.py --rounds 3 --output output/benchmark`，
 报告相同30件合成商品的覆盖、冷/热模型调用、SQL、耗时和Python资源；压缩逻辑时钟排除真实导航等待，不能用作真实平台提速比例。
-开发分支的验证范围和已知开销见 [升级验证记录](docs/validation/2026-10-27-phase3-milestone.md)。
+本次升级的验证范围和已知开销见 [升级验证记录](docs/validation/2026-10-27-phase3-milestone.md)。
 
 应用现使用无导入副作用的工厂；自定义 ASGI 部署请使用 `uvicorn goodprice.main:create_app --factory`，
 原有 `python -m goodprice` 启动方式不变。升级旧库前先停止服务并备份数据库，回退使用旧镜像与备份库成对恢复。
@@ -323,11 +324,13 @@ Docker 和本地运行都会在项目的 data/ 目录中保存 SQLite 数据库�
 ~~~bash
 git switch release
 git pull --ff-only origin release
-git tag -a v0.1.1 -m "Release v0.1.1"
-git push origin v0.1.1
+git tag -a v0.2.1 -m "Release v0.2.1"
+git push origin v0.2.1
 ~~~
 
 普通 PR 和 main/release 推送会执行测试和 Docker 构建校验，但不会覆盖正式镜像。
+上面的版本号为下一次发版示例；发版前同步 `pyproject.toml`/锁文件并更新 CHANGELOG，通过检查后推送新Tag。
+GitHub Release的版本说明使用CHANGELOG对应条目，待该Tag的镜像发布成功后再公开版本。
 
 ## 开发与测试
 

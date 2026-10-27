@@ -1,6 +1,6 @@
 # 分阶段执行与交互验证记录
 
-本记录针对 `codex/offer-media-upgrade` 开发分支；没有替换原服务、推送远程或发布版本。
+本记录保存 `codex/offer-media-upgrade` 合入前的验证结果；验证阶段没有替换原服务或发布版本。后续版本发布信息见 [CHANGELOG](../../CHANGELOG.md)。
 
 ## 已接入的行为
 
